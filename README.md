@@ -18,6 +18,12 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 - Create and modify container run commands with presets and AI-assisted editing.
 - Switch between `Light`, `Dark`, and `Black` themes with background artwork support.
 
+![image.png](/images/image.png)   
+![image.png](/images/image1.png)   
+![image.png](/images/image2.png)   
+![image.png](/images/image3.png)   
+![image.png](/images/image4.png)   
+
 ### Distribution
 - `Installer`: installs for the current Windows user.
 - `Portable`: standalone EXE package with no Python requirement.
@@ -42,7 +48,7 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 - `%APPDATA%\DockerControlCenter\docker_connection_profiles.json`
 - `%APPDATA%\DockerControlCenter\docker_control_center_secrets.json`
    
-![image.png](/images/image.png)   
+
 
 ---
 
