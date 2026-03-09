@@ -8,6 +8,9 @@
 
 A polished Windows control panel for managing Docker locally, through WSL/WSL2, and on remote hosts over SSH.
 
+## Download v1.0.0
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/auto-minter-gui/releases/tag/v0.1.7)
+
 ## English
 
 ### What it does
