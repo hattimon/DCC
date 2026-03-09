@@ -41,6 +41,8 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 - `docker_connection_profiles.example.json`
 - `%APPDATA%\DockerControlCenter\docker_connection_profiles.json`
 - `%APPDATA%\DockerControlCenter\docker_control_center_secrets.json`
+   
+![image.png](/images/image.png)   
 
 ---
 
