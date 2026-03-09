@@ -1,4 +1,4 @@
-
+﻿
 import base64
 import ctypes
 import json
@@ -117,6 +117,11 @@ TEXTS = {
         "menu_info": "Info",
         "menu_config": "Configure",
         "menu_llm": "LLM",
+        "menu_app": "Application",
+        "app_settings_title": "Application settings",
+        "app_settings_intro": "Startup behavior for local Docker integration.",
+        "app_settings_autostart_dd": "Start Docker Desktop in background when DCC starts (local mode)",
+        "app_settings_note": "When enabled, DCC checks local Docker at startup and launches Docker Desktop automatically if needed.",
         "info_safe_danger": "Safe vs dangerous commands",
         "info_title": "Docker Control Center",
         "btn_refresh": "Refresh",
@@ -334,6 +339,11 @@ TEXTS = {
         "menu_info": "Info",
         "menu_config": "Konfiguruj",
         "menu_llm": "LLM",
+        "menu_app": "Aplikacja",
+        "app_settings_title": "Ustawienia aplikacji",
+        "app_settings_intro": "Zachowanie startowe dla lokalnej integracji z Docker.",
+        "app_settings_autostart_dd": "Uruchamiaj Docker Desktop w tle przy starcie DCC (tryb lokalny)",
+        "app_settings_note": "Po wlaczeniu DCC sprawdza lokalny Docker przy starcie i automatycznie uruchamia Docker Desktop, jesli potrzeba.",
         "info_safe_danger": "Bezpieczne vs niebezpieczne komendy",
         "info_title": "Docker Control Center",
         "btn_refresh": "Odswiez",
@@ -1374,6 +1384,32 @@ class LlmSettingsDialog(QDialog):
         self.settings.setValue("llm/openai_model", sanitize_openai_model_name(self.openai_model_combo.currentText().strip() or DEFAULT_OPENAI_MODELS[0]))
         self.accept()
 
+class AppSettingsDialog(QDialog):
+    def __init__(self, settings: QSettings, texts: Dict[str, str], parent=None):
+        super().__init__(parent)
+        self.settings = settings
+        self.texts = texts
+        self.setWindowTitle(self.texts["app_settings_title"])
+        self.resize(680, 240)
+
+        layout = QVBoxLayout(self)
+        intro = QLabel(self.texts["app_settings_intro"])
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        self.auto_start_checkbox = QCheckBox(self.texts["app_settings_autostart_dd"])
+        enabled = str(self.settings.value("auto_start_docker_desktop", "false")).lower() in {"1", "true", "yes"}
+        self.auto_start_checkbox.setChecked(enabled)
+        layout.addWidget(self.auto_start_checkbox)
+
+        note = QLabel(self.texts["app_settings_note"])
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
 class NewContainerDialog(QDialog):
     def __init__(self, client, texts: Dict[str, str], run_command_callback=None, parent=None, initial_args: Optional[List[str]] = None, edit_mode: bool = False, existing_name: str = "", llm_settings_getter=None, ai_command_callback=None, lang: str = "EN"):
         super().__init__(parent)
@@ -2476,6 +2512,7 @@ class MainWindow(QMainWindow):
         self.transparent_mode = str(self.settings.value("transparent_mode", "true")).lower() in {"1", "true", "yes"}
         self.transparency_level = int(self.settings.value("transparency_level", 72))
         self.music_enabled = str(self.settings.value("music_enabled", "true")).lower() in {"1", "true", "yes"}
+        self.auto_start_docker_desktop = str(self.settings.value("auto_start_docker_desktop", "false")).lower() in {"1", "true", "yes"}
         self.glow_phase = 0.52
         self.current_backend = "local"
         self.current_wsl_distro = ""
@@ -2498,7 +2535,11 @@ class MainWindow(QMainWindow):
         self._setup_fx()
         self._load_theme()
         self.reload_profiles_ui()
-        self.connect_local_docker()
+        if self.auto_start_docker_desktop and not self.is_local_docker_available():
+            self.try_start_docker_desktop()
+            QTimer.singleShot(1500, self.connect_local_docker)
+        else:
+            self.connect_local_docker()
 
     def _build_static_ui(self):
         menubar = QMenuBar(self)
@@ -2693,6 +2734,7 @@ class MainWindow(QMainWindow):
         config_menu = QMenu(self.texts["menu_config"], self)
         menubar.addMenu(config_menu)
         config_menu.addAction(self.texts["menu_llm"]).triggered.connect(self.open_llm_settings_dialog)
+        config_menu.addAction(self.texts["menu_app"]).triggered.connect(self.open_app_settings_dialog)
 
         info_menu = QMenu(self.texts["menu_info"], self)
         menubar.addMenu(info_menu)
@@ -2844,6 +2886,14 @@ class MainWindow(QMainWindow):
         dialog = LlmSettingsDialog(self.settings, self.secret_store, self.texts, self)
         dialog.exec()
 
+
+    def open_app_settings_dialog(self):
+        dialog = AppSettingsDialog(self.settings, self.texts, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.auto_start_docker_desktop = dialog.auto_start_checkbox.isChecked()
+            self.settings.setValue("auto_start_docker_desktop", "true" if self.auto_start_docker_desktop else "false")
+            if self.auto_start_docker_desktop and self.current_backend == "local" and not self.is_local_docker_available():
+                self.try_start_docker_desktop()
     def generate_ai_docker_command(self, provider: str, model: str, prompt: str, current_command: str, image: str = "", edit_mode: bool = False) -> str:
         settings = self.get_llm_settings()
         provider = (provider or settings.get("provider") or "ollama").strip().lower()
@@ -3242,6 +3292,14 @@ class MainWindow(QMainWindow):
         dialog = CommandProgressDialog(title, status_text, self.run_backend_docker_command_stream, args, self.texts, self)
         dialog.exec()
         return dialog.close_button.isEnabled() and dialog.status_label.text() == self.texts["progress_status_done"]
+
+    def is_local_docker_available(self) -> bool:
+        try:
+            local_client = docker.from_env(timeout=3)
+            local_client.ping()
+            return True
+        except Exception:
+            return False
 
     def try_start_docker_desktop(self) -> bool:
         candidates = [
@@ -3779,6 +3837,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

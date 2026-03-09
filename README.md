@@ -1,4 +1,4 @@
-# Docker Control Center
+﻿# Docker Control Center
 
 [Jump to Polish / Przejdz do polskiej wersji](#polski)
 
@@ -10,8 +10,24 @@
 
 A polished Windows control panel for managing Docker locally, through WSL/WSL2, and on remote hosts over SSH.
 
-### Download v1.0.0
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/tag/v1.0.0)
+### Download Latest Version
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/latest)
+
+## What's New in v1.1.0
+
+### EN
+- Added `Configure -> Application` settings panel.
+- Added startup checkbox for background Docker Desktop boot in local mode.
+- Better local Docker unavailable dialog with one-click Docker Desktop start.
+- Localized New Container catalog descriptions and notes for EN/PL.
+- Improved startup flow for users after Windows restart.
+
+### PL
+- Dodano panel `Konfiguruj -> Aplikacja`.
+- Dodano checkbox uruchamiania Docker Desktop w tle w trybie lokalnym.
+- Lepszy komunikat braku lokalnego Dockera z przyciskiem uruchomienia Docker Desktop.
+- Zlokalizowano opisy i podpowiedzi katalogu Nowy kontener (EN/PL).
+- Usprawniono start aplikacji po restarcie Windows.
 
 ## English
 
@@ -136,3 +152,4 @@ Ponizsze zrzuty pokazuja interfejs w jezyku angielskim.
 - `images/` - README screenshots
 - `icon.ico` / `icon.png` - application icons
 - `bg.mp3` - optional in-app background music
+
