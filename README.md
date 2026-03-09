@@ -9,7 +9,7 @@
 A polished Windows control panel for managing Docker locally, through WSL/WSL2, and on remote hosts over SSH.
 
 ## Download v1.0.0
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/tag/v1.0.0))
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/tag/v1.0.0)
 
 ## English
 
