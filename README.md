@@ -1,5 +1,7 @@
 # Docker Control Center
 
+[Jump to Polish / Przejdz do polskiej wersji](#polski)
+
 ![Windows](https://img.shields.io/badge/Windows-11%20%2F%2010-0078D6?logo=windows&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
 ![PyQt6](https://img.shields.io/badge/UI-PyQt6-41CD52?logo=qt&logoColor=white)
@@ -92,6 +94,6 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 ## Repository contents
 - `docker-menager.ps` - main application source
 - `DockerControlCenter.nsi` - NSIS installer script
-- `start_rpi_docker_gui.bat` - helper launcher
 - `backgrounds/` - theme background artwork
 - `icon.ico` / `icon.png` - application icons
+- `bg.mp3` - optional in-app background music
