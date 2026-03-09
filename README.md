@@ -23,11 +23,28 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 - Create and modify container run commands with presets and AI-assisted editing.
 - Switch between `Light`, `Dark`, and `Black` themes with background artwork support.
 
-![image.png](/images/image.png)   
-![image.png](/images/image1.png)   
-![image.png](/images/image2.png)   
-![image.png](/images/image3.png)   
-![image.png](/images/image4.png)   
+### Screenshots
+Screenshots below use the English UI.
+
+`Main view - local containers`
+
+![Main view - local containers](images/image.png)
+
+`Remote view - SSH-connected containers`
+
+![Remote view - SSH-connected containers](images/image1.png)
+
+`New container wizard`
+
+![New container wizard](images/image2.png)
+
+`AI assistant`
+
+![AI assistant](images/image3.png)
+
+`New remote profile`
+
+![New remote profile](images/image4.png)
 
 ### Distribution
 - `Installer`: installs for the current Windows user.
@@ -52,8 +69,6 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 - `docker_connection_profiles.example.json`
 - `%APPDATA%\DockerControlCenter\docker_connection_profiles.json`
 - `%APPDATA%\DockerControlCenter\docker_control_center_secrets.json`
-   
-
 
 ---
 
@@ -66,6 +81,29 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 - Pokazuje logi, inspect, linki WWW i pozwala ustawic autostart kontenerow.
 - Umozliwia tworzenie i edycje komend `docker run` z presetami oraz wsparciem AI.
 - Pozwala przelaczac motywy `Light`, `Dark` i `Black` oraz korzystac z tapet graficznych.
+
+### Zrzuty ekranu
+Ponizsze zrzuty pokazuja interfejs w jezyku angielskim.
+
+`Widok glowny - lokalne kontenery`
+
+![Widok glowny - lokalne kontenery](images/image.png)
+
+`Widok zdalny - kontenery przez SSH`
+
+![Widok zdalny - kontenery przez SSH](images/image1.png)
+
+`Kreator nowego kontenera`
+
+![Kreator nowego kontenera](images/image2.png)
+
+`Asystent AI`
+
+![Asystent AI](images/image3.png)
+
+`Dodawanie nowego profilu zdalnego`
+
+![Dodawanie nowego profilu zdalnego](images/image4.png)
 
 ### Dystrybucja
 - `Installer`: instaluje aplikacje dla aktualnego uzytkownika Windows.
@@ -95,5 +133,6 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 - `docker-menager.ps` - main application source
 - `DockerControlCenter.nsi` - NSIS installer script
 - `backgrounds/` - theme background artwork
+- `images/` - README screenshots
 - `icon.ico` / `icon.png` - application icons
 - `bg.mp3` - optional in-app background music
