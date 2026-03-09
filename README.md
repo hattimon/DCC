@@ -52,7 +52,7 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 - Laczy sie ze zdalnymi hostami Docker przez SSH.
 - Pokazuje logi, inspect, linki WWW i pozwala ustawic autostart kontenerow.
 - Umozliwia tworzenie i edycje komend `docker run` z presetami oraz wsparciem AI.
-- Pozwala przelaczac motywy `Light`, `Dark` i `Black` oraz korzystac z te³ graficznych.
+- Pozwala przelaczac motywy `Light`, `Dark` i `Black` oraz korzystac z tapet graficznych.
 
 ### Dystrybucja
 - `Installer`: instaluje aplikacje dla aktualnego uzytkownika Windows.
