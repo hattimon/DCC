@@ -1,0 +1,16 @@
+{
+  "profiles": [
+    {
+      "name": "Example Raspberry Pi SSH",
+      "mode": "ssh",
+      "ssh_target": "user@192.168.0.200",
+      "ssh_auth_mode": "key",
+      "ssh_username": "",
+      "ssh_password": "",
+      "secret_id": "",
+      "base_url": "",
+      "tunnel_command": "ssh -N -L 23750:127.0.0.1:2375 user@192.168.0.200",
+      "wait_seconds": 2
+    }
+  ]
+}

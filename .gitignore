@@ -1,0 +1,22 @@
+# Python / virtualenv
+.venv/
+__pycache__/
+*.pyc
+
+# Local user data / secrets
+/docker_connection_profiles.json
+/docker_control_center_secrets.json
+
+# Build artifacts
+/build/
+/dist/
+/release/
+*.spec
+
+# Temporary local files
+/_tmp*.txt
+/test_write_probe.txt
+
+# OS / editor
+Thumbs.db
+.DS_Store
