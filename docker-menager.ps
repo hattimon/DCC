@@ -285,6 +285,10 @@ TEXTS = {
         "exec_shell_intro_remote_ssh": "This command opens an interactive shell inside the selected container on remote host: {target}.",
         "exec_shell_intro_remote_tunnel": "This command opens an interactive shell inside the selected container through the configured Docker tunnel.",
         "docker_not_available": "Docker connection unavailable. Is Docker Desktop or the remote host running?",
+        "docker_local_unavailable_title": "Local Docker is unavailable",
+        "docker_local_unavailable_hint": "Docker Desktop is not running or not reachable. Start Docker Desktop first, then click Refresh.",
+        "docker_local_open_desktop": "Start Docker Desktop",
+        "docker_local_open_failed": "Could not start Docker Desktop automatically. Start it manually and try again.",
         "local_client": "Connect local",
         "btn_local_profiles": "Local INFO",
         "btn_wsl_profile": "Local WSL",
@@ -498,6 +502,10 @@ TEXTS = {
         "exec_shell_intro_remote_ssh": "To polecenie otwiera interaktywna powloke wewnatrz wybranego kontenera na zdalnym hoscie: {target}.",
         "exec_shell_intro_remote_tunnel": "To polecenie otwiera interaktywna powloke wewnatrz wybranego kontenera przez skonfigurowany tunel Docker.",
         "docker_not_available": "Brak polaczenia z Docker. Czy Docker Desktop lub host zdalny dziala?",
+        "docker_local_unavailable_title": "Lokalny Docker jest niedostepny",
+        "docker_local_unavailable_hint": "Docker Desktop nie dziala lub nie odpowiada. Uruchom Docker Desktop i kliknij Odswiez.",
+        "docker_local_open_desktop": "Uruchom Docker Desktop",
+        "docker_local_open_failed": "Nie udalo sie uruchomic Docker Desktop automatycznie. Uruchom go recznie i sprobuj ponownie.",
         "local_client": "Polacz lokalnie",
         "btn_local_profiles": "INFO lokalne",
         "btn_wsl_profile": "WSL lokalne",
@@ -659,26 +667,37 @@ class ImageTemplate:
     command: str = ""
     notes: str = ""
     lightweight: bool = False
+    category_en: str = ""
+    description_en: str = ""
+    notes_en: str = ""
+
+    def category_for(self, lang: str) -> str:
+        return self.category_en if lang == "EN" and self.category_en else self.category
+
+    def description_for(self, lang: str) -> str:
+        return self.description_en if lang == "EN" and self.description_en else self.description
+
+    def notes_for(self, lang: str) -> str:
+        return self.notes_en if lang == "EN" and self.notes_en else self.notes
 
 
 def default_image_catalog() -> List[ImageTemplate]:
     return [
-        ImageTemplate("Open WebUI", "ghcr.io/open-webui/open-webui:main", "AI / UI", "Interfejs webowy do modeli i lokalnych pipeline'ow AI.", "open-webui", "8080", "3000", notes="Dobra para z Ollama albo OpenAI API."),
-        ImageTemplate("Perplexica", "itzcrazykns1337/perplexica:latest", "AI / Search", "Wyszukiwarka AI z mozliwoscia pracy lokalnej.", "perplexica", "3000", "3100", notes="Czesto uruchamiana razem z SearXNG."),
-        ImageTemplate("SearXNG", "searxng/searxng:latest", "AI / Search", "Meta-wyszukiwarka prywatnosciowa dla self-hostingu.", "searxng", "8080", "8888", notes="Przydatna jako backend wyszukiwania dla narzedzi AI."),
-        ImageTemplate("Portainer CE", "portainer/portainer-ce:latest", "Administracja", "Panel administracyjny do Docker i kontenerow.", "portainer", "9000", "9000", extra="-p 9443:9443 -v portainer_data:/data -v /var/run/docker.sock:/var/run/docker.sock", notes="Dziala na x86 i ARM, dobre rowniez na Raspberry Pi."),
-        ImageTemplate("Nginx", "nginx:alpine", "WWW / Proxy", "Lekki serwer WWW i reverse proxy.", "nginx", "80", "8080", lightweight=True, notes="Wersja alpine jest lekka i dobra na slabsze maszyny."),
-        ImageTemplate("Caddy", "caddy:alpine", "WWW / Proxy", "Nowoczesny reverse proxy z prostym HTTPS.", "caddy", "80", "8081", lightweight=True, notes="Bardzo wygodny do szybkich wdrozen stron i API."),
-        ImageTemplate("Redis", "redis:7-alpine", "Bazy danych", "Lekka baza key-value i cache.", "redis", "6379", "6379", lightweight=True),
-        ImageTemplate("MariaDB", "mariadb:11", "Bazy danych", "MySQL-compatible baza danych dla aplikacji self-hosted.", "mariadb", "3306", "3306", extra="-e MARIADB_ROOT_PASSWORD=changeme -v mariadb_data:/var/lib/mysql"),
-        ImageTemplate("Adminer", "adminer:latest", "Bazy danych", "Lekki panel WWW do baz danych.", "adminer", "8080", "8082", lightweight=True),
-        ImageTemplate("Eclipse Mosquitto", "eclipse-mosquitto:2", "Smart Home / IoT", "Broker MQTT dla IoT i Home Assistant.", "mosquitto", "1883", "1883", lightweight=True, notes="Dobry wybor dla slabszych maszyn i Raspberry Pi 3."),
-        ImageTemplate("Node-RED", "nodered/node-red:latest", "Smart Home / IoT", "Wizualna automatyzacja workflow i integracji.", "node-red", "1880", "1880", extra="-v node_red_data:/data", notes="Czesto laczony z MQTT i Home Assistant."),
-        ImageTemplate("Gitea", "gitea/gitea:latest", "DevOps", "Lekki self-hosted Git server.", "gitea", "3000", "3001", extra="-p 2222:22 -v gitea:/data", notes="Przyjazny dla Raspberry Pi i slabego sprzetu."),
-        ImageTemplate("Jellyfin", "linuxserver/jellyfin:latest", "Media", "Self-hosted media server z obsluga ARM i x86.", "jellyfin", "8096", "8096", extra="-v jellyfin_config:/config -v jellyfin_cache:/cache", notes="Aby dodac muzyke z Windows, dopisz w Dodatkowe parametry mount typu -v C:/TwojaMuzyka:/data/music:ro i potem w Jellyfin wskaz folder /data/music. Na slabszych maszynach ogranicz transkodowanie."),
-        ImageTemplate("Uptime Kuma", "louislam/uptime-kuma:1", "Monitoring", "Monitoring stron i uslug z prostym dashboardem.", "uptime-kuma", "3001", "3002", extra="-v uptime_kuma:/app/data", notes="Bardzo lekki do domowego monitoringu."),
+        ImageTemplate("Open WebUI", "ghcr.io/open-webui/open-webui:main", "AI / UI", "Interfejs webowy do modeli i lokalnych pipeline'ow AI.", "open-webui", "8080", "3000", notes="Dobra para z Ollama albo OpenAI API.", category_en="AI / UI", description_en="Web interface for AI models and local AI pipelines.", notes_en="Great pair with Ollama or OpenAI API."),
+        ImageTemplate("Perplexica", "itzcrazykns1337/perplexica:latest", "AI / Search", "Wyszukiwarka AI z mozliwoscia pracy lokalnej.", "perplexica", "3000", "3100", notes="Czesto uruchamiana razem z SearXNG.", category_en="AI / Search", description_en="AI search engine with local-first workflows.", notes_en="Often deployed together with SearXNG."),
+        ImageTemplate("SearXNG", "searxng/searxng:latest", "AI / Search", "Meta-wyszukiwarka prywatnosciowa dla self-hostingu.", "searxng", "8080", "8888", notes="Przydatna jako backend wyszukiwania dla narzedzi AI.", category_en="AI / Search", description_en="Privacy-focused metasearch engine for self-hosting.", notes_en="Useful as a search backend for AI tools."),
+        ImageTemplate("Portainer CE", "portainer/portainer-ce:latest", "Administracja", "Panel administracyjny do Docker i kontenerow.", "portainer", "9000", "9000", extra="-p 9443:9443 -v portainer_data:/data -v /var/run/docker.sock:/var/run/docker.sock", notes="Dziala na x86 i ARM, dobre rowniez na Raspberry Pi.", category_en="Administration", description_en="Administration panel for Docker and containers.", notes_en="Runs on x86 and ARM, including Raspberry Pi."),
+        ImageTemplate("Nginx", "nginx:alpine", "WWW / Proxy", "Lekki serwer WWW i reverse proxy.", "nginx", "80", "8080", lightweight=True, notes="Wersja alpine jest lekka i dobra na slabsze maszyny.", category_en="Web / Proxy", description_en="Lightweight web server and reverse proxy.", notes_en="Alpine image is lightweight and great for low-end hardware."),
+        ImageTemplate("Caddy", "caddy:alpine", "WWW / Proxy", "Nowoczesny reverse proxy z prostym HTTPS.", "caddy", "80", "8081", lightweight=True, notes="Bardzo wygodny do szybkich wdrozen stron i API.", category_en="Web / Proxy", description_en="Modern reverse proxy with simple HTTPS setup.", notes_en="Very convenient for quick website and API deployments."),
+        ImageTemplate("Redis", "redis:7-alpine", "Bazy danych", "Lekka baza key-value i cache.", "redis", "6379", "6379", lightweight=True, category_en="Databases", description_en="Lightweight key-value database and cache."),
+        ImageTemplate("MariaDB", "mariadb:11", "Bazy danych", "MySQL-compatible baza danych dla aplikacji self-hosted.", "mariadb", "3306", "3306", extra="-e MARIADB_ROOT_PASSWORD=changeme -v mariadb_data:/var/lib/mysql", category_en="Databases", description_en="MySQL-compatible database for self-hosted applications."),
+        ImageTemplate("Adminer", "adminer:latest", "Bazy danych", "Lekki panel WWW do baz danych.", "adminer", "8080", "8082", lightweight=True, category_en="Databases", description_en="Lightweight web panel for database management."),
+        ImageTemplate("Eclipse Mosquitto", "eclipse-mosquitto:2", "Smart Home / IoT", "Broker MQTT dla IoT i Home Assistant.", "mosquitto", "1883", "1883", lightweight=True, notes="Dobry wybor dla slabszych maszyn i Raspberry Pi 3.", category_en="Smart Home / IoT", description_en="MQTT broker for IoT and Home Assistant.", notes_en="Good choice for low-end devices and Raspberry Pi 3."),
+        ImageTemplate("Node-RED", "nodered/node-red:latest", "Smart Home / IoT", "Wizualna automatyzacja workflow i integracji.", "node-red", "1880", "1880", extra="-v node_red_data:/data", notes="Czesto laczony z MQTT i Home Assistant.", category_en="Smart Home / IoT", description_en="Visual workflow automation and integrations.", notes_en="Often paired with MQTT and Home Assistant."),
+        ImageTemplate("Gitea", "gitea/gitea:latest", "DevOps", "Lekki self-hosted Git server.", "gitea", "3000", "3001", extra="-p 2222:22 -v gitea:/data", notes="Przyjazny dla Raspberry Pi i slabego sprzetu.", category_en="DevOps", description_en="Lightweight self-hosted Git server.", notes_en="Friendly for Raspberry Pi and low-end hardware."),
+        ImageTemplate("Jellyfin", "linuxserver/jellyfin:latest", "Media", "Self-hosted media server z obsluga ARM i x86.", "jellyfin", "8096", "8096", extra="-v jellyfin_config:/config -v jellyfin_cache:/cache", notes="Aby dodac muzyke z Windows, dopisz w Dodatkowe parametry mount typu -v C:/TwojaMuzyka:/data/music:ro i potem w Jellyfin wskaz folder /data/music. Na slabszych maszynach ogranicz transkodowanie.", category_en="Media", description_en="Self-hosted media server with ARM and x86 support.", notes_en="To expose Windows music, add -v C:/YourMusic:/data/music:ro in Extra parameters and then add /data/music in Jellyfin. On low-end hardware, limit transcoding."),
+        ImageTemplate("Uptime Kuma", "louislam/uptime-kuma:1", "Monitoring", "Monitoring stron i uslug z prostym dashboardem.", "uptime-kuma", "3001", "3002", extra="-v uptime_kuma:/app/data", notes="Bardzo lekki do domowego monitoringu.", category_en="Monitoring", description_en="Website and service monitoring with a simple dashboard.", notes_en="Very lightweight for home monitoring."),
     ]
-
 
 def fetch_docker_hub_description(image: str) -> Optional[str]:
     repo = image.split(":", 1)[0].strip()
@@ -1356,7 +1375,7 @@ class LlmSettingsDialog(QDialog):
         self.accept()
 
 class NewContainerDialog(QDialog):
-    def __init__(self, client, texts: Dict[str, str], run_command_callback=None, parent=None, initial_args: Optional[List[str]] = None, edit_mode: bool = False, existing_name: str = "", llm_settings_getter=None, ai_command_callback=None):
+    def __init__(self, client, texts: Dict[str, str], run_command_callback=None, parent=None, initial_args: Optional[List[str]] = None, edit_mode: bool = False, existing_name: str = "", llm_settings_getter=None, ai_command_callback=None, lang: str = "EN"):
         super().__init__(parent)
         self.client = client
         self.texts = texts
@@ -1369,6 +1388,7 @@ class NewContainerDialog(QDialog):
         self.existing_name = existing_name.strip()
         self.llm_settings_getter = llm_settings_getter or (lambda: {})
         self.ai_command_callback = ai_command_callback
+        self.lang = (lang or "EN").upper()
 
         self.setWindowTitle(self.texts["wizard_edit_title"] if self.edit_mode else self.texts["wizard_title"])
         self.resize(980, 760)
@@ -1380,7 +1400,7 @@ class NewContainerDialog(QDialog):
         self.search_edit.setPlaceholderText(self.texts["wizard_search"])
         self.category_combo = QComboBox()
         self.category_combo.addItem(self.texts["wizard_all_categories"])
-        for category in sorted({item.category for item in self.catalog}):
+        for category in sorted({item.category_for(self.lang) for item in self.catalog}):
             self.category_combo.addItem(category)
         self.btn_online_refresh = QPushButton(self.texts["wizard_online_refresh"])
         toolbar.addWidget(QLabel(self.texts["wizard_category"]))
@@ -1539,13 +1559,13 @@ class NewContainerDialog(QDialog):
         self.filtered_catalog = []
         self.catalog_list.clear()
         for item in self.catalog:
-            if category and category != self.texts["wizard_all_categories"] and item.category != category:
+            if category and category != self.texts["wizard_all_categories"] and item.category_for(self.lang) != category:
                 continue
-            haystack = f"{item.name} {item.image} {item.description} {item.notes}"
+            haystack = f"{item.name} {item.image} {item.description_for(self.lang)} {item.notes_for(self.lang)}"
             if query and query not in haystack.lower():
                 continue
             self.filtered_catalog.append(item)
-            label = f"{item.name} [{item.category}]"
+            label = f"{item.name} [{item.category_for(self.lang)}]"
             if item.lightweight:
                 label += " [light]"
             self.catalog_list.addItem(label)
@@ -1583,9 +1603,10 @@ class NewContainerDialog(QDialog):
         self.hport_edit.setText(template.host_port)
         self.extra_edit.setText(template.extra)
         self.command_edit.setText(template.command)
-        notes = template.description
-        if template.notes:
-            notes += f"\n\n{template.notes}"
+        notes = template.description_for(self.lang)
+        notes_extra = template.notes_for(self.lang)
+        if notes_extra:
+            notes += f"\n\n{notes_extra}"
         self.set_text_preserving_view(self.notes_text, notes)
         self._syncing = False
         self.load_ai_models(fetch=False)
@@ -1843,9 +1864,10 @@ class NewContainerDialog(QDialog):
     def update_notes_from_image(self, image: str):
         match = next((item for item in self.catalog if item.image == image), None)
         if match:
-            notes = match.description
-            if match.notes:
-                notes += f"\n\n{match.notes}"
+            notes = match.description_for(self.lang)
+            notes_extra = match.notes_for(self.lang)
+            if notes_extra:
+                notes += f"\n\n{notes_extra}"
             self.set_text_preserving_view(self.notes_text, notes)
         elif image:
             self.set_text_preserving_view(self.notes_text, image)
@@ -3220,6 +3242,44 @@ class MainWindow(QMainWindow):
         dialog = CommandProgressDialog(title, status_text, self.run_backend_docker_command_stream, args, self.texts, self)
         dialog.exec()
         return dialog.close_button.isEnabled() and dialog.status_label.text() == self.texts["progress_status_done"]
+
+    def try_start_docker_desktop(self) -> bool:
+        candidates = [
+            Path("C:/Program Files/Docker/Docker/Docker Desktop.exe"),
+            Path(os.getenv("LocalAppData", "")) / "Programs/Docker/Docker/Docker Desktop.exe",
+        ]
+        for candidate in candidates:
+            try:
+                if candidate and candidate.exists():
+                    subprocess.Popen([str(candidate)])
+                    return True
+            except Exception:
+                continue
+        try:
+            subprocess.Popen("start \"\" \"docker-desktop:\"", shell=True, creationflags=CREATE_NO_WINDOW)
+            return True
+        except Exception:
+            return False
+
+    def show_local_docker_unavailable(self, details: str = ""):
+        message = QMessageBox(self)
+        message.setWindowTitle(self.texts["msg_error"])
+        message.setIcon(QMessageBox.Icon.Critical)
+        message.setText(self.texts["docker_local_unavailable_title"])
+        info = self.texts["docker_local_unavailable_hint"]
+        if details:
+            info += f"\n\n{details}"
+        message.setInformativeText(info)
+        if self.current_backend == "local":
+            start_button = message.addButton(self.texts["docker_local_open_desktop"], QMessageBox.ButtonRole.AcceptRole)
+            message.addButton(QMessageBox.StandardButton.Ok)
+            message.exec()
+            if message.clickedButton() == start_button and not self.try_start_docker_desktop():
+                QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_local_open_failed"])
+            return
+        message.addButton(QMessageBox.StandardButton.Ok)
+        message.exec()
+
     def connect_local_docker(self):
         try:
             self.client = docker.from_env(timeout=DOCKER_HTTP_TIMEOUT)
@@ -3231,7 +3291,7 @@ class MainWindow(QMainWindow):
             self.refresh_containers()
         except Exception as exc:
             self.client = None
-            QMessageBox.critical(self, self.texts["msg_error"], str(exc))
+            self.show_local_docker_unavailable(str(exc))
 
     def connect_remote_docker(self):
         profile = self.selected_profile()
@@ -3565,7 +3625,7 @@ class MainWindow(QMainWindow):
 
     def refresh_containers(self):
         if not self.client:
-            QMessageBox.critical(self, self.texts["msg_error"], self.texts["docker_not_available"])
+            self.show_local_docker_unavailable(self.texts["docker_not_available"])
             return
         if self.refresh_thread is not None and self.refresh_thread.isRunning():
             return
@@ -3630,7 +3690,7 @@ class MainWindow(QMainWindow):
 
     def bulk_action(self, action: str):
         if not self.client:
-            QMessageBox.critical(self, self.texts["msg_error"], self.texts["docker_not_available"])
+            self.show_local_docker_unavailable(self.texts["docker_not_available"])
             return
         names = self.get_selected_names()
         if not names:
@@ -3660,7 +3720,7 @@ class MainWindow(QMainWindow):
 
     def show_selected_logs(self):
         if not self.client:
-            QMessageBox.critical(self, self.texts["msg_error"], self.texts["docker_not_available"])
+            self.show_local_docker_unavailable(self.texts["docker_not_available"])
             return
         names = self.get_selected_names()
         if not names:
@@ -3670,7 +3730,7 @@ class MainWindow(QMainWindow):
 
     def open_edit_start_wizard(self, container_name: str = ""):
         if not self.client:
-            QMessageBox.critical(self, self.texts["msg_error"], self.texts["docker_not_available"])
+            self.show_local_docker_unavailable(self.texts["docker_not_available"])
             return
         target_name = container_name or self.selected_container_name_for_edit()
         if not target_name:
@@ -3692,15 +3752,16 @@ class MainWindow(QMainWindow):
             existing_name=target_name,
             llm_settings_getter=self.get_llm_settings,
             ai_command_callback=self.generate_ai_docker_command,
+            lang=self.lang,
         )
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self.refresh_containers()
 
     def open_new_container_wizard(self):
         if not self.client:
-            QMessageBox.critical(self, self.texts["msg_error"], self.texts["docker_not_available"])
+            self.show_local_docker_unavailable(self.texts["docker_not_available"])
             return
-        dlg = NewContainerDialog(self.client, self.texts, lambda args: self.execute_backend_command_with_progress(args, self.texts["progress_title_create"], self.texts["progress_status_create"]), self, llm_settings_getter=self.get_llm_settings, ai_command_callback=self.generate_ai_docker_command)
+        dlg = NewContainerDialog(self.client, self.texts, lambda args: self.execute_backend_command_with_progress(args, self.texts["progress_title_create"], self.texts["progress_status_create"]), self, llm_settings_getter=self.get_llm_settings, ai_command_callback=self.generate_ai_docker_command, lang=self.lang)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self.refresh_containers()
 
@@ -3718,6 +3779,18 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
