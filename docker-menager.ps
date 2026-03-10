@@ -3,6 +3,7 @@ import base64
 import ctypes
 import json
 import os
+import platform
 import re
 import subprocess
 import shlex
@@ -112,6 +113,14 @@ DEFAULT_OLLAMA_MODELS = [
     "deepseek-r1:8b",
 ]
 
+APP_VERSION = "1.1.1"
+APP_VERSION_TAG = f"v{APP_VERSION}"
+GITHUB_REPO = "hattimon/DCC"
+GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
+GITHUB_RELEASES_URL = f"{GITHUB_REPO_URL}/releases"
+GITHUB_LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+
 TEXTS = {
     "EN": {
         "app_title": "Docker Control Center",
@@ -126,6 +135,23 @@ TEXTS = {
         "theme_dark": "Dark",
         "theme_black": "Black",
         "menu_info": "Info",
+        "info_app": "Application info",
+        "info_check_updates": "Check updates",
+        "info_app_title": "Docker Control Center",
+        "info_app_version": "Version: {version}",
+        "info_app_repo": "Repository: {repo}",
+        "info_app_latest": "Latest release: {release}",
+        "info_app_latest_unknown_value": "unknown",
+        "info_app_open_repo": "Open repository",
+        "info_app_open_release": "Open latest release",
+        "info_app_check_updates": "Check updates",
+        "info_app_changelog_title": "Changelog (v1.1.1)",
+        "info_app_changelog": "- Added Info menu with app version, changelog, and update checks.\n- Periodic release check and update notification.\n- Fixed SSH Docker command execution regression.\n- Window size now persists between launches.",
+        "info_update_available_title": "Update available",
+        "info_update_available_body": "A newer release is available: {release}.",
+        "info_update_none_title": "No updates",
+        "info_update_none": "You are already on the latest version.",
+        "info_update_check_failed": "Could not check for updates right now.",
         "menu_config": "Configure",
         "menu_llm": "LLM",
         "menu_app": "Application",
@@ -158,7 +184,20 @@ TEXTS = {
         "btn_profiles": "Connection profiles",
         "btn_ssh_terminal": "SSH terminal",
         "btn_local_info": "Local INFO",
-        "btn_transparency_on": "Transparency: ON",
+        "infra_unknown": "Infrastructure: unknown",
+        "infra_local_label": "Infrastructure: Local host ({os} | {arch})",
+        "infra_local_fallback": "Infrastructure: Docker Desktop",
+        "infra_local_wsl": "Infrastructure: WSL ({distro})",
+        "infra_remote_label": "Infrastructure: Remote host ({os} | {arch})",
+        "infra_remote_tunnel": "Infrastructure: Remote tunnel",
+        "btn_host_restart": "Restart host",
+        "host_status_running": "Host is reachable",
+        "host_status_off": "Host is offline",
+        "host_restart_title": "Restart host?",
+        "host_restart_body": "This will restart the current host. Continue?",
+        "host_restart_sent": "Restart command sent to the host.",
+        "host_restart_failed": "Could not restart the host with the available commands.",
+        "local_profiles_wsl_command": "WSL quick test (selected distro): wsl -d {distro} sh -lc \"docker ps\"",        "btn_transparency_on": "Transparency: ON",
         "btn_transparency_off": "Transparency: OFF",
         "transparency_level": "Glass level",
         "btn_music_on": "Music: ON",
@@ -334,7 +373,7 @@ TEXTS = {
         "wsl_label": "WSL",
         "wsl_none": "No WSL distributions",
         "wsl_detect_error": "Could not retrieve the WSL distribution list. Run the application with WSL access or verify that the WSL service is working.",
-        "wsl_connect_error": "Could not connect to Docker in WSL. Check: wsl -d {distro} sh -lc \"docker ps\"",
+        "wsl_connect_error": "Could not connect to Docker in WSL. Make sure Docker is running in the selected distribution.",
         "wsl_help_title": "WSL / WSL2 Docker",
         "wsl_help_text": "Detected distribution: {distro}\n\nGUI connection options:\n1. Easiest: Docker Desktop with WSL integration and the Connect local button.\n2. Click Local WSL to manage Docker running directly in this distribution.\n3. SSH profile: run OpenSSH in WSL and connect using an SSH profile.\n4. Tunnel profile: expose the Docker socket from WSL over TCP and connect using a tunnel profile.\n\nQuick terminal test:\nwsl -d {distro} sh -lc \"docker ps\"",
         "local_profiles_text": "Local profiles for beginners:\n\n1. Local containers\nUse this when Docker Desktop or a local daemon is running on Windows.\nCheck: PowerShell -> docker ps\n\n2. Local WSL\nUse this when Docker runs directly in Ubuntu, Debian, Kali or another WSL2 distribution.\nCheck: PowerShell -> wsl -d Ubuntu sh -lc \"docker ps\"\n\nHow to add a container:\n- click New container\n- choose a preset image or paste a docker run command\n- review the summary and run it\n\nWhich mode to use:\n- Windows / Docker Desktop: Connect local\n- WSL2 with its own dockerd: Local WSL\n- Raspberry Pi / server / NAS: Start profile through SSH or tunnel",
@@ -375,6 +414,23 @@ TEXTS = {
         "theme_dark": "Ciemny",
         "theme_black": "Czarny",
         "menu_info": "Info",
+        "info_app": "Informacje o aplikacji",
+        "info_check_updates": "Sprawdz aktualizacje",
+        "info_app_title": "Docker Control Center",
+        "info_app_version": "Wersja: {version}",
+        "info_app_repo": "Repozytorium: {repo}",
+        "info_app_latest": "Ostatni release: {release}",
+        "info_app_latest_unknown_value": "nieznany",
+        "info_app_open_repo": "Otworz repozytorium",
+        "info_app_open_release": "Otworz ostatni release",
+        "info_app_check_updates": "Sprawdz aktualizacje",
+        "info_app_changelog_title": "Changelog (v1.1.1)",
+        "info_app_changelog": "- Dodano sekcje Info z wersja aplikacji, changelogiem i sprawdzaniem aktualizacji.\n- Cykliczne sprawdzanie release i powiadomienie o nowej wersji.\n- Naprawiono wykonywanie komend Docker po SSH.\n- Zapamietywanie rozmiaru okna przy starcie.",
+        "info_update_available_title": "Dostepna aktualizacja",
+        "info_update_available_body": "Dostepna jest nowsza wersja: {release}.",
+        "info_update_none_title": "Brak aktualizacji",
+        "info_update_none": "Masz najnowsza wersje.",
+        "info_update_check_failed": "Nie udalo sie sprawdzic aktualizacji.",
         "menu_config": "Konfiguruj",
         "menu_llm": "LLM",
         "menu_app": "Aplikacja",
@@ -408,7 +464,20 @@ TEXTS = {
         "btn_profiles": "Profile polaczen",
         "btn_ssh_terminal": "Terminal SSH",
         "btn_local_info": "INFO lokalne",
-        "btn_transparency_on": "Przezroczystosc: ON",
+        "infra_unknown": "Infrastruktura: nieznana",
+        "infra_local_label": "Infrastruktura: Lokalny host ({os} | {arch})",
+        "infra_local_fallback": "Infrastruktura: Docker Desktop",
+        "infra_local_wsl": "Infrastruktura: WSL ({distro})",
+        "infra_remote_label": "Infrastruktura: Host zdalny ({os} | {arch})",
+        "infra_remote_tunnel": "Infrastruktura: Tunel zdalny",
+        "btn_host_restart": "Uruchom ponownie komputer",
+        "host_status_running": "Host jest dostepny",
+        "host_status_off": "Host jest wylaczony",
+        "host_restart_title": "Uruchomic ponownie hosta?",
+        "host_restart_body": "To spowoduje restart biezacego hosta. Kontynuowac?",
+        "host_restart_sent": "Polecenie restartu zostalo wyslane.",
+        "host_restart_failed": "Nie udalo sie zrestartowac hosta dostepnymi komendami.",
+        "local_profiles_wsl_command": "Szybki test WSL (wybrana dystrybucja): wsl -d {distro} sh -lc \"docker ps\"",        "btn_transparency_on": "Przezroczystosc: ON",
         "btn_transparency_off": "Przezroczystosc: OFF",
         "transparency_level": "Poziom szkla",
         "btn_music_on": "Muzyka: ON",
@@ -584,7 +653,7 @@ TEXTS = {
         "wsl_label": "WSL",
         "wsl_none": "Brak dystrybucji WSL",
         "wsl_detect_error": "Nie udalo sie pobrac listy dystrybucji WSL. Uruchom aplikacje z uprawnieniami do WSL albo sprawdz, czy usluga WSL dziala.",
-        "wsl_connect_error": "Nie udalo sie polaczyc z Dockerem w WSL. Sprawdz: wsl -d {distro} sh -lc \"docker ps\"",
+        "wsl_connect_error": "Nie udalo sie polaczyc z Dockerem w WSL. Upewnij sie, ze Docker dziala w wybranej dystrybucji.",
         "wsl_help_title": "WSL / WSL2 Docker",
         "wsl_help_text": "Wykryta dystrybucja: {distro}\n\nOpcje polaczenia z GUI:\n1. Najlatwiej: Docker Desktop z integracja WSL i przycisk Polacz lokalnie.\n2. Kliknij WSL lokalne, aby zarzadzac Dockerem uruchomionym bezposrednio w tej dystrybucji.\n3. Profil SSH: uruchom OpenSSH w WSL i polacz profilem SSH.\n4. Profil tunnel: wystaw socket Dockera z WSL do TCP i polacz profilem tunnel.\n\nSzybki test w terminalu:\nwsl -d {distro} sh -lc \"docker ps\"",
         "local_profiles_text": "Profile lokalne dla poczatkujacych:\n\n1. Kontenery lokalne\nUzywaj, gdy Docker Desktop albo lokalny daemon jest uruchomiony w Windows.\nSprawdz: PowerShell -> docker ps\n\n2. WSL lokalne\nUzywaj, gdy Docker dziala bezposrednio w Ubuntu, Debianie, Kali albo innej dystrybucji WSL2.\nSprawdz: PowerShell -> wsl -d Ubuntu sh -lc \"docker ps\"\n\nJak dodac kontener:\n- kliknij Nowy kontener\n- wybierz gotowy obraz albo wklej komende docker run\n- sprawdz podsumowanie i uruchom\n\nKiedy ktory tryb:\n- Windows / Docker Desktop: Polacz lokalnie\n- WSL2 z wlasnym dockerd: WSL lokalne\n- Raspberry Pi / serwer / NAS: Start profilu przez SSH lub tunel",
@@ -930,7 +999,7 @@ def extract_docker_run_command(text: str) -> str:
                 cleaned = part
                 break
     cleaned = normalize_docker_command_text(cleaned)
-    match = re.search(r"docker\s+run\b.*", cleaned, re.IGNORECASE)
+    match = re.search(r"(docker|balena)\s+run\b.*", cleaned, re.IGNORECASE)
     if match:
         return normalize_docker_command_text(match.group(0))
     return cleaned
@@ -2046,10 +2115,18 @@ class NewContainerDialog(QDialog):
                 image=self.image_edit.text().strip(),
                 edit_mode=self.edit_mode,
             )
-            command = extract_docker_run_command(command)
-            if not command.lower().startswith("docker run"):
-                raise RuntimeError(self.texts["llm_response_invalid"])
-            command = normalize_docker_command_text(command)
+            command = normalize_docker_command_text(extract_docker_run_command(command))
+            desired = self.current_cli()
+            if desired == "balena":
+                if command.lower().startswith("docker run"):
+                    command = "balena run" + command[len("docker run"):]
+                if not command.lower().startswith("balena run"):
+                    raise RuntimeError(self.texts["llm_response_invalid"])
+            else:
+                if command.lower().startswith("balena run"):
+                    command = "docker run" + command[len("balena run"):]
+                if not command.lower().startswith("docker run"):
+                    raise RuntimeError(self.texts["llm_response_invalid"])
             self.set_text_preserving_view(self.ai_result_text, command)
             self.ai_status_label.setText(self.texts["llm_status_done"])
         except Exception as exc:
@@ -2341,6 +2418,7 @@ class WslDockerClient:
         self.distro = distro
         self.timeout = timeout
         self.containers = WslContainerCollection(self)
+        self.detected_cli = ""
 
     def _wsl_command(self, args: List[str]) -> List[str]:
         docker_args = " ".join(shlex.quote(str(arg)) for arg in args)
@@ -2359,20 +2437,16 @@ class WslDockerClient:
         fatal_error = False
         for cli_name in cli_order:
             base = f"{cli_name} {docker_args}"
-            candidates = [
-                base,
-                f"sh -lc {shlex.quote(base)}",
-                f"sh -c {shlex.quote(base)}",
-            ]
-            for cmd in candidates:
+            candidates = [base, f"sh -lc {shlex.quote(base)}", f"sh -c {shlex.quote(base)}"]
+            for command in candidates:
                 ssh = self._ensure_client()
-                stdin, stdout, stderr = ssh.exec_command(cmd, timeout=self.timeout)
+                stdin, stdout, stderr = ssh.exec_command(command, timeout=self.timeout)
                 out = stdout.read().decode("utf-8", errors="ignore")
                 err = stderr.read().decode("utf-8", errors="ignore")
                 code = stdout.channel.recv_exit_status()
                 if code == 0:
                     self.detected_cli = cli_name
-                    return subprocess.CompletedProcess(cmd, code, out, err)
+                    return subprocess.CompletedProcess(command, code, out, err)
                 combined = (err or out or "").strip()
                 last_error = combined or "Docker command failed over SSH"
                 lowered = combined.lower()
@@ -2385,6 +2459,7 @@ class WslDockerClient:
             if fatal_error:
                 break
         raise RuntimeError(last_error)
+
     def ping(self):
         self.run_docker(["version"], capture_output=True)
 
@@ -2474,20 +2549,16 @@ class SshDockerClient:
         fatal_error = False
         for cli_name in cli_order:
             base = f"{cli_name} {docker_args}"
-            candidates = [
-                base,
-                f"sh -lc {shlex.quote(base)}",
-                f"sh -c {shlex.quote(base)}",
-            ]
-            for cmd in candidates:
+            candidates = [base, f"sh -lc {shlex.quote(base)}", f"sh -c {shlex.quote(base)}"]
+            for command in candidates:
                 ssh = self._ensure_client()
-                stdin, stdout, stderr = ssh.exec_command(cmd, timeout=self.timeout)
+                stdin, stdout, stderr = ssh.exec_command(command, timeout=self.timeout)
                 out = stdout.read().decode("utf-8", errors="ignore")
                 err = stderr.read().decode("utf-8", errors="ignore")
                 code = stdout.channel.recv_exit_status()
                 if code == 0:
                     self.detected_cli = cli_name
-                    return subprocess.CompletedProcess(cmd, code, out, err)
+                    return subprocess.CompletedProcess(command, code, out, err)
                 combined = (err or out or "").strip()
                 last_error = combined or "Docker command failed over SSH"
                 lowered = combined.lower()
@@ -2500,6 +2571,7 @@ class SshDockerClient:
             if fatal_error:
                 break
         raise RuntimeError(last_error)
+
     def ping(self):
         self.run_docker(["version"], capture_output=True)
 
@@ -2929,6 +3001,8 @@ class MainWindow(QMainWindow):
         self.active_remote_profile: Optional[RemoteProfile] = None
         self.status_icon_running = make_colored_icon(QColor("lime"))
         self.status_icon_stopped = make_colored_icon(QColor("red"))
+        self.host_status_icon_running = make_colored_icon(QColor("lime"), size=12)
+        self.host_status_icon_off = make_colored_icon(QColor("red"), size=12)
         self.client: Optional[docker.DockerClient] = None
         self.refresh_thread: Optional[QThread] = None
         self.worker: Optional[RefreshWorker] = None
@@ -2936,11 +3010,23 @@ class MainWindow(QMainWindow):
         self.audio_output = None
         self.media_player = None
         self.root_surface: Optional[BackgroundSurface] = None
+        self.latest_release_tag = ""
+        self.latest_release_url = GITHUB_RELEASES_URL
+        self.update_timer = QTimer(self)
+        self.update_timer.setInterval(UPDATE_CHECK_INTERVAL_MS)
+        self.update_timer.timeout.connect(self.check_for_updates)
+        self.update_timer.start()
         self.setWindowTitle(self.texts["app_title"])
         if ICON_FILE.exists():
             self.setWindowIcon(QIcon(str(ICON_FILE)))
-        self.resize(1360, 780)
+        try:
+            window_w = int(self.settings.value("window_width", 1360))
+            window_h = int(self.settings.value("window_height", 780))
+        except Exception:
+            window_w, window_h = 1360, 780
+        self.resize(window_w, window_h)
         self._build_static_ui()
+        self.update_infrastructure_ui(False)
         self._setup_audio()
         self._setup_fx()
         self._load_theme()
@@ -2950,6 +3036,16 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(1500, self.connect_local_docker)
         else:
             self.connect_local_docker()
+        QTimer.singleShot(4000, self.check_for_updates)
+
+    def closeEvent(self, event):
+        try:
+            size = self.size()
+            self.settings.setValue("window_width", size.width())
+            self.settings.setValue("window_height", size.height())
+        except Exception:
+            pass
+        super().closeEvent(event)
 
     def _build_static_ui(self):
         menubar = QMenuBar(self)
@@ -3053,7 +3149,23 @@ class MainWindow(QMainWindow):
 
         self.select_all_checkbox = QCheckBox(self.texts["select_all"])
         self.select_all_checkbox.stateChanged.connect(self.on_select_all)
-        main_layout.addWidget(self.select_all_checkbox)
+
+        self.infra_info_button = QPushButton(self.texts["infra_unknown"])
+        self.infra_info_button.setObjectName("infoAction")
+        self.infra_info_button.setMinimumWidth(260)
+        self.infra_info_button.setToolTip(self.texts["infra_unknown"])
+
+        self.btn_host_restart = QPushButton(self.texts["btn_host_restart"])
+        self.btn_host_restart.setObjectName("profileAction")
+        self.btn_host_restart.setIcon(self.host_status_icon_off)
+        self.btn_host_restart.setIconSize(QPixmap(12, 12).size())
+
+        infra_layout = QHBoxLayout()
+        infra_layout.addWidget(self.select_all_checkbox)
+        infra_layout.addStretch()
+        infra_layout.addWidget(self.infra_info_button)
+        infra_layout.addWidget(self.btn_host_restart)
+        main_layout.addLayout(infra_layout)
 
         self.table = QTableWidget(0, 8)
         self._set_table_headers()
@@ -3097,6 +3209,8 @@ class MainWindow(QMainWindow):
         self.btn_ssh_terminal.clicked.connect(self.open_remote_terminal)
         self.btn_profiles.clicked.connect(self.manage_profiles)
         self.btn_local_profiles.clicked.connect(self.show_local_profiles_info)
+        self.infra_info_button.clicked.connect(self.open_infra_terminal)
+        self.btn_host_restart.clicked.connect(self.restart_host)
         self.btn_wsl_refresh.clicked.connect(self.load_wsl_distros)
         self.btn_wsl_profile.clicked.connect(self.connect_wsl_docker)
         self.btn_transparency.clicked.connect(self.toggle_transparency)
@@ -3155,6 +3269,9 @@ class MainWindow(QMainWindow):
 
         info_menu = QMenu(self.texts["menu_info"], self)
         menubar.addMenu(info_menu)
+        info_menu.addAction(self.texts["info_app"]).triggered.connect(self.show_app_info_dialog)
+        info_menu.addAction(self.texts["info_check_updates"]).triggered.connect(lambda: self.check_for_updates(True))
+        info_menu.addSeparator()
         info_menu.addAction(self.texts["info_safe_danger"]).triggered.connect(self.show_info_dialog)
 
     def _set_table_headers(self):
@@ -3297,6 +3414,9 @@ class MainWindow(QMainWindow):
         self.btn_edit_start.setText(self.texts["btn_edit_start"])
         self.btn_new.setText(self.texts["btn_new"])
         self.select_all_checkbox.setText(self.texts["select_all"])
+        self.infra_info_button.setText(self.texts["infra_unknown"])
+        self.btn_host_restart.setText(self.texts["btn_host_restart"])
+        self.update_infrastructure_ui()
         self._set_table_headers()
         self.update_transparency_button()
         self.update_music_button()
@@ -3352,9 +3472,11 @@ class MainWindow(QMainWindow):
         settings = self.get_llm_settings()
         provider = (provider or settings.get("provider") or "ollama").strip().lower()
         model = (model or settings.get("openai_model") or settings.get("ollama_model") or "").strip()
+        preferred_cli = "balena" if str(current_command or "").strip().lower().startswith("balena run") else "docker"
         system_prompt = (
             "You edit docker or balena run commands for Docker Control Center. "
             "Return only one valid docker or balena run command in a single line. "
+            f"Prefer {preferred_cli} run based on the current engine. "
             "Do not add markdown, bullets, explanations or code fences. "
             "Keep existing container name, image, ports and detach mode unless the user explicitly asks to change them. "
             "When a Windows host path is needed, use Docker-compatible forward slashes such as D:/Music. "
@@ -3362,6 +3484,7 @@ class MainWindow(QMainWindow):
         )
         user_prompt = (
             f"Current command: {current_command or 'docker run -d'}\n"
+            f"Preferred CLI: {preferred_cli}\n"
             f"Target image: {image or 'unknown'}\n"
             f"Mode: {'edit existing container start' if edit_mode else 'create new container'}\n"
             f"User request: {prompt}\n\n"
@@ -3376,6 +3499,99 @@ class MainWindow(QMainWindow):
         ollama_url = settings.get("ollama_url", "http://127.0.0.1:11434").strip()
         selected_model = model or settings.get("ollama_model", DEFAULT_OLLAMA_MODELS[0])
         return call_ollama_model(ollama_url, selected_model, system_prompt, user_prompt)
+
+    def show_app_info_dialog(self):
+        version = APP_VERSION_TAG
+        latest_tag = self.latest_release_tag or self.texts["info_app_latest_unknown_value"]
+        latest_url = self.latest_release_url or GITHUB_RELEASES_URL
+        message = QMessageBox(self)
+        message.setWindowTitle(self.texts["info_app_title"])
+        message.setIcon(QMessageBox.Icon.Information)
+        message.setText(self.texts["info_app_title"])
+        info_lines = [
+            self.texts["info_app_version"].format(version=version),
+            self.texts["info_app_repo"].format(repo=GITHUB_REPO_URL),
+            self.texts["info_app_latest"].format(release=latest_tag),
+        ]
+        message.setInformativeText("\n".join(info_lines))
+        message.setDetailedText(f"{self.texts['info_app_changelog_title']}\n{self.texts['info_app_changelog']}")
+        btn_repo = message.addButton(self.texts["info_app_open_repo"], QMessageBox.ButtonRole.ActionRole)
+        btn_release = message.addButton(self.texts["info_app_open_release"], QMessageBox.ButtonRole.ActionRole)
+        btn_check = message.addButton(self.texts["info_app_check_updates"], QMessageBox.ButtonRole.ActionRole)
+        message.addButton(QMessageBox.StandardButton.Ok)
+        message.exec()
+        clicked = message.clickedButton()
+        if clicked == btn_repo:
+            webbrowser.open(GITHUB_REPO_URL)
+        elif clicked == btn_release:
+            webbrowser.open(latest_url)
+        elif clicked == btn_check:
+            self.check_for_updates(True)
+
+    def fetch_latest_release_info(self) -> Dict:
+        try:
+            request = Request(GITHUB_LATEST_RELEASE_API, headers={"User-Agent": f"DCC/{APP_VERSION}"})
+            with urlopen(request, timeout=8) as response:
+                payload = response.read().decode("utf-8")
+            return json.loads(payload)
+        except Exception:
+            return {}
+
+    def _parse_version_value(self, tag: str) -> List[int]:
+        clean = (tag or "").strip()
+        if clean.lower().startswith("v"):
+            clean = clean[1:]
+        parts = re.split(r"[^0-9]+", clean)
+        numbers = []
+        for part in parts:
+            if part.isdigit():
+                numbers.append(int(part))
+            else:
+                match = re.match(r"(\\d+)", part)
+                if match:
+                    numbers.append(int(match.group(1)))
+        return numbers
+
+    def _is_newer_version(self, latest_tag: str) -> bool:
+        latest = self._parse_version_value(latest_tag)
+        current = self._parse_version_value(APP_VERSION)
+        if not latest:
+            return False
+        length = max(len(latest), len(current))
+        latest += [0] * (length - len(latest))
+        current += [0] * (length - len(current))
+        return tuple(latest) > tuple(current)
+
+    def show_update_available(self, release_tag: str, url: str):
+        message = QMessageBox(self)
+        message.setWindowTitle(self.texts["info_update_available_title"])
+        message.setIcon(QMessageBox.Icon.Information)
+        message.setText(self.texts["info_update_available_body"].format(release=release_tag))
+        message.setInformativeText(url)
+        open_button = message.addButton(self.texts["info_app_open_release"], QMessageBox.ButtonRole.ActionRole)
+        message.addButton(QMessageBox.StandardButton.Ok)
+        message.exec()
+        if message.clickedButton() == open_button:
+            webbrowser.open(url)
+
+    def check_for_updates(self, notify_always: bool = False):
+        info = self.fetch_latest_release_info()
+        release_tag = (info.get("tag_name") or "").strip()
+        release_url = (info.get("html_url") or GITHUB_RELEASES_URL)
+        if release_tag:
+            self.latest_release_tag = release_tag
+            self.latest_release_url = release_url
+        if not release_tag:
+            if notify_always:
+                QMessageBox.information(self, self.texts["info_update_none_title"], self.texts["info_update_check_failed"])
+            return
+        if self._is_newer_version(release_tag):
+            last_notified = self.settings.value("last_notified_release", "")
+            if notify_always or last_notified != release_tag:
+                self.settings.setValue("last_notified_release", release_tag)
+                self.show_update_available(release_tag, release_url)
+        elif notify_always:
+            QMessageBox.information(self, self.texts["info_update_none_title"], self.texts["info_update_none"])
 
     def show_info_dialog(self):
         if self.lang == "PL":
@@ -3466,7 +3682,11 @@ class MainWindow(QMainWindow):
             self.wsl_combo.addItem(self.texts["wsl_none"])
 
     def show_local_profiles_info(self):
-        QMessageBox.information(self, self.texts["msg_info"], self.texts["local_profiles_text"])
+        info = self.texts["local_profiles_text"]
+        distro = self.wsl_combo.currentText().strip() if hasattr(self, "wsl_combo") else ""
+        if distro and distro != self.texts["wsl_none"]:
+            info = info + "\n\n" + self.texts["local_profiles_wsl_command"].format(distro=distro)
+        QMessageBox.information(self, self.texts["msg_info"], info)
 
     def show_wsl_profile_info(self):
         distro = self.wsl_combo.currentText().strip() if hasattr(self, "wsl_combo") else ""
@@ -3485,7 +3705,8 @@ class MainWindow(QMainWindow):
     def connect_wsl_docker(self):
         distro = self.wsl_combo.currentText().strip() if hasattr(self, "wsl_combo") else ""
         if not distro or distro == self.texts["wsl_none"]:
-            self.show_wsl_profile_info()
+            QMessageBox.information(self, self.texts["msg_info"], self.texts["wsl_detect_error"])
+            self.update_infrastructure_ui(False)
             return
         try:
             self.client = WslDockerClient(distro)
@@ -3497,10 +3718,12 @@ class MainWindow(QMainWindow):
             self.remote_os_name = ""
             self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_unknown"])
             self.statusBar().showMessage(self.texts["status_wsl_connected"].format(distro=distro))
+            self.update_infrastructure_ui(True)
             self.refresh_containers()
         except Exception:
             self.client = None
-            self.show_wsl_profile_info()
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["wsl_connect_error"].format(distro=distro))
+            self.update_infrastructure_ui(False)
 
     def autostart_supported(self, container) -> bool:
         attrs = container.attrs or {}
@@ -3748,13 +3971,22 @@ class MainWindow(QMainWindow):
             elif detected == "docker":
                 cli = "docker"
                 choices = ["docker"]
+        elif self.current_backend == "wsl" and isinstance(self.client, WslDockerClient):
+            detected = getattr(self.client, "detected_cli", "")
+            if detected == "balena":
+                cli = "balena"
+                choices = ["balena"]
+            elif detected == "docker":
+                cli = "docker"
+                choices = ["docker"]
         return cli, choices
 
     def run_backend_docker_command_stream(self, args: List[str], emit_line):
         if not args:
             return None
         if self.current_backend == "wsl" and self.current_wsl_distro:
-            command = ["wsl.exe", "-d", self.current_wsl_distro, "sh", "-lc", "docker " + " ".join(shlex.quote(str(arg)) for arg in args)]
+            cli = self.backend_cli_command()
+            command = ["wsl.exe", "-d", self.current_wsl_distro, "sh", "-lc", f"{cli} " + " ".join(shlex.quote(str(arg)) for arg in args)]
             return self._run_subprocess_stream(command, emit_line)
         if self.current_backend == "remote" and self.active_remote_profile:
             if self.active_remote_profile.mode == "tunnel":
@@ -3810,7 +4042,7 @@ class MainWindow(QMainWindow):
 
     def is_local_docker_available(self) -> bool:
         try:
-            local_client = docker.from_env(timeout=3)
+            local_client = self.build_local_docker_client()
             local_client.ping()
             return True
         except Exception:
@@ -3835,6 +4067,7 @@ class MainWindow(QMainWindow):
             return False
 
     def show_local_docker_unavailable(self, details: str = ""):
+        self.update_infrastructure_ui(False)
         message = QMessageBox(self)
         message.setWindowTitle(self.texts["msg_error"])
         message.setIcon(QMessageBox.Icon.Critical)
@@ -3855,7 +4088,7 @@ class MainWindow(QMainWindow):
 
     def connect_local_docker(self):
         try:
-            self.client = docker.from_env(timeout=DOCKER_HTTP_TIMEOUT)
+            self.client = self.build_local_docker_client()
             self.client.ping()
             self.current_backend = "local"
             self.current_wsl_distro = ""
@@ -3864,9 +4097,11 @@ class MainWindow(QMainWindow):
             self.remote_os_name = ""
             self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_unknown"])
             self.statusBar().showMessage(self.texts["status_local_connected"])
+            self.update_infrastructure_ui(True)
             self.refresh_containers()
         except Exception as exc:
             self.client = None
+            self.update_infrastructure_ui(False)
             self.show_local_docker_unavailable(str(exc))
 
     def connect_remote_docker(self):
@@ -3883,9 +4118,11 @@ class MainWindow(QMainWindow):
             self.active_remote_profile = profile
             self.update_remote_system_info()
             self.statusBar().showMessage(self.texts["profile_connected"].format(name=profile.name) + " - " + self.remote_engine_label())
+            self.update_infrastructure_ui(True)
             self.refresh_containers()
         except Exception as exc:
             self.client = None
+            self.update_infrastructure_ui(False)
             QMessageBox.critical(self, self.texts["msg_error"], str(exc))
 
     def start_hidden_tunnel(self, profile: RemoteProfile):
@@ -3945,9 +4182,214 @@ class MainWindow(QMainWindow):
             self.remote_arch = arch.strip().lower()
             label = self.texts["remote_sysinfo_label"].format(os=self.remote_os_name or "Linux", arch=self.remote_arch or "?")
             self.remote_sysinfo_label.setText(label)
+            self.update_infrastructure_ui(True)
         except Exception:
             self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_fetch_failed"])
             self.remote_arch = ""
+            self.update_infrastructure_ui(False)
+
+    def build_local_docker_client(self) -> docker.DockerClient:
+        if os.name == "nt":
+            return docker.DockerClient(base_url="npipe:////./pipe/docker_engine", timeout=DOCKER_HTTP_TIMEOUT)
+        return docker.DockerClient(base_url="unix://var/run/docker.sock", timeout=DOCKER_HTTP_TIMEOUT)
+
+    def detect_local_system_info(self) -> tuple[str, str]:
+        os_name = ""
+        arch = ""
+        if self.current_backend == "local" and isinstance(self.client, docker.DockerClient):
+            try:
+                info = self.client.info()
+                os_name = str(info.get("OperatingSystem") or "").strip()
+                arch = str(info.get("Architecture") or "").strip()
+            except Exception:
+                pass
+        if not os_name:
+            if os.name == "nt":
+                os_name = "Docker Desktop"
+            else:
+                os_name = platform.system() or "Linux"
+        if not arch:
+            arch = platform.machine() or ""
+        return os_name, arch
+
+    def backend_cli_command(self) -> str:
+        if self.current_backend == "remote":
+            return self.get_remote_cli_command()
+        if self.current_backend == "wsl" and isinstance(self.client, WslDockerClient):
+            cli = getattr(self.client, "detected_cli", "") or ""
+            if cli:
+                return cli
+        return "docker"
+
+    def infrastructure_label(self) -> str:
+        if self.current_backend == "remote":
+            profile = self.active_remote_profile
+            if profile and profile.mode != "ssh":
+                return self.texts["infra_remote_tunnel"]
+            os_name = self.remote_os_name or "Linux"
+            arch = self.remote_arch or "?"
+            return self.texts["infra_remote_label"].format(os=os_name, arch=arch)
+        if self.current_backend == "wsl":
+            distro = (self.current_wsl_distro or "").strip()
+            if not distro and hasattr(self, "wsl_combo"):
+                distro = self.wsl_combo.currentText().strip()
+            if distro and distro != self.texts["wsl_none"]:
+                return self.texts["infra_local_wsl"].format(distro=distro)
+            return self.texts["infra_local_wsl"].format(distro="?")
+        os_name, arch = self.detect_local_system_info()
+        if not os_name:
+            return self.texts["infra_local_fallback"]
+        return self.texts["infra_local_label"].format(os=os_name, arch=arch or "?")
+
+    def set_host_status_indicator(self, available: bool):
+        if not hasattr(self, "btn_host_restart"):
+            return
+        icon = self.host_status_icon_running if available else self.host_status_icon_off
+        self.btn_host_restart.setIcon(icon)
+        tooltip = self.texts["host_status_running"] if available else self.texts["host_status_off"]
+        self.btn_host_restart.setToolTip(tooltip)
+
+    def update_infrastructure_ui(self, available: Optional[bool] = None):
+        if hasattr(self, "infra_info_button"):
+            label = self.infrastructure_label()
+            self.infra_info_button.setText(label)
+            self.infra_info_button.setToolTip(label.replace("\n", " "))
+        if available is None:
+            available = self.client is not None
+        self.set_host_status_indicator(bool(available))
+
+    def open_powershell(self, command: str = ""):
+        if os.name != "nt":
+            subprocess.Popen(["/bin/sh"])
+            return
+        if command:
+            subprocess.Popen(["powershell.exe", "-NoExit", "-Command", command])
+        else:
+            subprocess.Popen(["powershell.exe", "-NoExit"])
+
+    def open_infra_terminal(self):
+        if self.current_backend == "remote":
+            profile = self.active_remote_profile or self.selected_profile()
+            if not profile:
+                QMessageBox.warning(self, self.texts["msg_error"], self.texts["profile_no_profiles"])
+                return
+            if profile.mode != "ssh":
+                QMessageBox.information(self, self.texts["msg_info"], self.texts["ssh_terminal_tunnel"])
+                return
+            target = f"{profile.resolved_ssh_user()}@{profile.resolved_ssh_host()}"
+            port = profile.resolved_ssh_port()
+            cmd = ["ssh"]
+            if port:
+                cmd.extend(["-p", str(port)])
+            if profile.ssh_key_path:
+                cmd.extend(["-i", profile.ssh_key_path])
+            cmd.append(target)
+            cmdline = subprocess.list2cmdline(cmd)
+            self.open_powershell(cmdline)
+            return
+        if self.current_backend == "wsl":
+            distro = (self.current_wsl_distro or "").strip()
+            if not distro and hasattr(self, "wsl_combo"):
+                distro = self.wsl_combo.currentText().strip()
+            if not distro or distro == self.texts["wsl_none"]:
+                QMessageBox.information(self, self.texts["msg_info"], self.texts["wsl_detect_error"])
+                return
+            self.open_powershell(f"wsl -d {distro}")
+            return
+        self.open_powershell()
+
+    def restart_host(self):
+        reply = QMessageBox.question(
+            self,
+            self.texts["host_restart_title"],
+            self.texts["host_restart_body"],
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        if self.current_backend == "remote":
+            success = self.restart_remote_host()
+        elif self.current_backend == "wsl":
+            success = self.restart_wsl_host()
+        else:
+            success = self.restart_local_host()
+        if success:
+            QMessageBox.information(self, self.texts["msg_info"], self.texts["host_restart_sent"])
+            self.set_host_status_indicator(False)
+        else:
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["host_restart_failed"])
+
+    def restart_local_host(self) -> bool:
+        commands = []
+        if os.name == "nt":
+            commands = [
+                ["shutdown", "/r", "/t", "0"],
+                ["powershell.exe", "-Command", "Restart-Computer -Force"],
+            ]
+        else:
+            commands = [
+                ["sudo", "reboot"],
+                ["reboot"],
+                ["sudo", "shutdown", "-r", "now"],
+                ["shutdown", "-r", "now"],
+            ]
+        for cmd in commands:
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=6)
+                if result.returncode == 0:
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def restart_wsl_host(self) -> bool:
+        distro = (self.current_wsl_distro or "").strip()
+        if not distro:
+            return False
+        commands = [
+            "sudo reboot",
+            "reboot",
+            "sudo shutdown -r now",
+            "shutdown -r now",
+        ]
+        for cmd in commands:
+            try:
+                result = subprocess.run(["wsl.exe", "-d", distro, "sh", "-lc", cmd], capture_output=True, text=True, timeout=8)
+                if result.returncode == 0:
+                    return True
+            except Exception:
+                continue
+        try:
+            result = subprocess.run(["wsl.exe", "-t", distro], capture_output=True, text=True, timeout=8)
+            if result.returncode == 0:
+                return True
+        except Exception:
+            pass
+        return False
+
+    def restart_remote_host(self) -> bool:
+        profile = self.active_remote_profile
+        if not (profile and isinstance(self.client, SshDockerClient) and profile.mode == "ssh"):
+            return False
+        commands = []
+        if self.get_remote_cli_command() == "balena":
+            commands.append("balena reboot")
+        commands.extend([
+            "sudo reboot",
+            "reboot",
+            "sudo shutdown -r now",
+            "shutdown -r now",
+            "sudo systemctl reboot",
+            "systemctl reboot",
+        ])
+        for cmd in commands:
+            try:
+                self.client.run_ssh(cmd)
+                return True
+            except Exception:
+                continue
+        return False
+
     def on_select_all(self, state):
         checked = int(state) == int(Qt.CheckState.Checked.value)
         for row in range(self.table.rowCount()):
@@ -4274,6 +4716,7 @@ class MainWindow(QMainWindow):
 
     def on_refresh_finished(self, containers, error_message: str):
         if error_message:
+            self.set_host_status_indicator(False)
             QMessageBox.critical(self, self.texts["msg_error"], error_message)
             message = self.texts["status_ready"]
             if self.current_backend == "remote" and isinstance(self.client, SshDockerClient):
@@ -4281,6 +4724,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(message)
             return
 
+        self.set_host_status_indicator(True)
         self.table.setRowCount(0)
         for container in containers:
             row = self.table.rowCount()
