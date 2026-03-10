@@ -1,4 +1,4 @@
-﻿# Docker Control Center v1.1.0
+# Docker Control Center v1.1.0
 
 ## EN
 This update improves first-run and restart experience for local Docker users.
@@ -11,7 +11,7 @@ This update improves first-run and restart experience for local Docker users.
 - Safer and clearer startup flow after Windows reboot.
 
 ## PL
-Ta wersja poprawia wygodę pracy lokalnej po starcie systemu.
+Ta wersja poprawia wygod� pracy lokalnej po starcie systemu.
 
 ### Najwazniejsze zmiany
 - Nowy panel `Konfiguruj -> Aplikacja`.

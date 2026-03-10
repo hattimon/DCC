@@ -1,4 +1,4 @@
-﻿
+
 import base64
 import ctypes
 import json
@@ -33,6 +33,7 @@ except Exception:
     QAudioOutput = None
     QMediaPlayer = None
 from PyQt6.QtWidgets import (
+    QFileDialog,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -86,6 +87,16 @@ BACKGROUND_NAMES = {
     "black": ("theme_black", "black"),
 }
 BACKGROUND_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+NEON_PALETTE = [
+    ("Cyan", "#33f0ff"),
+    ("Blue", "#4b7bff"),
+    ("Mint", "#4bffad"),
+    ("Purple", "#b26bff"),
+    ("Pink", "#ff4bd8"),
+    ("Orange", "#ff9955"),
+    ("Gold", "#ffd166"),
+    ("Red", "#ff5f5f"),
+]
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 DEFAULT_OPENAI_MODELS = [
     "gpt-4.1-mini",
@@ -119,9 +130,12 @@ TEXTS = {
         "menu_llm": "LLM",
         "menu_app": "Application",
         "app_settings_title": "Application settings",
-        "app_settings_intro": "Startup behavior for local Docker integration.",
+        "app_settings_intro": "Startup and appearance settings for local Docker integration.",
         "app_settings_autostart_dd": "Start Docker Desktop in background when DCC starts (local mode)",
         "app_settings_note": "When enabled, DCC checks local Docker at startup and launches Docker Desktop automatically if needed.",
+        "app_settings_theme": "Theme",
+        "app_settings_neon_animate": "Animate neon glow",
+        "app_settings_neon_color": "Neon color (static)",
         "info_safe_danger": "Safe vs dangerous commands",
         "info_title": "Docker Control Center",
         "btn_refresh": "Refresh",
@@ -130,6 +144,10 @@ TEXTS = {
         "btn_restart": "Restart",
         "btn_autostart_on": "Autostart ON",
         "btn_autostart_off": "Autostart OFF",
+        "autostart_status_on": "Yes ({policy})",
+        "autostart_status_off": "No",
+        "autostart_status_managed": "Auto (managed)",
+        "autostart_status_unknown": "N/A",
         "btn_remove": "Remove",
         "btn_logs": "Logs",
         "btn_new": "New container",
@@ -138,6 +156,7 @@ TEXTS = {
         "btn_unpause": "Unpause",
         "btn_start_profile": "Start profile",
         "btn_profiles": "Connection profiles",
+        "btn_ssh_terminal": "SSH terminal",
         "btn_local_info": "Local INFO",
         "btn_transparency_on": "Transparency: ON",
         "btn_transparency_off": "Transparency: OFF",
@@ -152,9 +171,16 @@ TEXTS = {
         "profile_name": "Profile name",
         "profile_mode": "Connection mode",
         "profile_ssh_target": "SSH target (user@host)",
+        "profile_ssh_port": "SSH port",
         "profile_auth_mode": "SSH authentication",
         "profile_auth_key": "SSH key",
+        "profile_auth_both": "SSH key + passphrase",
         "profile_auth_password": "Login and password",
+        "profile_key_path": "SSH key file (optional)",
+        "profile_key_browse": "Browse",
+        "profile_passphrase": "Key passphrase",
+        "profile_passphrase_note": "Use this when your SSH key is protected with a passphrase (SenseCap M1).",
+        "profile_key_path_required_passphrase": "Select an SSH key file for key passphrase mode.",
         "profile_password": "SSH password",
         "profile_password_note": "The password is stored in the local encrypted secret store for your Windows user account. Use it only on a trusted computer.",
         "profile_base_url": "Docker URL",
@@ -179,15 +205,16 @@ TEXTS = {
         "profile_started": "Connection started. Connecting in a moment...",
         "profile_tutorial_title": "Remote Docker host guide",
         "profile_tutorial_intro": "Steps for a new Docker device:",
-        "profile_tutorial_hint": "You can use an SSH key or login and password. Keep tunnel mode as a fallback.",
-        "profile_tutorial_test": "Test: ssh {target} docker ps",
+        "profile_tutorial_hint": "You can use an SSH key or login and password. Keep tunnel mode as a fallback. If the host runs Balena OS, use balena ps / balena run - DCC will auto-detect.",
+        "profile_tutorial_agent": "SSH key in Windows (optional, run PowerShell as Administrator):\n1) Get-Service ssh-agent | Set-Service -StartupType Automatic  - set ssh-agent to start automatically\n2) Start-Service ssh-agent  - start the agent now\n3) ssh-add C:\\Users\\Kosmo\\.ssh\\your_key_name  - add your private key to the agent",
+        "profile_tutorial_test": "Test (Docker): ssh -p {port} {target} docker ps\nTest (Balena OS): ssh -p {port} {target} balena ps",
         "profile_tutorial_steps": (
             "1. Install Docker on the remote device.\n"
             "2. Add the user to the docker group: sudo usermod -aG docker {user}\n"
             "3. Log in again on the host.\n"
             "4. Verify locally on the host: docker ps\n"
             "5. Configure an SSH key or prepare login and password for the GUI.\n"
-            "6. In the GUI choose Direct SSH mode and enter {target}."
+            "6. In the GUI choose Direct SSH mode and enter {target} and port {port}."
         ),
         "col_select": "",
         "col_status_icon": "",
@@ -201,6 +228,9 @@ TEXTS = {
         "status_ready": "Ready",
         "status_loading": "Loading containers...",
         "status_local_connected": "Connected to local Docker",
+        "engine_docker": "Detected engine: Docker",
+        "engine_balena": "Detected engine: Balena OS",
+        "engine_unknown": "Detected engine: Unknown",
         "status_wsl_connected": "Connected to Docker in WSL: {distro}",
         "msg_no_selection": "No containers selected.",
         "msg_confirm_remove": "Remove selected containers? This will delete their data.",
@@ -226,6 +256,7 @@ TEXTS = {
         "wizard_hport": "Host port (blank = same as container)",
         "wizard_extra": "Extra parameters (e.g. -e KEY=VAL -v host:cont)",
         "wizard_command_only": "Container start command (optional)",
+        "wizard_cli": "Command engine",
         "wizard_command_input": "Paste docker run (single line or multiline; it will be normalized)",
         "wizard_parse": "Fill from command",
         "wizard_normalize": "Normalize command",
@@ -265,6 +296,8 @@ TEXTS = {
         "wizard_catalog_loading": "Fetching image details...",
         "wizard_catalog_loaded": "Image description updated from Docker Hub.",
         "wizard_command_invalid": "Could not parse the docker run command.",
+        "wizard_balena_notice": "Balena OS detected. This docker run will be executed as 'balena run'.",
+        "wizard_balena_only": "Balena OS detected. DCC will use balena run/balena ps. Use Balena-compatible images only.",
         "wizard_port_in_use": "Port {port} is already used by: {users}. Choose another port.",
         "wizard_summary": "Command to run:",
         "wizard_run": "Run container",
@@ -306,6 +339,11 @@ TEXTS = {
         "wsl_help_text": "Detected distribution: {distro}\n\nGUI connection options:\n1. Easiest: Docker Desktop with WSL integration and the Connect local button.\n2. Click Local WSL to manage Docker running directly in this distribution.\n3. SSH profile: run OpenSSH in WSL and connect using an SSH profile.\n4. Tunnel profile: expose the Docker socket from WSL over TCP and connect using a tunnel profile.\n\nQuick terminal test:\nwsl -d {distro} sh -lc \"docker ps\"",
         "local_profiles_text": "Local profiles for beginners:\n\n1. Local containers\nUse this when Docker Desktop or a local daemon is running on Windows.\nCheck: PowerShell -> docker ps\n\n2. Local WSL\nUse this when Docker runs directly in Ubuntu, Debian, Kali or another WSL2 distribution.\nCheck: PowerShell -> wsl -d Ubuntu sh -lc \"docker ps\"\n\nHow to add a container:\n- click New container\n- choose a preset image or paste a docker run command\n- review the summary and run it\n\nWhich mode to use:\n- Windows / Docker Desktop: Connect local\n- WSL2 with its own dockerd: Local WSL\n- Raspberry Pi / server / NAS: Start profile through SSH or tunnel",
         "remote_hint": "Local, WSL and remote Docker engines in one operator panel.",
+        "remote_sysinfo_label": "Remote host: {os} | {arch}",
+        "remote_sysinfo_unknown": "Remote host: unknown",
+        "remote_sysinfo_fetch_failed": "Remote host: unavailable",
+        "ssh_terminal_unavailable": "SSH terminal is available only for Direct SSH profiles.",
+        "ssh_terminal_tunnel": "SSH terminal is not available for tunnel profiles.",
         "ctx_start": "Start",
         "ctx_stop": "Stop",
         "ctx_restart": "Restart",
@@ -341,9 +379,12 @@ TEXTS = {
         "menu_llm": "LLM",
         "menu_app": "Aplikacja",
         "app_settings_title": "Ustawienia aplikacji",
-        "app_settings_intro": "Zachowanie startowe dla lokalnej integracji z Docker.",
+        "app_settings_intro": "Ustawienia startowe i wygladu dla lokalnej integracji z Docker.",
         "app_settings_autostart_dd": "Uruchamiaj Docker Desktop w tle przy starcie DCC (tryb lokalny)",
         "app_settings_note": "Po wlaczeniu DCC sprawdza lokalny Docker przy starcie i automatycznie uruchamia Docker Desktop, jesli potrzeba.",
+        "app_settings_theme": "Motyw",
+        "app_settings_neon_animate": "Animuj neon",
+        "app_settings_neon_color": "Kolor neonu (staly)",
         "info_safe_danger": "Bezpieczne vs niebezpieczne komendy",
         "info_title": "Docker Control Center",
         "btn_refresh": "Odswiez",
@@ -352,6 +393,11 @@ TEXTS = {
         "btn_restart": "Restart",
         "btn_autostart_on": "Autostart ON",
         "btn_autostart_off": "Autostart OFF",
+        "autostart_status_on": "Tak ({policy})",
+        "autostart_status_off": "Nie",
+        "autostart_status_managed": "Auto (zarzadzane)",
+        "autostart_status_unknown": "N/D",
+
         "btn_remove": "Usun",
         "btn_logs": "Logi",
         "btn_new": "Nowy kontener",
@@ -360,6 +406,7 @@ TEXTS = {
         "btn_unpause": "Wznow",
         "btn_start_profile": "Start profilu",
         "btn_profiles": "Profile polaczen",
+        "btn_ssh_terminal": "Terminal SSH",
         "btn_local_info": "INFO lokalne",
         "btn_transparency_on": "Przezroczystosc: ON",
         "btn_transparency_off": "Przezroczystosc: OFF",
@@ -374,9 +421,16 @@ TEXTS = {
         "profile_name": "Nazwa profilu",
         "profile_mode": "Tryb polaczenia",
         "profile_ssh_target": "SSH target (user@host)",
+        "profile_ssh_port": "Port SSH",
         "profile_auth_mode": "Autoryzacja SSH",
         "profile_auth_key": "Klucz SSH",
+        "profile_auth_both": "Klucz + haslo do klucza",
         "profile_auth_password": "Login i haslo",
+        "profile_key_path": "Plik klucza SSH (opcjonalnie)",
+        "profile_key_browse": "Wybierz",
+        "profile_passphrase": "Haslo do klucza",
+        "profile_passphrase_note": "Uzyj tego pola, gdy klucz SSH ma haslo (SenseCap M1).",
+        "profile_key_path_required_passphrase": "Wybierz plik klucza SSH dla trybu z haslem do klucza.",
         "profile_password": "Haslo SSH",
         "profile_password_note": "Haslo jest zapisywane w lokalnym zaszyfrowanym magazynie sekretow dla Twojego konta Windows. Uzywaj tylko na zaufanym komputerze.",
         "profile_base_url": "Docker URL",
@@ -401,15 +455,16 @@ TEXTS = {
         "profile_started": "Polaczenie uruchomione. Proba laczenia za chwile...",
         "profile_tutorial_title": "Konfigurator zdalnego hosta Docker",
         "profile_tutorial_intro": "Kroki dla nowego urzadzenia z Dockerem:",
-        "profile_tutorial_hint": "Mozesz uzyc klucza SSH albo loginu z haslem. Tunel zostaw jako fallback.",
-        "profile_tutorial_test": "Test: ssh {target} docker ps",
+        "profile_tutorial_hint": "Mozesz uzyc klucza SSH albo loginu z haslem. Tunel zostaw jako fallback. Jesli host ma Balena OS, uzyj balena ps / balena run - DCC wykryje to automatycznie.",
+        "profile_tutorial_agent": "Klucz SSH w Windows (opcjonalnie, uruchom PowerShell jako administrator):\n1) Get-Service ssh-agent | Set-Service -StartupType Automatic  - ustawia ssh-agent na start automatyczny\n2) Start-Service ssh-agent  - uruchamia agent teraz\n3) ssh-add C:\\Users\\Kosmo\\.ssh\\your_key_name  - dodaje klucz prywatny do agenta",
+        "profile_tutorial_test": "Test (Docker): ssh -p {port} {target} docker ps\nTest (Balena OS): ssh -p {port} {target} balena ps",
         "profile_tutorial_steps": (
             "1. Zainstaluj Docker na zdalnym urzadzeniu.\n"
             "2. Dodaj uzytkownika do grupy docker: sudo usermod -aG docker {user}\n"
             "3. Zaloguj sie ponownie na hosta.\n"
             "4. Sprawdz lokalnie na hoscie: docker ps\n"
             "5. Skonfiguruj klucz SSH albo przygotuj login i haslo do GUI.\n"
-            "6. W GUI wybierz tryb SSH bezposrednio i wpisz {target}."
+            "6. W GUI wybierz tryb SSH bezposrednio i wpisz {target} i port {port}."
         ),
         "col_select": "",
         "col_status_icon": "",
@@ -423,6 +478,9 @@ TEXTS = {
         "status_ready": "Gotowe",
         "status_loading": "Wczytywanie kontenerow...",
         "status_local_connected": "Polaczono z lokalnym Docker",
+        "engine_docker": "Wykryto silnik: Docker",
+        "engine_balena": "Wykryto silnik: Balena OS",
+        "engine_unknown": "Wykryto silnik: Nieznany",
         "status_wsl_connected": "Polaczono z Docker w WSL: {distro}",
         "msg_no_selection": "Brak zaznaczonych kontenerow.",
         "msg_confirm_remove": "Na pewno usunac zaznaczone kontenery? To skasuje ich dane.",
@@ -448,6 +506,7 @@ TEXTS = {
         "wizard_hport": "Port hosta (puste = taki sam jak w kontenerze)",
         "wizard_extra": "Dodatkowe parametry (np. -e KEY=VAL -v host:cont)",
         "wizard_command_only": "Polecenie startowe w kontenerze (opcjonalne)",
+        "wizard_cli": "Silnik polecen",
         "wizard_command_input": "Wklej docker run (jedna linia lub wiele linii; zostanie wyrownane)",
         "wizard_parse": "Uzupelnij z komendy",
         "wizard_normalize": "Wyrownaj komende",
@@ -487,6 +546,8 @@ TEXTS = {
         "wizard_catalog_loading": "Pobieranie danych o obrazie...",
         "wizard_catalog_loaded": "Zaktualizowano opis obrazu z Docker Hub.",
         "wizard_command_invalid": "Nie udalo sie sparsowac komendy docker run.",
+        "wizard_balena_notice": "Wykryto Balena OS. Ta komenda docker run zostanie uruchomiona jako 'balena run'.",
+        "wizard_balena_only": "Wykryto Balena OS. DCC uzywa balena run/balena ps. Uzywaj tylko obrazow kompatybilnych z Balena.",
         "wizard_port_in_use": "Port {port} jest juz uzywany przez: {users}. Wybierz inny port.",
         "wizard_summary": "Komenda do uruchomienia:",
         "wizard_run": "Uruchom kontener",
@@ -528,6 +589,11 @@ TEXTS = {
         "wsl_help_text": "Wykryta dystrybucja: {distro}\n\nOpcje polaczenia z GUI:\n1. Najlatwiej: Docker Desktop z integracja WSL i przycisk Polacz lokalnie.\n2. Kliknij WSL lokalne, aby zarzadzac Dockerem uruchomionym bezposrednio w tej dystrybucji.\n3. Profil SSH: uruchom OpenSSH w WSL i polacz profilem SSH.\n4. Profil tunnel: wystaw socket Dockera z WSL do TCP i polacz profilem tunnel.\n\nSzybki test w terminalu:\nwsl -d {distro} sh -lc \"docker ps\"",
         "local_profiles_text": "Profile lokalne dla poczatkujacych:\n\n1. Kontenery lokalne\nUzywaj, gdy Docker Desktop albo lokalny daemon jest uruchomiony w Windows.\nSprawdz: PowerShell -> docker ps\n\n2. WSL lokalne\nUzywaj, gdy Docker dziala bezposrednio w Ubuntu, Debianie, Kali albo innej dystrybucji WSL2.\nSprawdz: PowerShell -> wsl -d Ubuntu sh -lc \"docker ps\"\n\nJak dodac kontener:\n- kliknij Nowy kontener\n- wybierz gotowy obraz albo wklej komende docker run\n- sprawdz podsumowanie i uruchom\n\nKiedy ktory tryb:\n- Windows / Docker Desktop: Polacz lokalnie\n- WSL2 z wlasnym dockerd: WSL lokalne\n- Raspberry Pi / serwer / NAS: Start profilu przez SSH lub tunel",
         "remote_hint": "Lokalne, WSL i zdalne silniki Dockera w jednym panelu operatorskim.",
+        "remote_sysinfo_label": "Host zdalny: {os} | {arch}",
+        "remote_sysinfo_unknown": "Host zdalny: nieznany",
+        "remote_sysinfo_fetch_failed": "Host zdalny: brak danych",
+        "ssh_terminal_unavailable": "Terminal SSH jest dostepny tylko dla profili SSH bezposrednio.",
+        "ssh_terminal_tunnel": "Terminal SSH nie jest dostepny w trybie tunelu.",
         "ctx_start": "Start",
         "ctx_stop": "Stop",
         "ctx_restart": "Restart",
@@ -551,13 +617,16 @@ TEXTS = {
 class RemoteProfile:
     name: str
     mode: str = "ssh"
-    ssh_target: str = "pi@192.168.0.200"
+    ssh_target: str = "user@192.168.0.200"
+    ssh_port: int = 0
     ssh_auth_mode: str = "key"
     ssh_username: str = ""
     ssh_password: str = ""
+    ssh_passphrase: str = ""
+    ssh_key_path: str = ""
     secret_id: str = ""
     base_url: str = ""
-    tunnel_command: str = "ssh -N -L 23750:127.0.0.1:2375 pi@192.168.0.200"
+    tunnel_command: str = "ssh -N -L 23750:127.0.0.1:2375 user@192.168.0.200"
     wait_seconds: int = 2
 
     @classmethod
@@ -566,17 +635,23 @@ class RemoteProfile:
 
     def resolved_base_url(self) -> str:
         if self.mode == "ssh":
-            if "@" in self.ssh_target or not self.ssh_username:
-                return f"ssh://{self.ssh_target}"
-            return f"ssh://{self.ssh_username}@{self.ssh_target}"
+            port = self.resolved_ssh_port()
+            user = self.resolved_ssh_user()
+            host = self.resolved_ssh_host()
+            return f"ssh://{user}@{host}:{port}"
         if self.base_url:
             return self.base_url
         return "tcp://127.0.0.1:23750"
 
     def resolved_ssh_host(self) -> str:
-        if "@" in self.ssh_target:
-            return self.ssh_target.split("@", 1)[1]
-        return self.ssh_target
+        target = self.ssh_target
+        if "@" in target:
+            target = target.split("@", 1)[1]
+        if ":" in target:
+            host, tail = target.rsplit(":", 1)
+            if tail.isdigit():
+                return host
+        return target
 
     def resolved_ssh_user(self) -> str:
         if self.ssh_username:
@@ -585,6 +660,20 @@ class RemoteProfile:
             return self.ssh_target.split("@", 1)[0]
         return "root"
 
+    def resolved_ssh_port(self) -> int:
+        target = self.ssh_target
+        if "@" in target:
+            target = target.split("@", 1)[1]
+        if ":" in target:
+            _host, tail = target.rsplit(":", 1)
+            if tail.isdigit():
+                return int(tail)
+        if self.ssh_port:
+            try:
+                return int(self.ssh_port)
+            except Exception:
+                pass
+        return 22
 class SecretStore:
     def __init__(self, path: Path):
         self.path = path
@@ -680,6 +769,24 @@ class ImageTemplate:
     category_en: str = ""
     description_en: str = ""
     notes_en: str = ""
+    engines: Optional[List[str]] = None
+    archs: Optional[List[str]] = None
+
+    def supports_engine(self, engine: str) -> bool:
+        engine = str(engine or "").lower().strip()
+        if not engine:
+            return True
+        engines = [str(item).lower() for item in (self.engines or ["docker"]) if str(item).strip()]
+        return engine in engines or "any" in engines
+
+    def supports_arch(self, arch: str) -> bool:
+        arch = str(arch or "").lower().strip()
+        if not arch:
+            return True
+        archs = [str(item).lower() for item in (self.archs or []) if str(item).strip()]
+        if not archs:
+            return True
+        return arch in archs
 
     def category_for(self, lang: str) -> str:
         return self.category_en if lang == "EN" and self.category_en else self.category
@@ -693,6 +800,33 @@ class ImageTemplate:
 
 def default_image_catalog() -> List[ImageTemplate]:
     return [
+        ImageTemplate("Balena Base ARMv7 Alpine", "balenalib/armv7hf-alpine:latest", "Balena OS", "Bazowy obraz dla Balena OS (ARMv7, Alpine).", "balena-armv7", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", lightweight=True, category_en="Balena OS", description_en="Base image for Balena OS (ARMv7, Alpine).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["armv7l","armv7","armhf","arm"]),
+        ImageTemplate("Balena Base ARMv7 Debian", "balenalib/armv7hf-debian:latest", "Balena OS", "Bazowy obraz dla Balena OS (ARMv7, Debian).", "balena-armv7-debian", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", category_en="Balena OS", description_en="Base image for Balena OS (ARMv7, Debian).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["armv7l","armv7","armhf","arm"]),
+        ImageTemplate("Balena Base ARMv7 Ubuntu", "balenalib/armv7hf-ubuntu:latest", "Balena OS", "Bazowy obraz dla Balena OS (ARMv7, Ubuntu).", "balena-armv7-ubuntu", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", category_en="Balena OS", description_en="Base image for Balena OS (ARMv7, Ubuntu).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["armv7l","armv7","armhf","arm"]),
+        ImageTemplate("Balena Base AArch64 Alpine", "balenalib/aarch64-alpine:latest", "Balena OS", "Bazowy obraz dla Balena OS (AArch64, Alpine).", "balena-aarch64", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", lightweight=True, category_en="Balena OS", description_en="Base image for Balena OS (AArch64, Alpine).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["aarch64","arm64"]),
+        ImageTemplate("Balena Base AArch64 Debian", "balenalib/aarch64-debian:latest", "Balena OS", "Bazowy obraz dla Balena OS (AArch64, Debian).", "balena-aarch64-debian", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", category_en="Balena OS", description_en="Base image for Balena OS (AArch64, Debian).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["aarch64","arm64"]),
+        ImageTemplate("Balena Base AArch64 Ubuntu", "balenalib/aarch64-ubuntu:latest", "Balena OS", "Bazowy obraz dla Balena OS (AArch64, Ubuntu).", "balena-aarch64-ubuntu", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", category_en="Balena OS", description_en="Base image for Balena OS (AArch64, Ubuntu).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["aarch64","arm64"]),
+        ImageTemplate("Balena Base Raspberry Pi 3 Alpine", "balenalib/raspberrypi3-alpine:latest", "Balena OS", "Bazowy obraz dla Balena OS (Raspberry Pi 3, Alpine).", "balena-rpi3-alpine", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", lightweight=True, category_en="Balena OS", description_en="Base image for Balena OS (Raspberry Pi 3, Alpine).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["armv7l","armv7","armhf","arm"]),
+        ImageTemplate("Balena Base Raspberry Pi 3 Debian", "balenalib/raspberrypi3-debian:latest", "Balena OS", "Bazowy obraz dla Balena OS (Raspberry Pi 3, Debian).", "balena-rpi3-debian", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", category_en="Balena OS", description_en="Base image for Balena OS (Raspberry Pi 3, Debian).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["armv7l","armv7","armhf","arm"]),
+        ImageTemplate("Balena Base Raspberry Pi 3 64-bit Debian", "balenalib/raspberrypi3-64-debian:latest", "Balena OS", "Bazowy obraz dla Balena OS (Raspberry Pi 3 64-bit, Debian).", "balena-rpi3-64", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", category_en="Balena OS", description_en="Base image for Balena OS (Raspberry Pi 3 64-bit, Debian).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["aarch64","arm64"]),
+        ImageTemplate("Balena Base x86_64 Alpine", "balenalib/amd64-alpine:latest", "Balena OS", "Bazowy obraz dla Balena OS (x86_64, Alpine).", "balena-amd64", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", lightweight=True, category_en="Balena OS", description_en="Base image for Balena OS (x86_64, Alpine).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["x86_64","amd64"]),
+        ImageTemplate("Balena Base x86_64 Debian", "balenalib/amd64-debian:latest", "Balena OS", "Bazowy obraz dla Balena OS (x86_64, Debian).", "balena-amd64-debian", "", "", notes="Balenalib jest przestarzaly, ale nadal dostepny.", category_en="Balena OS", description_en="Base image for Balena OS (x86_64, Debian).", notes_en="Balenalib is deprecated but still available.", engines=["balena"], archs=["x86_64","amd64"]),
+        ImageTemplate("Alpine Linux", "alpine:latest", "Baza / System", "Minimalny obraz systemowy (Alpine Linux).", "alpine", "", "", notes="Bardzo lekki, dobry na Raspberry Pi.", lightweight=True, category_en="Base / System", description_en="Minimal base image (Alpine Linux).", notes_en="Very lightweight, great for low-end devices."),
+        ImageTemplate("Debian", "debian:bookworm", "Baza / System", "Stabilny system bazowy (Debian Bookworm).", "debian", "", "", notes="Dobry kompromis miedzy rozmiarem a kompatybilnoscia.", category_en="Base / System", description_en="Stable base system (Debian Bookworm).", notes_en="Good balance of size and compatibility."),
+        ImageTemplate("Ubuntu", "ubuntu:24.04", "Baza / System", "Popularny system bazowy (Ubuntu 24.04).", "ubuntu", "", "", notes="Latwy start do aplikacji Linux.", category_en="Base / System", description_en="Popular base system (Ubuntu 24.04).", notes_en="Easy starting point for Linux apps."),
+        ImageTemplate("BusyBox", "busybox:latest", "Baza / System", "Najmniejszy obraz narzedziowy.", "busybox", "", "", notes="Idealny do testow i narzedzi.", lightweight=True, category_en="Base / System", description_en="Tiny utility image.", notes_en="Great for tests and tooling."),
+        ImageTemplate("Node.js", "node:20-alpine", "Runtime / Dev", "Runtime Node.js dla aplikacji JS.", "node-app", "", "", notes="Wersja alpine jest lekka.", lightweight=True, category_en="Runtime / Dev", description_en="Node.js runtime for JavaScript apps.", notes_en="Alpine variant is lightweight."),
+        ImageTemplate("Python", "python:3.12-slim", "Runtime / Dev", "Runtime Python do aplikacji i skryptow.", "python-app", "", "", notes="Slim to mniejszy obraz.", category_en="Runtime / Dev", description_en="Python runtime for apps and scripts.", notes_en="Slim variant is smaller."),
+        ImageTemplate("Golang", "golang:1.22-alpine", "Runtime / Dev", "Golang toolchain do budowy i uruchamiania aplikacji.", "go-app", "", "", notes="Lekki obraz do projektow Go.", lightweight=True, category_en="Runtime / Dev", description_en="Golang toolchain for building and running apps.", notes_en="Lightweight image for Go projects."),
+        ImageTemplate("Apache HTTPD", "httpd:2.4", "WWW / Proxy", "Serwer HTTP Apache.", "apache", "80", "8083", category_en="Web / Proxy", description_en="Apache HTTP server."),
+        ImageTemplate("PostgreSQL", "postgres:16", "Bazy danych", "Popularna relacyjna baza danych.", "postgres", "5432", "5432", extra="-e POSTGRES_PASSWORD=changeme -v postgres_data:/var/lib/postgresql/data", notes="Ustaw haslo i dane dostepu.", category_en="Databases", description_en="Popular relational database.", notes_en="Set password and access details."),
+        ImageTemplate("MySQL", "mysql:8.0", "Bazy danych", "Relacyjna baza danych MySQL.", "mysql", "3306", "3307", extra="-e MYSQL_ROOT_PASSWORD=changeme -v mysql_data:/var/lib/mysql", notes="Zmien domyslne haslo.", category_en="Databases", description_en="MySQL relational database.", notes_en="Change the default password."),
+        ImageTemplate("MongoDB", "mongo:7", "Bazy danych", "Baza danych dokumentowa MongoDB.", "mongo", "27017", "27017", extra="-v mongo_data:/data/db", category_en="Databases", description_en="MongoDB document database."),
+        ImageTemplate("RabbitMQ", "rabbitmq:3-management", "Messaging", "Broker kolejek z panelem WWW.", "rabbitmq", "5672", "5672", extra="-p 15672:15672", notes="Panel WWW na porcie 15672.", category_en="Messaging", description_en="Message broker with web UI.", notes_en="Web UI on port 15672."),
+        ImageTemplate("NATS", "nats:latest", "Messaging", "Lekki broker wiadomosci.", "nats", "4222", "4222", extra="-p 8222:8222", notes="Monitoring na porcie 8222.", category_en="Messaging", description_en="Lightweight messaging broker.", notes_en="Monitoring on port 8222."),
+        ImageTemplate("Memcached", "memcached:latest", "Cache", "Lekki cache w pamieci.", "memcached", "11211", "11211", lightweight=True, category_en="Cache", description_en="Lightweight in-memory cache."),
+        ImageTemplate("WordPress", "wordpress:latest", "Aplikacje WWW", "Popularny CMS do stron i blogow.", "wordpress", "80", "8086", notes="Wymaga bazy MySQL/MariaDB.", category_en="Web Apps", description_en="Popular CMS for websites and blogs.", notes_en="Requires MySQL/MariaDB."),
+        ImageTemplate("Nextcloud", "nextcloud:latest", "Aplikacje WWW", "Self-hosted chmura plikow.", "nextcloud", "80", "8087", extra="-v nextcloud_data:/var/www/html", notes="Wymaga bazy danych.", category_en="Web Apps", description_en="Self-hosted file cloud.", notes_en="Requires a database."),
         ImageTemplate("Open WebUI", "ghcr.io/open-webui/open-webui:main", "AI / UI", "Interfejs webowy do modeli i lokalnych pipeline'ow AI.", "open-webui", "8080", "3000", notes="Dobra para z Ollama albo OpenAI API.", category_en="AI / UI", description_en="Web interface for AI models and local AI pipelines.", notes_en="Great pair with Ollama or OpenAI API."),
         ImageTemplate("Perplexica", "itzcrazykns1337/perplexica:latest", "AI / Search", "Wyszukiwarka AI z mozliwoscia pracy lokalnej.", "perplexica", "3000", "3100", notes="Czesto uruchamiana razem z SearXNG.", category_en="AI / Search", description_en="AI search engine with local-first workflows.", notes_en="Often deployed together with SearXNG."),
         ImageTemplate("SearXNG", "searxng/searxng:latest", "AI / Search", "Meta-wyszukiwarka prywatnosciowa dla self-hostingu.", "searxng", "8080", "8888", notes="Przydatna jako backend wyszukiwania dla narzedzi AI.", category_en="AI / Search", description_en="Privacy-focused metasearch engine for self-hosting.", notes_en="Useful as a search backend for AI tools."),
@@ -707,6 +841,12 @@ def default_image_catalog() -> List[ImageTemplate]:
         ImageTemplate("Gitea", "gitea/gitea:latest", "DevOps", "Lekki self-hosted Git server.", "gitea", "3000", "3001", extra="-p 2222:22 -v gitea:/data", notes="Przyjazny dla Raspberry Pi i slabego sprzetu.", category_en="DevOps", description_en="Lightweight self-hosted Git server.", notes_en="Friendly for Raspberry Pi and low-end hardware."),
         ImageTemplate("Jellyfin", "linuxserver/jellyfin:latest", "Media", "Self-hosted media server z obsluga ARM i x86.", "jellyfin", "8096", "8096", extra="-v jellyfin_config:/config -v jellyfin_cache:/cache", notes="Aby dodac muzyke z Windows, dopisz w Dodatkowe parametry mount typu -v C:/TwojaMuzyka:/data/music:ro i potem w Jellyfin wskaz folder /data/music. Na slabszych maszynach ogranicz transkodowanie.", category_en="Media", description_en="Self-hosted media server with ARM and x86 support.", notes_en="To expose Windows music, add -v C:/YourMusic:/data/music:ro in Extra parameters and then add /data/music in Jellyfin. On low-end hardware, limit transcoding."),
         ImageTemplate("Uptime Kuma", "louislam/uptime-kuma:1", "Monitoring", "Monitoring stron i uslug z prostym dashboardem.", "uptime-kuma", "3001", "3002", extra="-v uptime_kuma:/app/data", notes="Bardzo lekki do domowego monitoringu.", category_en="Monitoring", description_en="Website and service monitoring with a simple dashboard.", notes_en="Very lightweight for home monitoring."),
+        ImageTemplate("Pi-hole", "pihole/pihole:latest", "Network / DNS", "Blokowanie reklam i DNS sinkhole.", "pihole", "80", "8088", extra="-e TZ=Europe/Warsaw -p 53:53/tcp -p 53:53/udp -p 67:67/udp -v pihole_data:/etc/pihole -v pihole_dnsmasq:/etc/dnsmasq.d", notes="Lekki i bardzo popularny. Idealny na Raspberry Pi.", lightweight=True, category_en="Network / DNS", description_en="Ad blocking DNS sinkhole and web UI.", notes_en="Lightweight and very popular. Great for Raspberry Pi."),
+        ImageTemplate("Home Assistant", "homeassistant/home-assistant:stable", "Smart Home / IoT", "Centrum automatyzacji smart home.", "home-assistant", "8123", "8123", extra="--network=host", notes="Wymaga trybu host. Zalecany mocniejszy sprzet lub Raspberry Pi 4+.", category_en="Smart Home / IoT", description_en="Smart home automation hub.", notes_en="Requires host network mode. Recommended on stronger hardware or Raspberry Pi 4+."),
+        ImageTemplate("Grafana", "grafana/grafana:latest", "Monitoring", "Dashboardy i wizualizacja metryk.", "grafana", "3000", "3003", extra="-v grafana_data:/var/lib/grafana", notes="Dobre do monitoringu na NAS/serwerze. Wymaga wiecej RAM.", category_en="Monitoring", description_en="Metrics dashboards and visualization.", notes_en="Great for NAS/server monitoring. Needs more RAM."),
+        ImageTemplate("Prometheus", "prom/prometheus:latest", "Monitoring", "Zbieranie metryk i alerty.", "prometheus", "9090", "9090", extra="-v prometheus_data:/prometheus", notes="Popularny backend metryk. Na slabszym sprzecie ogranicz retention.", category_en="Monitoring", description_en="Metrics collection and alerting.", notes_en="Popular metrics backend. On low-end hardware, reduce retention."),
+        ImageTemplate("InfluxDB", "influxdb:2", "Bazy danych", "Baza danych time-series dla IoT i monitoringu.", "influxdb", "8086", "8086", extra="-v influxdb_data:/var/lib/influxdb2", notes="Wersja 2.x jest ciezsza - lepiej na mocniejszy sprzet.", category_en="Databases", description_en="Time-series database for IoT and monitoring.", notes_en="2.x is heavier - best on stronger hardware."),
+        ImageTemplate("Plex Media Server", "plexinc/pms-docker:latest", "Media", "Serwer multimedialny Plex (x86_64).", "plex", "32400", "32400", extra="-v plex_config:/config -v plex_transcode:/transcode", notes="Wymaga mocniejszego CPU, szczegolnie przy transkodowaniu. Dobre na Windows/x86_64.", category_en="Media", description_en="Plex media server (x86_64).", notes_en="Needs stronger CPU, especially for transcoding. Good on Windows/x86_64."),
     ]
 
 def fetch_docker_hub_description(image: str) -> Optional[str]:
@@ -725,10 +865,13 @@ def fetch_docker_hub_description(image: str) -> Optional[str]:
 
 def normalize_docker_command_text(raw: str) -> str:
     raw = str(raw or "").strip()
-    raw = re.sub(r"\s*\^\s*[\r\n]+\s*", " ", raw)
-    raw = re.sub(r"\\\s*[\r\n]+\s*", " ", raw)
-    raw = re.sub(r"[\r\n]+", " ", raw)
-    raw = re.sub(r"\s{2,}", " ", raw)
+    raw = re.sub(r"\\s*\\^\\s*\\r?\\n+\\s*", " ", raw)
+    raw = re.sub(r"\\\\\\s*\\r?\\n+\\s*", " ", raw)
+    raw = re.sub(r"\\r?\\n+", " ", raw)
+    raw = re.sub(r"\\s{2,}", " ", raw)
+    return raw.strip()
+
+
     return raw.strip()
 
 
@@ -783,7 +926,7 @@ def extract_docker_run_command(text: str) -> str:
     cleaned = cleaned.replace("```bash", "```").replace("```sh", "```").replace("```powershell", "```")
     if "```" in cleaned:
         for part in [chunk.strip() for chunk in cleaned.split("```") if chunk.strip()]:
-            if "docker run" in part.lower():
+            if "docker run" in part.lower() or "balena run" in part.lower():
                 cleaned = part
                 break
     cleaned = normalize_docker_command_text(cleaned)
@@ -876,10 +1019,18 @@ class ProfileStore:
         self.path = path
         self.secret_store = secret_store
 
-    def secret_key_for_profile(self, profile: RemoteProfile) -> str:
+    def _ensure_secret_id(self, profile: RemoteProfile) -> str:
         if not profile.secret_id:
             profile.secret_id = uuid.uuid4().hex
-        return f"profiles/{profile.secret_id}/ssh_password"
+        return profile.secret_id
+
+    def secret_key_for_password(self, profile: RemoteProfile) -> str:
+        secret_id = self._ensure_secret_id(profile)
+        return f"profiles/{secret_id}/ssh_password"
+
+    def secret_key_for_passphrase(self, profile: RemoteProfile) -> str:
+        secret_id = self._ensure_secret_id(profile)
+        return f"profiles/{secret_id}/ssh_passphrase"
 
     def load(self) -> List[RemoteProfile]:
         if not self.path.exists():
@@ -895,14 +1046,25 @@ class ProfileStore:
                     secret_id = uuid.uuid4().hex
                     item["secret_id"] = secret_id
                     dirty = True
-                secret_key = f"profiles/{secret_id}/ssh_password"
+                password_key = f"profiles/{secret_id}/ssh_password"
+                passphrase_key = f"profiles/{secret_id}/ssh_passphrase"
                 plain_password = str(item.get("ssh_password") or "")
+                plain_passphrase = str(item.get("ssh_passphrase") or "")
                 if plain_password:
-                    self.secret_store.set_secret(secret_key, plain_password)
+                    self.secret_store.set_secret(password_key, plain_password)
                     item["ssh_password"] = ""
                     dirty = True
+                if plain_passphrase:
+                    self.secret_store.set_secret(passphrase_key, plain_passphrase)
+                    item["ssh_passphrase"] = ""
+                    dirty = True
                 profile = RemoteProfile(**item)
-                profile.ssh_password = self.secret_store.get_secret(secret_key)
+                profile.ssh_password = self.secret_store.get_secret(password_key)
+                profile.ssh_passphrase = self.secret_store.get_secret(passphrase_key)
+                if profile.ssh_auth_mode == "key_password" and not profile.ssh_passphrase and profile.ssh_password:
+                    profile.ssh_passphrase = profile.ssh_password
+                    profile.ssh_password = ""
+                    dirty = True
                 profiles.append(profile)
             if dirty:
                 self.save(profiles)
@@ -916,16 +1078,21 @@ class ProfileStore:
     def save(self, profiles: List[RemoteProfile]) -> None:
         serialized = []
         for profile in profiles:
-            secret_key = self.secret_key_for_profile(profile)
-            if profile.ssh_password and profile.ssh_auth_mode == "password":
-                self.secret_store.set_secret(secret_key, profile.ssh_password)
+            password_key = self.secret_key_for_password(profile)
+            passphrase_key = self.secret_key_for_passphrase(profile)
+            if profile.ssh_auth_mode == "password" and profile.ssh_password:
+                self.secret_store.set_secret(password_key, profile.ssh_password)
             else:
-                self.secret_store.delete_secret(secret_key)
+                self.secret_store.delete_secret(password_key)
+            if profile.ssh_auth_mode == "key_password" and profile.ssh_passphrase:
+                self.secret_store.set_secret(passphrase_key, profile.ssh_passphrase)
+            else:
+                self.secret_store.delete_secret(passphrase_key)
             item = asdict(profile)
             item["ssh_password"] = ""
+            item["ssh_passphrase"] = ""
             serialized.append(item)
         self.path.write_text(json.dumps({"profiles": serialized}, indent=2, ensure_ascii=True), encoding="utf-8")
-
 def palette_for_theme(theme: str) -> Dict[str, str]:
     palettes = {
         "light": {
@@ -968,10 +1135,27 @@ def palette_for_theme(theme: str) -> Dict[str, str]:
     return palettes.get(theme, palettes["black"])
 
 
-def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transparency_level: int) -> str:
+def normalize_accent_color(value: str, fallback: str = "#33f0ff") -> str:
+    try:
+        color = QColor(value)
+        if color.isValid():
+            return color.name()
+    except Exception:
+        pass
+    return QColor(fallback).name()
+
+
+def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transparency_level: int, neon_animate: bool = True, accent_color: str = "#33f0ff") -> str:
     palette = palette_for_theme(theme)
-    accent = QColor.fromHsvF(glow_phase, 0.72, 1.0).name()
-    accent_soft = QColor.fromHsvF(glow_phase, 0.46, 0.78).name()
+    if neon_animate:
+        accent = QColor.fromHsvF(glow_phase, 0.72, 1.0).name()
+        accent_soft = QColor.fromHsvF(glow_phase, 0.46, 0.78).name()
+    else:
+        base = QColor(normalize_accent_color(accent_color))
+        accent = base.name()
+        soft = QColor(base)
+        soft.setAlpha(160)
+        accent_soft = soft.name(QColor.NameFormat.HexArgb)
     input_bg = "rgba(255,255,255,0.92)" if theme == "light" else "rgba(255,255,255,0.06)"
     surface = palette["bg0"] if transparent else palette["solid0"]
     return f"""
@@ -1246,14 +1430,17 @@ class TutorialDialog(QDialog):
         self.setWindowTitle(texts["profile_tutorial_title"])
         self.resize(760, 480)
         layout = QVBoxLayout(self)
-        user = profile.ssh_target.split("@")[0] if "@" in profile.ssh_target else "twoj_user"
+        target = profile.ssh_target or "user@192.168.0.200"
+        user = target.split("@")[0] if "@" in target else "user"
+        port = profile.resolved_ssh_port() or 22
         body = QTextEdit()
         body.setReadOnly(True)
         body.setPlainText(
             texts["profile_tutorial_intro"] + "\n\n" +
-            texts["profile_tutorial_steps"].format(user=user, target=profile.ssh_target or "user@host") +
+            texts["profile_tutorial_steps"].format(user=user, target=target, port=port) +
             "\n\n" + texts["profile_tutorial_hint"] +
-            "\n\n" + texts["profile_tutorial_test"].format(target=profile.ssh_target or "user@host")
+            "\n\n" + texts["profile_tutorial_agent"] +
+            "\n\n" + texts["profile_tutorial_test"].format(target=target, port=port)
         )
         layout.addWidget(body)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -1390,7 +1577,7 @@ class AppSettingsDialog(QDialog):
         self.settings = settings
         self.texts = texts
         self.setWindowTitle(self.texts["app_settings_title"])
-        self.resize(680, 240)
+        self.resize(680, 360)
 
         layout = QVBoxLayout(self)
         intro = QLabel(self.texts["app_settings_intro"])
@@ -1406,12 +1593,46 @@ class AppSettingsDialog(QDialog):
         note.setWordWrap(True)
         layout.addWidget(note)
 
+        form = QFormLayout()
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem(self.texts["theme_light"], "light")
+        self.theme_combo.addItem(self.texts["theme_dark"], "dark")
+        self.theme_combo.addItem(self.texts["theme_black"], "black")
+        current_theme = str(self.settings.value("theme", "black"))
+        theme_index = self.theme_combo.findData(current_theme)
+        if theme_index >= 0:
+            self.theme_combo.setCurrentIndex(theme_index)
+
+        self.neon_checkbox = QCheckBox(self.texts["app_settings_neon_animate"])
+        neon_enabled = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
+        self.neon_checkbox.setChecked(neon_enabled)
+
+        self.neon_color_combo = QComboBox()
+        for label, value in NEON_PALETTE:
+            self.neon_color_combo.addItem(label, value)
+            index = self.neon_color_combo.count() - 1
+            self.neon_color_combo.setItemData(index, QColor(value), Qt.ItemDataRole.DecorationRole)
+        saved_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
+        color_index = self.neon_color_combo.findData(saved_color)
+        if color_index < 0:
+            self.neon_color_combo.addItem(saved_color, saved_color)
+            self.neon_color_combo.setItemData(self.neon_color_combo.count() - 1, QColor(saved_color), Qt.ItemDataRole.DecorationRole)
+            color_index = self.neon_color_combo.count() - 1
+        self.neon_color_combo.setCurrentIndex(color_index)
+        self.neon_color_combo.setEnabled(not neon_enabled)
+        self.neon_checkbox.toggled.connect(lambda checked: self.neon_color_combo.setEnabled(not checked))
+
+        form.addRow(self.texts["app_settings_theme"], self.theme_combo)
+        form.addRow(self.neon_checkbox)
+        form.addRow(self.texts["app_settings_neon_color"], self.neon_color_combo)
+        layout.addLayout(form)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 class NewContainerDialog(QDialog):
-    def __init__(self, client, texts: Dict[str, str], run_command_callback=None, parent=None, initial_args: Optional[List[str]] = None, edit_mode: bool = False, existing_name: str = "", llm_settings_getter=None, ai_command_callback=None, lang: str = "EN"):
+    def __init__(self, client, texts: Dict[str, str], run_command_callback=None, parent=None, initial_args: Optional[List[str]] = None, edit_mode: bool = False, existing_name: str = "", llm_settings_getter=None, ai_command_callback=None, lang: str = "EN", cli_command: str = "docker", cli_choices: Optional[List[str]] = None, remote_arch: str = ""):
         super().__init__(parent)
         self.client = client
         self.texts = texts
@@ -1425,6 +1646,8 @@ class NewContainerDialog(QDialog):
         self.llm_settings_getter = llm_settings_getter or (lambda: {})
         self.ai_command_callback = ai_command_callback
         self.lang = (lang or "EN").upper()
+        self.cli_command = (cli_command or "docker").lower()
+        self.cli_choices = [str(item).lower() for item in (cli_choices or [self.cli_command]) if str(item).strip()]
 
         self.setWindowTitle(self.texts["wizard_edit_title"] if self.edit_mode else self.texts["wizard_title"])
         self.resize(980, 760)
@@ -1461,18 +1684,29 @@ class NewContainerDialog(QDialog):
         self.hport_edit = QLineEdit()
         self.extra_edit = QLineEdit()
         self.command_edit = QLineEdit()
+        self.cli_combo = QComboBox()
+        for cli in self.cli_choices:
+            self.cli_combo.addItem(cli, cli)
+        if self.cli_command in self.cli_choices:
+            self.cli_combo.setCurrentText(self.cli_command)
+        self.cli_combo.setEnabled(len(self.cli_choices) > 1)
         form.addRow(self.texts["wizard_name"], self.name_edit)
         form.addRow(self.texts["wizard_image"], self.image_edit)
         form.addRow(self.texts["wizard_cport"], self.cport_edit)
         form.addRow(self.texts["wizard_hport"], self.hport_edit)
         form.addRow(self.texts["wizard_extra"], self.extra_edit)
+        form.addRow(self.texts["wizard_cli"], self.cli_combo)
         form.addRow(self.texts["wizard_command_only"], self.command_edit)
         setup_layout.addLayout(form)
+        self.engine_notice = QLabel(self.texts["wizard_balena_only"])
+        self.engine_notice.setWordWrap(True)
+        setup_layout.addWidget(self.engine_notice)
 
-        setup_layout.addWidget(QLabel(self.texts["wizard_command_input"]))
+        self.command_input_label = QLabel(self.texts["wizard_command_input"])
+        setup_layout.addWidget(self.command_input_label)
         command_row = QHBoxLayout()
         self.command_input = QPlainTextEdit()
-        self.command_input.setPlaceholderText('docker run -d --name my-app -p 8080:80 nginx:alpine')
+        self.command_input.setPlaceholderText(f"{self.cli_command} run -d --name my-app -p 8080:80 nginx:alpine")
         self.command_input.setMaximumHeight(100)
         self.btn_parse_command = QPushButton(self.texts["wizard_parse"])
         self.btn_normalize_command = QPushButton(self.texts["wizard_normalize"])
@@ -1568,6 +1802,7 @@ class NewContainerDialog(QDialog):
         self.search_edit.textChanged.connect(self.filter_catalog)
         self.category_combo.currentIndexChanged.connect(self.filter_catalog)
         self.catalog_list.currentRowChanged.connect(self.apply_selected_template)
+        self.cli_combo.currentIndexChanged.connect(self.on_cli_changed)
         for widget in [self.name_edit, self.image_edit, self.cport_edit, self.hport_edit, self.extra_edit, self.command_edit]:
             widget.textChanged.connect(self.update_summary)
         self.btn_parse_command.clicked.connect(self.parse_command_input)
@@ -1582,6 +1817,7 @@ class NewContainerDialog(QDialog):
         self.btn_cancel.clicked.connect(self.reject)
 
         self.filter_catalog()
+        self.update_cli_labels()
         if self.initial_args:
             self.load_run_args(self.initial_args)
         elif self.catalog_list.count() > 0:
@@ -1593,8 +1829,11 @@ class NewContainerDialog(QDialog):
         query = self.search_edit.text().strip().lower()
         category = self.category_combo.currentText().strip()
         self.filtered_catalog = []
+        engine = self.current_cli()
         self.catalog_list.clear()
         for item in self.catalog:
+            if not item.supports_engine(engine):
+                continue
             if category and category != self.texts["wizard_all_categories"] and item.category_for(self.lang) != category:
                 continue
             haystack = f"{item.name} {item.image} {item.description_for(self.lang)} {item.notes_for(self.lang)}"
@@ -1669,9 +1908,35 @@ class NewContainerDialog(QDialog):
         return args
 
     def load_run_args(self, args: List[str]):
-        rendered = "docker " + " ".join(shlex.quote(str(part)) for part in args)
+        prefix = self.current_cli()
+        rendered = prefix + " " + " ".join(shlex.quote(str(part)) for part in args)
         self.set_text_preserving_view(self.command_input, rendered, block_signals=True)
         self.parse_command_input()
+
+    def current_cli(self) -> str:
+        return (self.cli_combo.currentData() or self.cli_command or "docker").lower()
+
+    def set_cli_command(self, cli: str):
+        cli = str(cli or "").lower()
+        index = self.cli_combo.findData(cli)
+        if index >= 0:
+            self.cli_combo.blockSignals(True)
+            self.cli_combo.setCurrentIndex(index)
+            self.cli_combo.blockSignals(False)
+        self.update_cli_labels()
+        self.filter_catalog()
+
+    def update_cli_labels(self):
+        prefix = self.current_cli()
+        self.command_input_label.setText(self.texts["wizard_command_input"].replace("docker", prefix))
+        self.command_input.setPlaceholderText(f"{prefix} run -d --name my-app -p 8080:80 nginx:alpine")
+        self.ai_prompt_edit.setPlaceholderText(self.texts["llm_prompt_placeholder"].replace("docker", prefix))
+        self.engine_notice.setVisible(prefix == "balena")
+
+    def on_cli_changed(self):
+        self.update_cli_labels()
+        self.filter_catalog()
+        self.update_summary()
 
     def update_summary(self):
         if self._syncing:
@@ -1681,7 +1946,8 @@ class NewContainerDialog(QDialog):
             self.set_text_preserving_view(self.summary_text, "")
             self.refresh_ai_context()
             return
-        summary = "docker " + " ".join(shlex.quote(part) for part in args)
+        prefix = self.current_cli()
+        summary = prefix + " " + " ".join(shlex.quote(part) for part in args)
         self.set_text_preserving_view(self.summary_text, summary)
         self.set_text_preserving_view(self.command_input, summary, block_signals=True)
         self.refresh_ai_context()
@@ -1706,7 +1972,7 @@ class NewContainerDialog(QDialog):
         if current:
             return current
         image = self.image_edit.text().strip() or "<image>"
-        return f"docker run -d {image}"
+        return f"{self.current_cli()} run -d {image}"
 
     def refresh_ai_context(self):
         self.set_text_preserving_view(self.ai_context_text, self.current_ai_context())
@@ -1821,7 +2087,12 @@ class NewContainerDialog(QDialog):
         except Exception:
             QMessageBox.warning(self, self.texts["msg_error"], self.texts["wizard_command_invalid"])
             return
-        if len(tokens) >= 2 and tokens[0] == "docker" and tokens[1] == "run":
+        if len(tokens) >= 2 and tokens[0] in {"docker", "balena"} and tokens[1] == "run":
+            if self.current_cli() == "balena" and tokens[0] == "docker":
+                QMessageBox.information(self, self.texts["msg_info"], self.texts["wizard_balena_notice"])
+                self.set_cli_command("balena")
+            else:
+                self.set_cli_command(tokens[0])
             tokens = tokens[2:]
         elif tokens and tokens[0] == "run":
             tokens = tokens[1:]
@@ -2076,19 +2347,44 @@ class WslDockerClient:
         return ["wsl.exe", "-d", self.distro, "sh", "-lc", f"docker {docker_args}"]
 
     def run_docker(self, args: List[str], capture_output: bool = False):
-        command = self._wsl_command(args)
-        result = subprocess.run(
-            command,
-            capture_output=capture_output,
-            text=True,
-            timeout=self.timeout,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        if result.returncode != 0:
-            error = (result.stderr or result.stdout or "Docker command failed in WSL").strip()
-            raise RuntimeError(error)
-        return result
-
+        docker_args = " ".join(shlex.quote(str(arg)) for arg in args)
+        preferred = getattr(self, "detected_cli", "") or ""
+        cli_order = []
+        if preferred:
+            cli_order.append(preferred)
+        for name in ["docker", "balena"]:
+            if name not in cli_order:
+                cli_order.append(name)
+        last_error = ""
+        fatal_error = False
+        for cli_name in cli_order:
+            base = f"{cli_name} {docker_args}"
+            candidates = [
+                base,
+                f"sh -lc {shlex.quote(base)}",
+                f"sh -c {shlex.quote(base)}",
+            ]
+            for cmd in candidates:
+                ssh = self._ensure_client()
+                stdin, stdout, stderr = ssh.exec_command(cmd, timeout=self.timeout)
+                out = stdout.read().decode("utf-8", errors="ignore")
+                err = stderr.read().decode("utf-8", errors="ignore")
+                code = stdout.channel.recv_exit_status()
+                if code == 0:
+                    self.detected_cli = cli_name
+                    return subprocess.CompletedProcess(cmd, code, out, err)
+                combined = (err or out or "").strip()
+                last_error = combined or "Docker command failed over SSH"
+                lowered = combined.lower()
+                if "command not found" in lowered or "not found" in lowered or "no such file" in lowered:
+                    continue
+                if "illegal option" in lowered or "unknown option" in lowered:
+                    continue
+                fatal_error = True
+                break
+            if fatal_error:
+                break
+        raise RuntimeError(last_error)
     def ping(self):
         self.run_docker(["version"], capture_output=True)
 
@@ -2098,6 +2394,8 @@ class WslDockerClient:
         if not data:
             raise RuntimeError(f"Container not found: {name}")
         return data[0]
+
+
 
 
 class SshDockerClient:
@@ -2108,38 +2406,100 @@ class SshDockerClient:
         self.timeout = timeout
         self.containers = SshContainerCollection(self)
         self._client = None
+        self.detected_cli = ""
 
     def _ensure_client(self):
         if self._client is not None:
             return self._client
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        auth_mode = (self.profile.ssh_auth_mode or "key").strip()
+        use_key = auth_mode in {"key", "key_password"}
+        use_password = auth_mode == "password"
+        key_path = (self.profile.ssh_key_path or "").strip()
+        passphrase = self.profile.ssh_passphrase if auth_mode == "key_password" else ""
         kwargs = {
             "hostname": self.profile.resolved_ssh_host(),
             "username": self.profile.resolved_ssh_user(),
+            "port": self.profile.resolved_ssh_port(),
             "timeout": self.timeout,
-            "look_for_keys": self.profile.ssh_auth_mode == "key",
-            "allow_agent": self.profile.ssh_auth_mode == "key",
+            "banner_timeout": self.timeout,
+            "look_for_keys": use_key,
+            "allow_agent": use_key,
         }
-        if self.profile.ssh_auth_mode == "password":
+        if use_password:
             kwargs["password"] = self.profile.ssh_password
             kwargs["look_for_keys"] = False
             kwargs["allow_agent"] = False
-        client.connect(**kwargs)
+        if key_path:
+            key_file = Path(key_path)
+            if not key_file.exists():
+                raise RuntimeError(f"SSH key file not found: {key_path}")
+            kwargs["key_filename"] = str(key_file)
+            if passphrase:
+                kwargs["password"] = passphrase
+        try:
+            client.connect(**kwargs)
+        except paramiko.ssh_exception.PasswordRequiredException:
+            raise RuntimeError("SSH key requires a passphrase. Provide it in the profile.")
+        except paramiko.ssh_exception.AuthenticationException:
+            if use_key:
+                kwargs["disabled_algorithms"] = {"pubkeys": ["rsa-sha2-256", "rsa-sha2-512"]}
+                client.connect(**kwargs)
+            else:
+                raise
         self._client = client
         return self._client
 
-    def run_docker(self, args: List[str], capture_output: bool = False):
-        command = "docker " + " ".join(shlex.quote(str(arg)) for arg in args)
+    def run_ssh(self, command: str) -> str:
         ssh = self._ensure_client()
         stdin, stdout, stderr = ssh.exec_command(command, timeout=self.timeout)
         out = stdout.read().decode("utf-8", errors="ignore")
         err = stderr.read().decode("utf-8", errors="ignore")
         code = stdout.channel.recv_exit_status()
         if code != 0:
-            raise RuntimeError((err or out or "Docker command failed over SSH").strip())
-        return subprocess.CompletedProcess(command, code, out, err)
+            raise RuntimeError((err or out or "SSH command failed").strip())
+        return out.strip()
 
+    def run_docker(self, args: List[str], capture_output: bool = False):
+        docker_args = " ".join(shlex.quote(str(arg)) for arg in args)
+        preferred = getattr(self, "detected_cli", "") or ""
+        cli_order = []
+        if preferred:
+            cli_order.append(preferred)
+        for name in ["docker", "balena"]:
+            if name not in cli_order:
+                cli_order.append(name)
+        last_error = ""
+        fatal_error = False
+        for cli_name in cli_order:
+            base = f"{cli_name} {docker_args}"
+            candidates = [
+                base,
+                f"sh -lc {shlex.quote(base)}",
+                f"sh -c {shlex.quote(base)}",
+            ]
+            for cmd in candidates:
+                ssh = self._ensure_client()
+                stdin, stdout, stderr = ssh.exec_command(cmd, timeout=self.timeout)
+                out = stdout.read().decode("utf-8", errors="ignore")
+                err = stderr.read().decode("utf-8", errors="ignore")
+                code = stdout.channel.recv_exit_status()
+                if code == 0:
+                    self.detected_cli = cli_name
+                    return subprocess.CompletedProcess(cmd, code, out, err)
+                combined = (err or out or "").strip()
+                last_error = combined or "Docker command failed over SSH"
+                lowered = combined.lower()
+                if "command not found" in lowered or "not found" in lowered or "no such file" in lowered:
+                    continue
+                if "illegal option" in lowered or "unknown option" in lowered:
+                    continue
+                fatal_error = True
+                break
+            if fatal_error:
+                break
+        raise RuntimeError(last_error)
     def ping(self):
         self.run_docker(["version"], capture_output=True)
 
@@ -2149,7 +2509,6 @@ class SshDockerClient:
         if not data:
             raise RuntimeError(f"Container not found: {name}")
         return data[0]
-
 
 class SshContainerCollection:
     def __init__(self, client):
@@ -2348,9 +2707,20 @@ class ProfileManagerDialog(QDialog):
         self.mode_combo.addItem(self.texts["profile_mode_ssh"], "ssh")
         self.mode_combo.addItem(self.texts["profile_mode_tunnel"], "tunnel")
         self.ssh_target_edit = QLineEdit()
+        self.ssh_port_spin = QSpinBox()
+        self.ssh_port_spin.setRange(1, 65535)
+        self.ssh_port_spin.setValue(22)
         self.auth_mode_combo = QComboBox()
         self.auth_mode_combo.addItem(self.texts["profile_auth_key"], "key")
+        self.auth_mode_combo.addItem(self.texts["profile_auth_both"], "key_password")
         self.auth_mode_combo.addItem(self.texts["profile_auth_password"], "password")
+        self.key_path_edit = QLineEdit()
+        self.key_browse_btn = QPushButton(self.texts["profile_key_browse"])
+        key_row = QHBoxLayout()
+        key_row.addWidget(self.key_path_edit, 1)
+        key_row.addWidget(self.key_browse_btn)
+        self.passphrase_edit = QLineEdit()
+        self.passphrase_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.password_edit = QLineEdit()
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.base_url_edit = QLineEdit()
@@ -2361,12 +2731,22 @@ class ProfileManagerDialog(QDialog):
         form.addRow(self.texts["profile_name"], self.name_edit)
         form.addRow(self.texts["profile_mode"], self.mode_combo)
         form.addRow(self.texts["profile_ssh_target"], self.ssh_target_edit)
+        form.addRow(self.texts["profile_ssh_port"], self.ssh_port_spin)
         form.addRow(self.texts["profile_auth_mode"], self.auth_mode_combo)
+        form.addRow(self.texts["profile_key_path"], key_row)
+        form.addRow(self.texts["profile_passphrase"], self.passphrase_edit)
         form.addRow(self.texts["profile_password"], self.password_edit)
         form.addRow(self.texts["profile_base_url"], self.base_url_edit)
         form.addRow(self.texts["profile_tunnel_command"], self.tunnel_command_edit)
         form.addRow(self.texts["profile_wait"], self.wait_spin)
         right.addLayout(form)
+
+        self.passphrase_note = QLabel(self.texts["profile_passphrase_note"])
+        self.password_note = QLabel(self.texts["profile_password_note"])
+        self.passphrase_note.setWordWrap(True)
+        self.password_note.setWordWrap(True)
+        right.addWidget(self.passphrase_note)
+        right.addWidget(self.password_note)
 
         self.password_note = QLabel(self.texts["profile_password_note"])
         self.password_note.setWordWrap(True)
@@ -2394,6 +2774,7 @@ class ProfileManagerDialog(QDialog):
         self.btn_tutorial.clicked.connect(self.show_tutorial)
         self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
         self.auth_mode_combo.currentIndexChanged.connect(self.on_mode_changed)
+        self.key_browse_btn.clicked.connect(self.choose_key_path)
         self.refresh_list()
         if self.profiles:
             self.list_widget.setCurrentRow(0)
@@ -2409,11 +2790,24 @@ class ProfileManagerDialog(QDialog):
     def current_auth_mode(self) -> str:
         return self.auth_mode_combo.currentData() or "key"
 
+    def choose_key_path(self):
+        path, _ = QFileDialog.getOpenFileName(self, self.texts["profile_key_path"], "", "SSH Keys (*.pem *.ppk *id_rsa*);;All files (*.*)")
+        if path:
+            self.key_path_edit.setText(path)
+
+
     def on_mode_changed(self):
         tunnel_mode = self.current_mode() == "tunnel"
         ssh_mode = self.current_mode() == "ssh"
         password_mode = self.current_auth_mode() == "password"
+        passphrase_mode = self.current_auth_mode() == "key_password"
+        key_mode = self.current_auth_mode() in {"key", "key_password"}
         self.auth_mode_combo.setEnabled(ssh_mode)
+        self.ssh_port_spin.setEnabled(ssh_mode or tunnel_mode)
+        self.key_path_edit.setEnabled(ssh_mode and key_mode)
+        self.key_browse_btn.setEnabled(ssh_mode and key_mode)
+        self.passphrase_edit.setEnabled(ssh_mode and passphrase_mode)
+        self.passphrase_note.setVisible(ssh_mode and passphrase_mode)
         self.password_edit.setEnabled(ssh_mode and password_mode)
         self.password_note.setVisible(ssh_mode and password_mode)
         self.tunnel_command_edit.setEnabled(tunnel_mode)
@@ -2427,7 +2821,11 @@ class ProfileManagerDialog(QDialog):
         self.name_edit.setText(profile.name)
         self.mode_combo.setCurrentIndex(0 if profile.mode == "ssh" else 1)
         self.ssh_target_edit.setText(profile.ssh_target)
-        self.auth_mode_combo.setCurrentIndex(0 if profile.ssh_auth_mode == "key" else 1)
+        self.ssh_port_spin.setValue(int(profile.ssh_port or 22))
+        auth_index = self.auth_mode_combo.findData(profile.ssh_auth_mode)
+        self.auth_mode_combo.setCurrentIndex(auth_index if auth_index >= 0 else 0)
+        self.key_path_edit.setText(profile.ssh_key_path)
+        self.passphrase_edit.setText(profile.ssh_passphrase)
         self.password_edit.setText(profile.ssh_password)
         self.base_url_edit.setText(profile.base_url)
         self.tunnel_command_edit.setPlainText(profile.tunnel_command)
@@ -2444,18 +2842,28 @@ class ProfileManagerDialog(QDialog):
         base_url = self.base_url_edit.text().strip()
         auth_mode = self.current_auth_mode()
         ssh_password = self.password_edit.text()
+        ssh_passphrase = self.passphrase_edit.text()
+        ssh_port = int(self.ssh_port_spin.value())
+        ssh_key_path = self.key_path_edit.text().strip()
+        if auth_mode == "key_password" and not ssh_key_path:
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["profile_key_path_required_passphrase"])
+            return None
         if mode == "ssh" and not ssh_target and not base_url:
             QMessageBox.warning(self, self.texts["msg_error"], self.texts["profile_missing_target"])
             return None
         tunnel_command = self.tunnel_command_edit.toPlainText().strip()
         if mode == "tunnel" and not tunnel_command and ssh_target:
-            tunnel_command = f"ssh -N -L 23750:127.0.0.1:2375 {ssh_target}"
+            port_flag = f" -p {ssh_port}" if ssh_port and ssh_port != 22 else ""
+            tunnel_command = f"ssh -N{port_flag} -L 23750:127.0.0.1:2375 {ssh_target}"
         return RemoteProfile(
             name=name,
             mode=mode,
             ssh_target=ssh_target,
+            ssh_port=ssh_port,
             ssh_auth_mode=auth_mode,
             ssh_password=ssh_password,
+            ssh_passphrase=ssh_passphrase,
+            ssh_key_path=ssh_key_path,
             base_url=base_url,
             tunnel_command=tunnel_command,
             wait_seconds=self.wait_spin.value(),
@@ -2512,6 +2920,8 @@ class MainWindow(QMainWindow):
         self.transparent_mode = str(self.settings.value("transparent_mode", "true")).lower() in {"1", "true", "yes"}
         self.transparency_level = int(self.settings.value("transparency_level", 72))
         self.music_enabled = str(self.settings.value("music_enabled", "true")).lower() in {"1", "true", "yes"}
+        self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
+        self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
         self.auto_start_docker_desktop = str(self.settings.value("auto_start_docker_desktop", "false")).lower() in {"1", "true", "yes"}
         self.glow_phase = 0.52
         self.current_backend = "local"
@@ -2570,6 +2980,8 @@ class MainWindow(QMainWindow):
         self.btn_profiles.setObjectName("profileAction")
         self.btn_start_profile = QPushButton(self.texts["btn_start_profile"])
         self.btn_start_profile.setObjectName("primaryAction")
+        self.btn_ssh_terminal = QPushButton(self.texts["btn_ssh_terminal"])
+        self.btn_ssh_terminal.setObjectName("profileAction")
         self.btn_transparency = QPushButton()
         self.btn_transparency.setObjectName("profileAction")
         self.btn_music = QPushButton()
@@ -2581,17 +2993,21 @@ class MainWindow(QMainWindow):
         self.transparency_slider.valueChanged.connect(self.set_transparency_level)
         self.remote_hint = QLabel(self.texts["remote_hint"])
         self.remote_hint.setWordWrap(True)
+        self.remote_sysinfo_label = QLabel(self.texts["remote_sysinfo_unknown"])
+        self.remote_sysinfo_label.setWordWrap(True)
 
         self.profile_label_widget = QLabel(self.texts["profile_label"])
         selector_layout.addWidget(self.profile_label_widget)
         selector_layout.addWidget(self.profile_combo)
         selector_layout.addWidget(self.btn_profiles)
         selector_layout.addWidget(self.btn_start_profile)
+        selector_layout.addWidget(self.btn_ssh_terminal)
         selector_layout.addWidget(self.btn_transparency)
         selector_layout.addWidget(self.btn_music)
         selector_layout.addWidget(self.transparency_label)
         selector_layout.addWidget(self.transparency_slider)
         selector_layout.addWidget(self.remote_hint, 1)
+        selector_layout.addWidget(self.remote_sysinfo_label)
         main_layout.addLayout(selector_layout)
 
         local_layout = QHBoxLayout()
@@ -2678,6 +3094,7 @@ class MainWindow(QMainWindow):
         self.btn_new.clicked.connect(self.open_new_container_wizard)
         self.btn_local.clicked.connect(self.connect_local_docker)
         self.btn_start_profile.clicked.connect(self.start_profile_connection)
+        self.btn_ssh_terminal.clicked.connect(self.open_remote_terminal)
         self.btn_profiles.clicked.connect(self.manage_profiles)
         self.btn_local_profiles.clicked.connect(self.show_local_profiles_info)
         self.btn_wsl_refresh.clicked.connect(self.load_wsl_distros)
@@ -2691,7 +3108,7 @@ class MainWindow(QMainWindow):
     def _setup_fx(self):
         self.glow_timer = QTimer(self)
         self.glow_timer.timeout.connect(self.advance_glow)
-        self.glow_timer.start(900)
+        self.update_glow_timer()
         self.fx_animations = []
         for button, color in [
             (self.btn_start_profile, "#33f0ff"),
@@ -2745,7 +3162,7 @@ class MainWindow(QMainWindow):
 
     def _load_theme(self):
         base_theme = "light" if self.current_theme == "light" else "dark"
-        qdarktheme.setup_theme(base_theme, additional_qss=gaming_stylesheet(self.current_theme, self.glow_phase, self.transparent_mode, self.transparency_level))
+        qdarktheme.setup_theme(base_theme, additional_qss=gaming_stylesheet(self.current_theme, self.glow_phase, self.transparent_mode, self.transparency_level, self.neon_animate, self.accent_color))
         if self.root_surface is not None:
             self.root_surface.set_visual_state(self.current_theme, self.transparent_mode, self.transparency_level)
         self.apply_window_surface()
@@ -2784,6 +3201,8 @@ class MainWindow(QMainWindow):
 
     def update_music_button(self):
         self.btn_music.setText(self.texts["btn_music_on" if self.music_enabled else "btn_music_off"])
+        self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
+        self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
         self.btn_music.setEnabled(MUSIC_FILE.exists() and self.media_player is not None)
         if not MUSIC_FILE.exists():
             self.btn_music.setToolTip(self.texts["music_missing"])
@@ -2794,7 +3213,11 @@ class MainWindow(QMainWindow):
 
     def toggle_music(self):
         self.music_enabled = not self.music_enabled
+        self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
+        self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
         self.settings.setValue("music_enabled", "true" if self.music_enabled else "false")
+        self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
+        self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
         if self.media_player is not None:
             if self.music_enabled and MUSIC_FILE.exists():
                 self.media_player.play()
@@ -2812,7 +3235,18 @@ class MainWindow(QMainWindow):
         self.settings.setValue("transparency_level", value)
         self._load_theme()
 
+    def update_glow_timer(self):
+        if not hasattr(self, "glow_timer") or self.glow_timer is None:
+            return
+        if self.neon_animate:
+            if not self.glow_timer.isActive():
+                self.glow_timer.start(900)
+        else:
+            self.glow_timer.stop()
+
     def advance_glow(self):
+        if not self.neon_animate:
+            return
         self.glow_phase = 0.0 if self.glow_phase > 0.95 else self.glow_phase + 0.06
         self._load_theme()
 
@@ -2838,6 +3272,11 @@ class MainWindow(QMainWindow):
         self.profile_label_widget.setText(self.texts["profile_label"])
         self.btn_profiles.setText(self.texts["btn_profiles"])
         self.btn_start_profile.setText(self.texts["btn_start_profile"])
+        self.btn_ssh_terminal.setText(self.texts["btn_ssh_terminal"])
+        if self.remote_arch:
+            self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_label"].format(os=self.remote_os_name or "Linux", arch=self.remote_arch))
+        else:
+            self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_unknown"])
         self.transparency_label.setText(self.texts["transparency_level"])
         self.remote_hint.setText(self.texts["remote_hint"])
         self.btn_local_profiles.setText(self.texts["btn_local_profiles"])
@@ -2863,7 +3302,10 @@ class MainWindow(QMainWindow):
         self.update_music_button()
         self.reload_profiles_ui()
         self.load_wsl_distros()
-        self.statusBar().showMessage(self.texts["status_ready"])
+        message = self.texts["status_ready"]
+        if self.current_backend == "remote" and isinstance(self.client, SshDockerClient):
+            message = message + " - " + self.remote_engine_label()
+        self.statusBar().showMessage(message)
         if self.client:
             self.refresh_containers()
 
@@ -2892,6 +3334,18 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.auto_start_docker_desktop = dialog.auto_start_checkbox.isChecked()
             self.settings.setValue("auto_start_docker_desktop", "true" if self.auto_start_docker_desktop else "false")
+            selected_theme = dialog.theme_combo.currentData() or self.current_theme
+            neon_animate = dialog.neon_checkbox.isChecked()
+            accent_color = dialog.neon_color_combo.currentData() or self.accent_color
+            self.settings.setValue("neon_animate", "true" if neon_animate else "false")
+            self.settings.setValue("accent_color", accent_color)
+            self.neon_animate = neon_animate
+            self.accent_color = normalize_accent_color(str(accent_color))
+            if selected_theme:
+                self.current_theme = selected_theme
+                self.settings.setValue("theme", selected_theme)
+            self.update_glow_timer()
+            self._load_theme()
             if self.auto_start_docker_desktop and self.current_backend == "local" and not self.is_local_docker_available():
                 self.try_start_docker_desktop()
     def generate_ai_docker_command(self, provider: str, model: str, prompt: str, current_command: str, image: str = "", edit_mode: bool = False) -> str:
@@ -2899,8 +3353,8 @@ class MainWindow(QMainWindow):
         provider = (provider or settings.get("provider") or "ollama").strip().lower()
         model = (model or settings.get("openai_model") or settings.get("ollama_model") or "").strip()
         system_prompt = (
-            "You edit docker run commands for Docker Control Center. "
-            "Return only one valid docker run command in a single line. "
+            "You edit docker or balena run commands for Docker Control Center. "
+            "Return only one valid docker or balena run command in a single line. "
             "Do not add markdown, bullets, explanations or code fences. "
             "Keep existing container name, image, ports and detach mode unless the user explicitly asks to change them. "
             "When a Windows host path is needed, use Docker-compatible forward slashes such as D:/Music. "
@@ -2911,7 +3365,7 @@ class MainWindow(QMainWindow):
             f"Target image: {image or 'unknown'}\n"
             f"Mode: {'edit existing container start' if edit_mode else 'create new container'}\n"
             f"User request: {prompt}\n\n"
-            "Return only the final docker run command in one line."
+            "Return only the final docker or balena run command in one line."
         )
         if provider == "openai":
             api_key = settings.get("openai_api_key", "").strip()
@@ -3039,19 +3493,46 @@ class MainWindow(QMainWindow):
             self.current_backend = "wsl"
             self.current_wsl_distro = distro
             self.active_remote_profile = None
+            self.remote_arch = ""
+            self.remote_os_name = ""
+            self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_unknown"])
             self.statusBar().showMessage(self.texts["status_wsl_connected"].format(distro=distro))
             self.refresh_containers()
         except Exception:
             self.client = None
             self.show_wsl_profile_info()
 
+    def autostart_supported(self, container) -> bool:
+        attrs = container.attrs or {}
+        host_config = attrs.get("HostConfig", {}) or {}
+        if "RestartPolicy" in host_config:
+            return True
+        labels = (attrs.get("Config", {}) or {}).get("Labels", {}) or {}
+        for key in labels.keys():
+            if key.startswith("io.balena.") or key.startswith("io.resin."):
+                return False
+        if self.current_backend == "remote" and isinstance(self.client, SshDockerClient):
+            if self.get_remote_cli_command() == "balena":
+                return False
+        if self.current_backend == "wsl" and isinstance(self.client, WslDockerClient):
+            if getattr(self.client, "detected_cli", "") == "balena":
+                return False
+        return True
+
     def restart_policy_name(self, container) -> str:
         policy = ((container.attrs.get("HostConfig", {}) or {}).get("RestartPolicy", {}) or {})
-        return policy.get("Name", "") or "no"
+        name = (policy.get("Name", "") or "").strip()
+        return name
 
     def restart_policy_label(self, container) -> str:
         name = self.restart_policy_name(container)
-        return "Tak (unless-stopped)" if name == "unless-stopped" else "Nie"
+        if not name:
+            if not self.autostart_supported(container):
+                return self.texts["autostart_status_managed"]
+            return self.texts["autostart_status_unknown"]
+        if name == "no":
+            return self.texts["autostart_status_off"]
+        return self.texts["autostart_status_on"].format(policy=name)
 
     def confirm_restart_policy_change(self, enable: bool) -> bool:
         title = self.texts["autostart_enable_title"] if enable else self.texts["autostart_disable_title"]
@@ -3096,8 +3577,12 @@ class MainWindow(QMainWindow):
         elif action == "remove":
             container.remove(force=True)
         elif action == "autostart_on":
+            if not self.autostart_supported(container):
+                return None
             container.update(restart_policy={"Name": "unless-stopped"})
         elif action == "autostart_off":
+            if not self.autostart_supported(container):
+                return None
             container.update(restart_policy={"Name": "no"})
         return None
 
@@ -3236,6 +3721,35 @@ class MainWindow(QMainWindow):
             raise RuntimeError(output or "docker command failed")
         return subprocess.CompletedProcess(command, code, output, "")
 
+    def remote_engine_label(self) -> str:
+        if isinstance(self.client, SshDockerClient):
+            cli = getattr(self.client, "detected_cli", "")
+            if cli == "balena":
+                return self.texts["engine_balena"]
+            if cli == "docker":
+                return self.texts["engine_docker"]
+        return self.texts["engine_unknown"]
+
+    def get_remote_cli_command(self) -> str:
+        if isinstance(self.client, SshDockerClient):
+            cli = getattr(self.client, "detected_cli", "")
+            if cli:
+                return cli
+        return "docker"
+
+    def wizard_cli_settings(self) -> tuple[str, List[str]]:
+        cli = "docker"
+        choices = ["docker"]
+        if self.current_backend == "remote" and isinstance(self.client, SshDockerClient):
+            detected = getattr(self.client, "detected_cli", "")
+            if detected == "balena":
+                cli = "balena"
+                choices = ["balena"]
+            elif detected == "docker":
+                cli = "docker"
+                choices = ["docker"]
+        return cli, choices
+
     def run_backend_docker_command_stream(self, args: List[str], emit_line):
         if not args:
             return None
@@ -3248,7 +3762,8 @@ class MainWindow(QMainWindow):
                 return self._run_subprocess_stream(command, emit_line)
             if paramiko is None:
                 raise RuntimeError("Missing paramiko package for SSH support.")
-            command = "docker " + " ".join(shlex.quote(str(arg)) for arg in args)
+            cli = self.get_remote_cli_command()
+            command = cli + " " + " ".join(shlex.quote(str(arg)) for arg in args)
             ssh_client = self.client._ensure_client() if hasattr(self.client, "_ensure_client") else None
             if ssh_client is None:
                 raise RuntimeError("SSH client is not available.")
@@ -3345,6 +3860,9 @@ class MainWindow(QMainWindow):
             self.current_backend = "local"
             self.current_wsl_distro = ""
             self.active_remote_profile = None
+            self.remote_arch = ""
+            self.remote_os_name = ""
+            self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_unknown"])
             self.statusBar().showMessage(self.texts["status_local_connected"])
             self.refresh_containers()
         except Exception as exc:
@@ -3363,7 +3881,8 @@ class MainWindow(QMainWindow):
             self.current_backend = "remote"
             self.current_wsl_distro = ""
             self.active_remote_profile = profile
-            self.statusBar().showMessage(self.texts["profile_connected"].format(name=profile.name))
+            self.update_remote_system_info()
+            self.statusBar().showMessage(self.texts["profile_connected"].format(name=profile.name) + " - " + self.remote_engine_label())
             self.refresh_containers()
         except Exception as exc:
             self.client = None
@@ -3391,7 +3910,44 @@ class MainWindow(QMainWindow):
                 self.connect_remote_docker()
         except Exception as exc:
             QMessageBox.critical(self, self.texts["msg_error"], str(exc))
+    def open_remote_terminal(self):
+        profile = self.selected_profile()
+        if not profile:
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["profile_no_profiles"])
+            return
+        if profile.mode != "ssh":
+            QMessageBox.information(self, self.texts["msg_info"], self.texts["ssh_terminal_tunnel"])
+            return
+        target = f"{profile.resolved_ssh_user()}@{profile.resolved_ssh_host()}"
+        port = profile.resolved_ssh_port()
+        cmd = ["ssh"]
+        if port:
+            cmd.extend(["-p", str(port)])
+        if profile.ssh_key_path:
+            cmd.extend(["-i", profile.ssh_key_path])
+        cmd.append(target)
+        subprocess.Popen(["cmd.exe", "/k"] + cmd)
 
+    def update_remote_system_info(self):
+        self.remote_os_name = ""
+        self.remote_arch = ""
+        if not (self.current_backend == "remote" and isinstance(self.client, SshDockerClient) and self.active_remote_profile and self.active_remote_profile.mode == "ssh"):
+            self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_unknown"])
+            return
+        try:
+            os_name = self.client.run_ssh("cat /etc/os-release | grep PRETTY_NAME= | head -n 1")
+            if os_name.startswith("PRETTY_NAME="):
+                os_name = os_name.split("=", 1)[1].strip().strip('"')
+            if not os_name:
+                os_name = self.client.run_ssh("uname -s")
+            arch = self.client.run_ssh("uname -m")
+            self.remote_os_name = os_name.strip()
+            self.remote_arch = arch.strip().lower()
+            label = self.texts["remote_sysinfo_label"].format(os=self.remote_os_name or "Linux", arch=self.remote_arch or "?")
+            self.remote_sysinfo_label.setText(label)
+        except Exception:
+            self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_fetch_failed"])
+            self.remote_arch = ""
     def on_select_all(self, state):
         checked = int(state) == int(Qt.CheckState.Checked.value)
         for row in range(self.table.rowCount()):
@@ -3650,9 +4206,17 @@ class MainWindow(QMainWindow):
             intro = self.texts["exec_shell_intro_wsl"].format(target=self.current_wsl_distro)
         elif self.current_backend == "remote" and self.active_remote_profile:
             if self.active_remote_profile.mode == "ssh":
-                target = self.active_remote_profile.ssh_target
-                remote_cmd = f'docker exec -it {container.name} /bin/bash || docker exec -it {container.name} /bin/sh'
-                cmd = ["ssh", target, remote_cmd]
+                profile = self.active_remote_profile
+                target = f"{profile.resolved_ssh_user()}@{profile.resolved_ssh_host()}"
+                port = profile.resolved_ssh_port()
+                cli = self.get_remote_cli_command()
+                remote_cmd = f"{cli} exec -it {container.name} /bin/bash || {cli} exec -it {container.name} /bin/sh"
+                cmd = ["ssh"]
+                if port:
+                    cmd.extend(["-p", str(port)])
+                if profile.ssh_key_path:
+                    cmd.extend(["-i", profile.ssh_key_path])
+                cmd.extend([target, remote_cmd])
                 intro = self.texts["exec_shell_intro_remote_ssh"].format(target=target)
             else:
                 cmd = ["docker", "--host", self.active_remote_profile.resolved_base_url(), "exec", "-it", container.name, "/bin/bash"]
@@ -3672,6 +4236,7 @@ class MainWindow(QMainWindow):
             action_callback=lambda command=list(cmd): subprocess.Popen(["cmd.exe", "/k"] + command),
         )
         dialog.exec()
+
     def bulk_remove_single(self, name: str):
         reply = QMessageBox.question(self, self.texts["msg_info"], self.texts["msg_confirm_remove"], QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
@@ -3710,25 +4275,48 @@ class MainWindow(QMainWindow):
     def on_refresh_finished(self, containers, error_message: str):
         if error_message:
             QMessageBox.critical(self, self.texts["msg_error"], error_message)
-            self.statusBar().showMessage(self.texts["status_ready"])
+            message = self.texts["status_ready"]
+            if self.current_backend == "remote" and isinstance(self.client, SshDockerClient):
+                message = message + " - " + self.remote_engine_label()
+            self.statusBar().showMessage(message)
             return
+
         self.table.setRowCount(0)
         for container in containers:
             row = self.table.rowCount()
             self.table.insertRow(row)
             self.table.setCellWidget(row, 0, QCheckBox())
+
             status = container.status or ""
             icon_item = QTableWidgetItem()
-            icon_item.setIcon(self.status_icon_running if status == "running" or status.startswith("up") else self.status_icon_stopped)
+            if status.startswith("up") or status == "running":
+                icon_item.setIcon(self.status_icon_running)
+            else:
+                icon_item.setIcon(self.status_icon_stopped)
             icon_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
             self.table.setItem(row, 1, icon_item)
-            self.table.setItem(row, 2, QTableWidgetItem(container.name))
-            self.table.setItem(row, 3, QTableWidgetItem(container.image.tags[0] if container.image.tags else container.image.short_id))
-            self.table.setItem(row, 4, QTableWidgetItem(status))
 
-            port_lines = self.port_lines(container)
-            ports_item = QTableWidgetItem("\n".join(port_lines) if port_lines else "-")
+            name_item = QTableWidgetItem(container.name)
+            image_item = QTableWidgetItem(container.image.tags[0] if container.image.tags else container.image.short_id)
+            status_item = QTableWidgetItem(status)
+
+            ports = container.attrs.get("NetworkSettings", {}).get("Ports", {}) or {}
+            ports_str = []
+            port_lines = []
+            for cont_port, mappings in ports.items():
+                if not mappings:
+                    continue
+                for mapping in mappings:
+                    host_port = mapping.get("HostPort")
+                    if host_port:
+                        ports_str.append(f"{host_port}->{cont_port}")
+                        port_lines.append(f"{host_port} -> {cont_port}")
+            ports_item = QTableWidgetItem("\n".join(port_lines) if port_lines else ", ".join(ports_str))
             ports_item.setTextAlignment(int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop))
+
+            self.table.setItem(row, 2, name_item)
+            self.table.setItem(row, 3, image_item)
+            self.table.setItem(row, 4, status_item)
             self.table.setItem(row, 5, ports_item)
             self.table.setItem(row, 6, QTableWidgetItem(self.restart_policy_label(container)))
 
@@ -3744,7 +4332,10 @@ class MainWindow(QMainWindow):
             height = max(52, 42 * max(1, len(port_lines), len(urls)))
             self.table.setRowHeight(row, height)
         self.update_link_widget_selection_states()
-        self.statusBar().showMessage(self.texts["status_ready"])
+        message = self.texts["status_ready"]
+        if self.current_backend == "remote" and isinstance(self.client, SshDockerClient):
+            message = message + " - " + self.remote_engine_label()
+        self.statusBar().showMessage(message)
 
     def bulk_action(self, action: str):
         if not self.client:
@@ -3800,6 +4391,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, self.texts["msg_error"], f"{target_name}: {exc}")
             return
+        cli_command, cli_choices = self.wizard_cli_settings()
         dlg = NewContainerDialog(
             self.client,
             self.texts,
@@ -3811,6 +4403,9 @@ class MainWindow(QMainWindow):
             llm_settings_getter=self.get_llm_settings,
             ai_command_callback=self.generate_ai_docker_command,
             lang=self.lang,
+            cli_command=cli_command,
+            cli_choices=cli_choices,
+            remote_arch=self.remote_arch if self.current_backend == "remote" else "",
         )
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self.refresh_containers()
@@ -3819,7 +4414,19 @@ class MainWindow(QMainWindow):
         if not self.client:
             self.show_local_docker_unavailable(self.texts["docker_not_available"])
             return
-        dlg = NewContainerDialog(self.client, self.texts, lambda args: self.execute_backend_command_with_progress(args, self.texts["progress_title_create"], self.texts["progress_status_create"]), self, llm_settings_getter=self.get_llm_settings, ai_command_callback=self.generate_ai_docker_command, lang=self.lang)
+        cli_command, cli_choices = self.wizard_cli_settings()
+        dlg = NewContainerDialog(
+            self.client,
+            self.texts,
+            lambda args: self.execute_backend_command_with_progress(args, self.texts["progress_title_create"], self.texts["progress_status_create"]),
+            self,
+            llm_settings_getter=self.get_llm_settings,
+            ai_command_callback=self.generate_ai_docker_command,
+            lang=self.lang,
+            cli_command=cli_command,
+            cli_choices=cli_choices,
+            remote_arch=self.remote_arch if self.current_backend == "remote" else "",
+        )
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self.refresh_containers()
 
@@ -3837,6 +4444,131 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

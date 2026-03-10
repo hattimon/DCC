@@ -1,4 +1,4 @@
-﻿Unicode True
+Unicode True
 ManifestDPIAware True
 RequestExecutionLevel user
 
@@ -6,7 +6,7 @@ RequestExecutionLevel user
 !define APP_EXE "DockerControlCenter.exe"
 !define APP_ID "DockerControlCenter"
 !define APP_PUBLISHER "Docker Control Center"
-!define APP_VERSION "1.1.0"
+!define APP_VERSION "1.1.1"
 
 Name "${APP_NAME}"
 OutFile "release\DockerControlCenter-Setup.exe"
