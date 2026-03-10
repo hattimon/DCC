@@ -17,19 +17,19 @@ A polished Windows control panel for managing Docker locally, through WSL/WSL2, 
 
 ### EN
 - Added theme + neon palette controls in `Configure -> Application` (static or animated).
-- Improved Balena OS autostart detection (managed services no longer show as disabled).
-- Added Info menu with app version, changelog, and update checks.
-- Added SSH authentication: key + passphrase (instructions below).
-- Added Balena OS auto-detection (`balena ps` / `balena run`).
-- Expanded the image catalog to 40+ popular templates, with Raspberry Pi-friendly options and heavier x86_64 picks.
+- Improved Balena OS autostart detection and Balena-aware AI command handling (`balena run`).
+- Added infrastructure info + restart button with host status indicator.
+- Improved local Docker detection (Docker Desktop/WSL) and WSL info behavior.
+- Added Info menu with app version, changelog, and automatic update checks.
+- Window size now persists between launches.
 
 ### PL
 - Dodano ustawienia motywu i palety neonu w `Konfiguruj -> Aplikacja` (statyczny lub animowany).
-- Poprawiono wykrywanie autostartu na Balena OS (uslugi zarzadzane nie sa pokazywane jako wylaczone).
-- Dodano sekcje Info z wersja aplikacji, changelogiem oraz sprawdzaniem aktualizacji.
-- Dodano autoryzacje SSH: klucz + haslo do klucza (instrukcja ponizej).
-- Dodano auto-wykrywanie Balena OS (`balena ps` / `balena run`).
-- Rozszerzono katalog obrazow do 40+ popularnych propozycji, z lekkimi opcjami pod Raspberry Pi i ciezszymi dla x86_64.
+- Poprawiono autostart na Balena OS oraz obsluge polecen AI z `balena run`.
+- Dodano przycisk informacji o infrastrukturze i restartu hosta z indikacja statusu.
+- Poprawiono wykrywanie lokalnego Dockera (Docker Desktop/WSL) i zachowanie informacji WSL.
+- Dodano sekcje Info z wersja aplikacji, changelogiem i automatycznym sprawdzaniem aktualizacji.
+- Zapamietywanie rozmiaru okna miedzy uruchomieniami.
 
 ## English
 
