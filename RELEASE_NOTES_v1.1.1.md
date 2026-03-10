@@ -17,17 +17,17 @@ This production update expands remote/embedded support and the container catalog
 3. Choose the key file and enter the passphrase.
 
 ## PL
-Ta wersja produkcyjna rozszerza wsparcie zdalne i katalog obrazow.
+Ta wersja produkcyjna rozszerza wsparcie zdalne i katalog obrazów.
 
-### Najwazniejsze zmiany
+### Najważniejsze zmiany
 - Ustawienia motywu i palety neonu w `Konfiguruj -> Aplikacja` (statyczny lub animowany).
-- Poprawione wykrywanie autostartu na Balena OS (uslugi zarzadzane pokazuja sie poprawnie).
-- Dodano sekcje Info z wersja aplikacji, changelogiem i sprawdzaniem aktualizacji.
-- Autoryzacja SSH: klucz + haslo do klucza (dodatkowa ochrona).
+- Poprawione wykrywanie autostartu na Balena OS (usługi zarządzane pokazują się poprawnie).
+- Dodano sekcję Info z wersją aplikacji, changelogiem i sprawdzaniem aktualizacji.
+- Autoryzacja SSH: klucz + hasło do klucza (dodatkowa ochrona).
 - Auto-wykrywanie Balena OS (`balena ps` / `balena run`).
-- Rozszerzony katalog do 40+ popularnych obrazow, z lekkimi opcjami pod Raspberry Pi i ciezszymi dla x86_64.
+- Rozszerzony katalog do 40+ popularnych obrazów, z lekkimi opcjami pod Raspberry Pi i cięższymi dla x86_64.
 
-### Klucz SSH + haslo do klucza (szybka instrukcja)
-1. Otworz `Profile polaczen` i dodaj/edytuj profil.
-2. Ustaw `Autoryzacja SSH` na `Klucz + haslo do klucza`.
-3. Wybierz plik klucza i wpisz haslo.
+### Klucz SSH + hasło do klucza (szybka instrukcja)
+1. Otwórz `Profile połączeń` i dodaj/edytuj profil.
+2. Ustaw `Autoryzacja SSH` na `Klucz + hasło do klucza`.
+3. Wybierz plik klucza i wpisz hasło.
