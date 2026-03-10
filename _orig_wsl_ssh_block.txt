@@ -1,0 +1,123 @@
+﻿class WslDockerClient:
+    def __init__(self, distro: str, timeout: int = DOCKER_HTTP_TIMEOUT):
+        self.distro = distro
+        self.timeout = timeout
+        self.containers = WslContainerCollection(self)
+
+    def _wsl_command(self, args: List[str]) -> List[str]:
+        docker_args = " ".join(shlex.quote(str(arg)) for arg in args)
+        return ["wsl.exe", "-d", self.distro, "sh", "-lc", f"docker {docker_args}"]
+
+    def run_docker(self, args: List[str], capture_output: bool = False):
+        command = self._wsl_command(args)
+        result = subprocess.run(
+            command,
+            capture_output=capture_output,
+            text=True,
+            timeout=self.timeout,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        if result.returncode != 0:
+            error = (result.stderr or result.stdout or "Docker command failed in WSL").strip()
+            raise RuntimeError(error)
+        return result
+
+    def ping(self):
+        self.run_docker(["version"], capture_output=True)
+
+    def inspect_container(self, name: str) -> Dict:
+        result = self.run_docker(["inspect", name], capture_output=True)
+        data = json.loads(result.stdout)
+        if not data:
+            raise RuntimeError(f"Container not found: {name}")
+        return data[0]
+
+
+class SshDockerClient:
+    def __init__(self, profile: RemoteProfile, timeout: int = DOCKER_HTTP_TIMEOUT):
+        if paramiko is None:
+            raise RuntimeError("Brakuje pakietu paramiko do polaczen SSH. Zainstaluj: pip install paramiko")
+        self.profile = profile
+        self.timeout = timeout
+        self.containers = SshContainerCollection(self)
+        self._client = None
+
+    def _ensure_client(self):
+        if self._client is not None:
+            return self._client
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        kwargs = {
+            "hostname": self.profile.resolved_ssh_host(),
+            "username": self.profile.resolved_ssh_user(),
+            "timeout": self.timeout,
+            "look_for_keys": self.profile.ssh_auth_mode == "key",
+            "allow_agent": self.profile.ssh_auth_mode == "key",
+        }
+        if self.profile.ssh_auth_mode == "password":
+            kwargs["password"] = self.profile.ssh_password
+            kwargs["look_for_keys"] = False
+            kwargs["allow_agent"] = False
+        client.connect(**kwargs)
+        self._client = client
+        return self._client
+
+    def run_docker(self, args: List[str], capture_output: bool = False):
+        command = "docker " + " ".join(shlex.quote(str(arg)) for arg in args)
+        ssh = self._ensure_client()
+        stdin, stdout, stderr = ssh.exec_command(command, timeout=self.timeout)
+        out = stdout.read().decode("utf-8", errors="ignore")
+        err = stderr.read().decode("utf-8", errors="ignore")
+        code = stdout.channel.recv_exit_status()
+        if code != 0:
+            raise RuntimeError((err or out or "Docker command failed over SSH").strip())
+        return subprocess.CompletedProcess(command, code, out, err)
+
+    def ping(self):
+        self.run_docker(["version"], capture_output=True)
+
+    def inspect_container(self, name: str) -> Dict:
+        result = self.run_docker(["inspect", name], capture_output=True)
+        data = json.loads(result.stdout)
+        if not data:
+            raise RuntimeError(f"Container not found: {name}")
+        return data[0]
+
+
+class SshContainerCollection:
+    def __init__(self, client):
+        self.client = client
+
+    def list(self, all=True):
+        names_result = self.client.run_docker(["ps", "-aq"] if all else ["ps", "-q"], capture_output=True)
+        names = [line.strip() for line in names_result.stdout.splitlines() if line.strip()]
+        containers = []
+        for identifier in names:
+            try:
+                inspect = self.client.inspect_container(identifier)
+                containers.append(WslContainerProxy(self.client, inspect))
+            except Exception:
+                continue
+        return containers
+
+    def get(self, name: str):
+        return WslContainerProxy(self.client, self.client.inspect_container(name))
+
+    def run(self, image, name=None, ports=None, detach=True, command=None, **kwargs):
+        args = ["run"]
+        if detach:
+            args.append("-d")
+        if name:
+            args.extend(["--name", name])
+        for container_port, host_port in (ports or {}).items():
+            port_value = str(container_port).split("/")[0]
+            args.extend(["-p", f"{host_port}:{port_value}"])
+        extra_args = kwargs.pop("extra_args", []) or []
+        args.extend(extra_args)
+        args.append(image)
+        if command:
+            args.extend(shlex.split(command))
+        self.client.run_docker(args)
+
+
+

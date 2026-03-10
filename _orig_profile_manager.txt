@@ -1,0 +1,167 @@
+﻿class ProfileManagerDialog(QDialog):
+    def __init__(self, profiles: List[RemoteProfile], texts: Dict[str, str], parent=None):
+        super().__init__(parent)
+        self.texts = texts
+        self.profiles = [RemoteProfile(**asdict(profile)) for profile in profiles]
+        self.setWindowTitle(self.texts["profile_dialog_title"])
+        self.resize(900, 560)
+        layout = QHBoxLayout(self)
+
+        self.list_widget = QListWidget()
+        self.list_widget.currentRowChanged.connect(self.load_selected_profile)
+        layout.addWidget(self.list_widget, 1)
+
+        right = QVBoxLayout()
+        form = QFormLayout()
+        self.name_edit = QLineEdit()
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem(self.texts["profile_mode_ssh"], "ssh")
+        self.mode_combo.addItem(self.texts["profile_mode_tunnel"], "tunnel")
+        self.ssh_target_edit = QLineEdit()
+        self.auth_mode_combo = QComboBox()
+        self.auth_mode_combo.addItem(self.texts["profile_auth_key"], "key")
+        self.auth_mode_combo.addItem(self.texts["profile_auth_password"], "password")
+        self.password_edit = QLineEdit()
+        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.base_url_edit = QLineEdit()
+        self.tunnel_command_edit = QTextEdit()
+        self.wait_spin = QSpinBox()
+        self.wait_spin.setRange(0, 60)
+
+        form.addRow(self.texts["profile_name"], self.name_edit)
+        form.addRow(self.texts["profile_mode"], self.mode_combo)
+        form.addRow(self.texts["profile_ssh_target"], self.ssh_target_edit)
+        form.addRow(self.texts["profile_auth_mode"], self.auth_mode_combo)
+        form.addRow(self.texts["profile_password"], self.password_edit)
+        form.addRow(self.texts["profile_base_url"], self.base_url_edit)
+        form.addRow(self.texts["profile_tunnel_command"], self.tunnel_command_edit)
+        form.addRow(self.texts["profile_wait"], self.wait_spin)
+        right.addLayout(form)
+
+        self.password_note = QLabel(self.texts["profile_password_note"])
+        self.password_note.setWordWrap(True)
+        right.addWidget(self.password_note)
+
+        actions = QHBoxLayout()
+        self.btn_add = QPushButton(self.texts["profile_add"])
+        self.btn_save = QPushButton(self.texts["profile_save"])
+        self.btn_delete = QPushButton(self.texts["profile_delete"])
+        self.btn_tutorial = QPushButton(self.texts["profile_tutorial"])
+        actions.addWidget(self.btn_add)
+        actions.addWidget(self.btn_save)
+        actions.addWidget(self.btn_delete)
+        actions.addWidget(self.btn_tutorial)
+        right.addLayout(actions)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.accept)
+        right.addWidget(buttons)
+        layout.addLayout(right, 2)
+
+        self.btn_add.clicked.connect(self.add_profile)
+        self.btn_save.clicked.connect(self.save_current_profile)
+        self.btn_delete.clicked.connect(self.delete_current_profile)
+        self.btn_tutorial.clicked.connect(self.show_tutorial)
+        self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
+        self.auth_mode_combo.currentIndexChanged.connect(self.on_mode_changed)
+        self.refresh_list()
+        if self.profiles:
+            self.list_widget.setCurrentRow(0)
+
+    def refresh_list(self):
+        self.list_widget.clear()
+        for profile in self.profiles:
+            self.list_widget.addItem(QListWidgetItem(profile.name))
+
+    def current_mode(self) -> str:
+        return self.mode_combo.currentData() or "ssh"
+
+    def current_auth_mode(self) -> str:
+        return self.auth_mode_combo.currentData() or "key"
+
+    def on_mode_changed(self):
+        tunnel_mode = self.current_mode() == "tunnel"
+        ssh_mode = self.current_mode() == "ssh"
+        password_mode = self.current_auth_mode() == "password"
+        self.auth_mode_combo.setEnabled(ssh_mode)
+        self.password_edit.setEnabled(ssh_mode and password_mode)
+        self.password_note.setVisible(ssh_mode and password_mode)
+        self.tunnel_command_edit.setEnabled(tunnel_mode)
+        self.wait_spin.setEnabled(tunnel_mode)
+        self.base_url_edit.setEnabled(not ssh_mode or tunnel_mode)
+
+    def load_selected_profile(self, row: int):
+        if row < 0 or row >= len(self.profiles):
+            return
+        profile = self.profiles[row]
+        self.name_edit.setText(profile.name)
+        self.mode_combo.setCurrentIndex(0 if profile.mode == "ssh" else 1)
+        self.ssh_target_edit.setText(profile.ssh_target)
+        self.auth_mode_combo.setCurrentIndex(0 if profile.ssh_auth_mode == "key" else 1)
+        self.password_edit.setText(profile.ssh_password)
+        self.base_url_edit.setText(profile.base_url)
+        self.tunnel_command_edit.setPlainText(profile.tunnel_command)
+        self.wait_spin.setValue(profile.wait_seconds)
+        self.on_mode_changed()
+
+    def build_profile_from_inputs(self) -> Optional[RemoteProfile]:
+        name = self.name_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["profile_missing_name"])
+            return None
+        mode = self.current_mode()
+        ssh_target = self.ssh_target_edit.text().strip()
+        base_url = self.base_url_edit.text().strip()
+        auth_mode = self.current_auth_mode()
+        ssh_password = self.password_edit.text()
+        if mode == "ssh" and not ssh_target and not base_url:
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["profile_missing_target"])
+            return None
+        tunnel_command = self.tunnel_command_edit.toPlainText().strip()
+        if mode == "tunnel" and not tunnel_command and ssh_target:
+            tunnel_command = f"ssh -N -L 23750:127.0.0.1:2375 {ssh_target}"
+        return RemoteProfile(
+            name=name,
+            mode=mode,
+            ssh_target=ssh_target,
+            ssh_auth_mode=auth_mode,
+            ssh_password=ssh_password,
+            base_url=base_url,
+            tunnel_command=tunnel_command,
+            wait_seconds=self.wait_spin.value(),
+        )
+
+    def add_profile(self):
+        self.profiles.append(RemoteProfile(name="Nowy profil"))
+        self.refresh_list()
+        self.list_widget.setCurrentRow(len(self.profiles) - 1)
+
+    def save_current_profile(self):
+        row = self.list_widget.currentRow()
+        if row < 0:
+            self.add_profile()
+            row = self.list_widget.currentRow()
+        profile = self.build_profile_from_inputs()
+        if not profile:
+            return
+        self.profiles[row] = profile
+        self.refresh_list()
+        self.list_widget.setCurrentRow(row)
+        QMessageBox.information(self, self.texts["msg_info"], self.texts["profile_saved"])
+
+    def delete_current_profile(self):
+        row = self.list_widget.currentRow()
+        if row < 0:
+            return
+        self.profiles.pop(row)
+        if not self.profiles:
+            self.add_profile()
+        self.refresh_list()
+        self.list_widget.setCurrentRow(min(row, len(self.profiles) - 1))
+        QMessageBox.information(self, self.texts["msg_info"], self.texts["profile_deleted"])
+
+    def show_tutorial(self):
+        profile = self.build_profile_from_inputs() or RemoteProfile.default()
+        TutorialDialog(profile, self.texts, self).exec()
+
+
