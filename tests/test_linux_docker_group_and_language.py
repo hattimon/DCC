@@ -66,12 +66,11 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
             ["id", "-nG", "alice"], 0, "alice sudo docker\n", ""
         )
         active = subprocess.CompletedProcess(["id", "-nG"], 0, "alice sudo\n", "")
-        stub = SimpleNamespace()
+        stub = SimpleNamespace(linux_target_username=lambda: "alice")
 
         with (
             patch.object(dcc.os, "name", "posix"),
             patch.object(dcc.shutil, "which", return_value="/usr/bin/id"),
-            patch.object(dcc.getpass, "getuser", return_value="alice"),
             patch.object(dcc.subprocess, "run", side_effect=[configured, active]),
         ):
             configured_groups = dcc.MainWindow._linux_user_groups(stub, configured=True)
@@ -90,21 +89,79 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
             },
             linux_docker_group_setup_supported=lambda: True,
             linux_docker_group_configured=lambda: False,
+            linux_target_username=lambda: "alice",
             _run_subprocess_stream=lambda command, emit: captured.append(list(command))
             or subprocess.CompletedProcess(command, 0, "", ""),
         )
         output = []
 
         with (
-            patch.object(dcc.getpass, "getuser", return_value="alice"),
             patch.object(dcc.shutil, "which", side_effect=lambda name: {"pkexec": "/usr/bin/pkexec", "usermod": "/usr/sbin/usermod"}.get(name)),
             patch.object(dcc.Path, "is_file", return_value=True),
         ):
             result = dcc.MainWindow._run_linux_docker_group_setup_stream(stub, [], output.append)
 
         self.assertEqual(result.returncode, 0)
-        self.assertEqual(captured, [["/usr/bin/pkexec", "/usr/sbin/usermod", "-aG", "docker", "alice"]])
+        self.assertEqual(captured[0][:3], ["/usr/bin/pkexec", "/bin/sh", "-c"])
+        self.assertIn("usermod -aG docker alice", captured[0][3])
+        self.assertIn("groupadd docker", captured[0][3])
         self.assertEqual(output, ["adding"])
+
+    def test_linux_docker_context_resolves_docker_desktop_socket(self):
+        stub = SimpleNamespace()
+        context_show = subprocess.CompletedProcess(
+            ["docker", "context", "show"], 0, "desktop-linux\n", ""
+        )
+        context_inspect = subprocess.CompletedProcess(
+            ["docker", "context", "inspect", "desktop-linux"],
+            0,
+            '[{"Endpoints":{"docker":{"Host":"unix:///home/karol/.docker/desktop/docker-cli.sock"}}}]',
+            "",
+        )
+
+        with (
+            patch.object(dcc.os, "name", "posix"),
+            patch.dict(dcc.os.environ, {}, clear=True),
+            patch.object(dcc.shutil, "which", side_effect=lambda name: "/usr/bin/docker" if name == "docker" else None),
+            patch.object(dcc.subprocess, "run", side_effect=[context_show, context_inspect]),
+        ):
+            endpoint, source = dcc.MainWindow._linux_docker_endpoint_info(stub, refresh=True)
+
+        self.assertEqual(endpoint, "unix:///home/karol/.docker/desktop/docker-cli.sock")
+        self.assertEqual(source, "desktop-linux")
+
+    def test_linux_build_client_uses_resolved_context_endpoint(self):
+        endpoint = "unix:///home/karol/.docker/desktop/docker-cli.sock"
+        stub = SimpleNamespace(linux_docker_endpoint=Mock(return_value=endpoint))
+
+        with (
+            patch.object(dcc.os, "name", "posix"),
+            patch.object(dcc.docker, "DockerClient") as docker_client,
+        ):
+            dcc.MainWindow.build_local_docker_client(stub)
+
+        docker_client.assert_called_once_with(base_url=endpoint, timeout=dcc.DOCKER_HTTP_TIMEOUT)
+        stub.linux_docker_endpoint.assert_called_once_with(refresh=True)
+
+    def test_docker_desktop_context_does_not_require_docker_group_relaunch(self):
+        stub = SimpleNamespace(
+            linux_docker_uses_system_socket=lambda: False,
+            linux_docker_group_configured=lambda: True,
+            linux_docker_group_active=lambda: False,
+        )
+        with patch.object(dcc.os, "name", "posix"):
+            self.assertFalse(dcc.MainWindow.linux_docker_group_requires_relaunch(stub))
+
+    def test_linux_target_username_prefers_non_root_desktop_user(self):
+        stub = SimpleNamespace()
+        with (
+            patch.object(dcc.os, "name", "posix"),
+            patch.dict(dcc.os.environ, {"SUDO_USER": "karol", "USER": "root", "LOGNAME": "root"}, clear=True),
+            patch.object(dcc.getpass, "getuser", return_value="root"),
+        ):
+            username = dcc.MainWindow.linux_target_username(stub)
+
+        self.assertEqual(username, "karol")
 
     def test_first_run_confirms_group_configured_while_relogin_is_pending(self):
         main_window = SimpleNamespace(
@@ -113,6 +170,7 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
             linux_docker_group_configured=lambda: True,
             linux_docker_group_active=lambda: False,
             linux_docker_group_setup_supported=lambda: True,
+            linux_docker_uses_system_socket=lambda: True,
             remote_profiles=[],
         )
         stub = SimpleNamespace(

@@ -628,7 +628,8 @@ TEXTS = {
         "docker_not_available": "Docker connection unavailable. Is Docker Desktop or the remote host running?",
         "docker_local_unavailable_title": "Local Docker is unavailable",
         "docker_local_unavailable_hint": "No local Docker engine is reachable. You can install or start the required Docker runtime here, then retry the local connection.",
-        "docker_local_unavailable_hint_linux": "The local Docker Engine is not reachable from DCC. Check that Docker is running and that this DCC process has access to /var/run/docker.sock.",
+        "docker_local_unavailable_hint_linux": "The local Docker Engine is not reachable from DCC. DCC follows DOCKER_HOST and the active Docker CLI context (including Docker Desktop/rootless sockets), then falls back to the system Docker socket.",
+        "docker_local_endpoint_detected": "Detected Docker endpoint: {context} -> {endpoint}",
         "docker_local_open_desktop": "Start Docker Desktop",
         "docker_local_install_desktop": "Install Docker Desktop",
         "docker_local_install_docker": "Install Docker",
@@ -1140,7 +1141,8 @@ TEXTS = {
         "docker_not_available": "Brak połączenia z Docker. Czy Docker Desktop lub host zdalny działa?",
         "docker_local_unavailable_title": "Lokalny Docker jest niedostępny",
         "docker_local_unavailable_hint": "Lokalny silnik Docker jest niedostępny. Możesz tutaj zainstalować lub uruchomić wymagany Docker, a następnie ponowić połączenie lokalne.",
-        "docker_local_unavailable_hint_linux": "Lokalny Docker Engine jest niedost\u0119pny z poziomu DCC. Sprawd\u017a, czy Docker dzia\u0142a i czy ten proces DCC ma dost\u0119p do /var/run/docker.sock.",
+        "docker_local_unavailable_hint_linux": "Lokalny Docker Engine jest niedost\u0119pny z poziomu DCC. DCC korzysta z DOCKER_HOST i aktywnego kontekstu Docker CLI (w tym socketu Docker Desktop/rootless), a dopiero potem z systemowego socketu Dockera.",
+        "docker_local_endpoint_detected": "Wykryty endpoint Dockera: {context} -> {endpoint}",
         "docker_local_open_desktop": "Uruchom Docker Desktop",
         "docker_local_install_desktop": "Zainstaluj Docker Desktop",
         "docker_local_install_docker": "Zainstaluj Docker",
@@ -5711,6 +5713,7 @@ class FirstRunWizardDialog(QDialog):
         group_configured = self.main_window.linux_docker_group_configured()
         group_active = self.main_window.linux_docker_group_active()
         group_supported = self.main_window.linux_docker_group_setup_supported()
+        system_socket = self.main_window.linux_docker_uses_system_socket() if docker_binary else False
         self.add_docker_group_button.setText(
             self.texts["first_run_docker_group_added"]
             if group_configured
@@ -5720,7 +5723,10 @@ class FirstRunWizardDialog(QDialog):
             self.docker_status.setText(self.texts["first_run_docker_ready"])
             self.docker_status.setStyleSheet("color: #58d68d;")
         elif docker_binary:
-            if group_configured:
+            if not system_socket:
+                self.docker_status.setText(self.texts["dependencies_installed_not_running"])
+                self.docker_status.setStyleSheet("color: #ffcc66;")
+            elif group_configured:
                 if group_active:
                     self.docker_status.setText(self.texts["dependencies_docker_group_active_no_daemon"])
                     self.docker_status.setStyleSheet("color: #ffcc66;")
@@ -5738,7 +5744,7 @@ class FirstRunWizardDialog(QDialog):
             self.docker_status.setStyleSheet("color: #ff8c8c;")
         self.install_docker_button.setEnabled((not docker_ready) and (not docker_binary) and supported)
         self.add_docker_group_button.setEnabled(
-            (not docker_ready) and docker_binary and (not group_configured) and group_supported
+            docker_binary and (not group_configured) and group_supported
         )
 
         profiles = self.main_window.remote_profiles
@@ -5864,13 +5870,17 @@ class DependencyManagerDialog(QDialog):
             group_configured = self.main_window.linux_docker_group_configured()
             group_active = self.main_window.linux_docker_group_active()
             group_supported = self.main_window.linux_docker_group_setup_supported()
+            system_socket = self.main_window.linux_docker_uses_system_socket() if docker_binary else False
             if docker_ready:
                 self.docker_status.setText(self.texts["dependencies_ready"])
                 self.docker_status.setStyleSheet("color: #58d68d;")
                 self.docker_action.setText(self.texts["dependencies_install_docker"])
                 self.docker_action.setEnabled(False)
             elif docker_binary:
-                if group_configured:
+                if not system_socket:
+                    self.docker_status.setText(self.texts["dependencies_installed_not_running"])
+                    self.docker_status.setStyleSheet("color: #ffcc66;")
+                elif group_configured:
                     if group_active:
                         self.docker_status.setText(self.texts["dependencies_docker_group_active_no_daemon"])
                         self.docker_status.setStyleSheet("color: #ffcc66;")
@@ -5895,7 +5905,7 @@ class DependencyManagerDialog(QDialog):
                 else self.texts["dependencies_add_docker_group"]
             )
             self.docker_group_action.setEnabled(
-                (not docker_ready) and docker_binary and (not group_configured) and group_supported
+                docker_binary and (not group_configured) and group_supported
             )
             if group_configured:
                 self.docker_group_action.setToolTip(self.texts["dependencies_docker_group_member"])
@@ -8453,6 +8463,132 @@ class MainWindow(QMainWindow):
             return False
         return bool(shutil.which("usermod") or Path("/usr/sbin/usermod").is_file())
 
+    def linux_target_username(self) -> str:
+        """Return the real desktop user that should receive Docker permissions."""
+        if os.name == "nt":
+            return getpass.getuser().strip()
+
+        sudo_user = os.getenv("SUDO_USER", "").strip()
+        if sudo_user and sudo_user != "root":
+            return sudo_user
+
+        pkexec_uid = os.getenv("PKEXEC_UID", "").strip()
+        if pkexec_uid.isdigit():
+            try:
+                import pwd
+
+                username = pwd.getpwuid(int(pkexec_uid)).pw_name.strip()
+                if username and username != "root":
+                    return username
+            except Exception:
+                pass
+
+        candidates = [
+            getpass.getuser().strip(),
+            os.getenv("USER", "").strip(),
+            os.getenv("LOGNAME", "").strip(),
+        ]
+        for username in candidates:
+            if username and username != "root":
+                return username
+
+        try:
+            import pwd
+
+            username = pwd.getpwuid(os.getuid()).pw_name.strip()
+            if username and username != "root":
+                return username
+        except Exception:
+            pass
+        return ""
+
+    def _linux_docker_endpoint_info(self, refresh: bool = False) -> tuple[str, str]:
+        """Resolve the Docker endpoint exactly like the Linux Docker CLI context."""
+        if os.name == "nt":
+            return "", ""
+
+        cached = getattr(self, "_linux_docker_endpoint_cache", None)
+        now = time.monotonic()
+        if not refresh and cached and now - cached[0] < 2.0:
+            return cached[1], cached[2]
+
+        endpoint = os.getenv("DOCKER_HOST", "").strip()
+        source = "DOCKER_HOST" if endpoint else ""
+        docker_cli = shutil.which("docker")
+        if not endpoint and docker_cli:
+            try:
+                context_result = subprocess.run(
+                    [docker_cli, "context", "show"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+                context_name = context_result.stdout.strip() if context_result.returncode == 0 else ""
+                if context_name:
+                    inspect_result = subprocess.run(
+                        [docker_cli, "context", "inspect", context_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=False,
+                        creationflags=CREATE_NO_WINDOW,
+                    )
+                    if inspect_result.returncode == 0:
+                        payload = json.loads(inspect_result.stdout or "[]")
+                        if isinstance(payload, list) and payload:
+                            docker_endpoint = (payload[0].get("Endpoints") or {}).get("docker") or {}
+                            endpoint = str(docker_endpoint.get("Host") or "").strip()
+                            if endpoint:
+                                source = context_name
+            except Exception:
+                pass
+
+        if not endpoint:
+            runtime_dir = os.getenv("XDG_RUNTIME_DIR", "").strip()
+            candidates = []
+            if runtime_dir:
+                candidates.append((Path(runtime_dir) / "docker.sock", "rootless"))
+            try:
+                candidates.append((Path(f"/run/user/{os.getuid()}/docker.sock"), "rootless"))
+            except Exception:
+                pass
+            candidates.extend(
+                [
+                    (Path.home() / ".docker/desktop/docker-cli.sock", "desktop-linux"),
+                    (Path("/var/run/docker.sock"), "default"),
+                    (Path("/run/docker.sock"), "default"),
+                ]
+            )
+            for socket_path, socket_source in candidates:
+                try:
+                    if socket_path.exists():
+                        endpoint = f"unix://{socket_path}"
+                        source = socket_source
+                        break
+                except Exception:
+                    continue
+
+        if not endpoint:
+            endpoint = "unix:///var/run/docker.sock"
+            source = "default"
+
+        self._linux_docker_endpoint_cache = (now, endpoint, source)
+        return endpoint, source
+
+    def linux_docker_endpoint(self, refresh: bool = False) -> str:
+        return self._linux_docker_endpoint_info(refresh=refresh)[0]
+
+    def linux_docker_uses_system_socket(self) -> bool:
+        endpoint = self.linux_docker_endpoint().strip().lower()
+        return endpoint in {
+            "unix:///var/run/docker.sock",
+            "unix://var/run/docker.sock",
+            "unix:///run/docker.sock",
+            "unix://run/docker.sock",
+        }
+
     def _linux_user_groups(self, configured: bool = True) -> set[str]:
         if os.name == "nt":
             return set()
@@ -8461,7 +8597,7 @@ class MainWindow(QMainWindow):
             return set()
         command = [id_program, "-nG"]
         if configured:
-            username = getpass.getuser().strip()
+            username = self.linux_target_username()
             if not username:
                 return set()
             command.append(username)
@@ -8489,6 +8625,7 @@ class MainWindow(QMainWindow):
     def linux_docker_group_requires_relaunch(self) -> bool:
         return (
             os.name != "nt"
+            and self.linux_docker_uses_system_socket()
             and self.linux_docker_group_configured()
             and not self.linux_docker_group_active()
         )
@@ -8526,7 +8663,7 @@ class MainWindow(QMainWindow):
     def _run_linux_docker_group_setup_stream(self, _args: List[str], emit_line):
         if not self.linux_docker_group_setup_supported():
             raise RuntimeError(self.texts["docker_group_unsupported"])
-        username = getpass.getuser().strip()
+        username = self.linux_target_username()
         if not username:
             raise RuntimeError("Could not determine the current user.")
         if self.linux_docker_group_configured():
@@ -8537,8 +8674,15 @@ class MainWindow(QMainWindow):
         if not pkexec or not Path(usermod).is_file():
             raise RuntimeError(self.texts["docker_group_unsupported"])
         emit_line(self.texts["docker_group_install_status"])
+        quoted_user = shlex.quote(username)
+        quoted_usermod = shlex.quote(usermod)
+        script = "\n".join([
+            "set -e",
+            "getent group docker >/dev/null 2>&1 || groupadd docker",
+            f"{quoted_usermod} -aG docker {quoted_user}",
+        ])
         return self._run_subprocess_stream(
-            [pkexec, usermod, "-aG", "docker", username],
+            [pkexec, "/bin/sh", "-c", script],
             emit_line,
         )
 
@@ -8664,7 +8808,7 @@ class MainWindow(QMainWindow):
         pkexec = shutil.which("pkexec")
         if not apt_get or not pkexec:
             raise RuntimeError(self.texts["first_run_docker_unsupported"])
-        username = getpass.getuser().strip()
+        username = self.linux_target_username()
         if not username:
             raise RuntimeError("Could not determine the current user.")
         quoted_user = shlex.quote(username)
@@ -8730,6 +8874,15 @@ class MainWindow(QMainWindow):
             if linux_group_pending
             else self.platform_text("docker_local_unavailable_hint")
         )
+        if os.name != "nt" and not linux_group_pending:
+            try:
+                endpoint, context_name = self._linux_docker_endpoint_info(refresh=True)
+                info += "\n\n" + self.texts["docker_local_endpoint_detected"].format(
+                    context=context_name or "default",
+                    endpoint=endpoint,
+                )
+            except Exception:
+                pass
         if details and not linux_group_pending:
             info += f"\n\n{details}"
         message.setInformativeText(info)
@@ -8978,7 +9131,8 @@ class MainWindow(QMainWindow):
     def build_local_docker_client(self) -> docker.DockerClient:
         if os.name == "nt":
             return docker.DockerClient(base_url="npipe:////./pipe/docker_engine", timeout=DOCKER_HTTP_TIMEOUT)
-        return docker.DockerClient(base_url="unix://var/run/docker.sock", timeout=DOCKER_HTTP_TIMEOUT)
+        endpoint = self.linux_docker_endpoint(refresh=True)
+        return docker.DockerClient(base_url=endpoint, timeout=DOCKER_HTTP_TIMEOUT)
 
     def detect_local_system_info(self) -> tuple[str, str]:
         os_name = ""
