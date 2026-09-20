@@ -257,6 +257,7 @@ TEXTS = {
         "dependencies_intro": "Install or repair optional system components used by Docker Control Center. Status is checked on this computer each time this window is opened or refreshed.",
         "dependencies_docker_windows": "Docker Desktop",
         "dependencies_docker_linux": "Docker Engine",
+        "dependencies_docker_linux_desktop": "Docker Desktop (Linux)",
         "dependencies_ssh": "OpenSSH client / SSH Agent",
         "dependencies_ready": "✓ Installed and available",
         "dependencies_installed_not_running": "Installed, but the local Docker engine is not running or is not reachable.",
@@ -268,6 +269,7 @@ TEXTS = {
         "dependencies_auto_unavailable": "Automatic installation is unavailable on this system.",
         "dependencies_install_docker_desktop": "Install Docker Desktop",
         "dependencies_install_docker": "Install Docker",
+        "dependencies_install_docker_engine": "Install Docker Engine",
         "dependencies_add_docker_group": "Add user to Docker group",
         "dependencies_docker_group_added": "\u2713 Added to Docker group",
         "dependencies_docker_group_member": "User is already assigned to the docker group.",
@@ -286,6 +288,11 @@ TEXTS = {
         "dependencies_ssh_install_status": "Installing OpenSSH Client and SSH Agent components...",
         "dependencies_docker_desktop_install_title": "Installing Docker Desktop",
         "dependencies_docker_desktop_install_status": "Installing Docker Desktop with Windows Package Manager...",
+        "docker_desktop_linux_stopped": "Docker Desktop is installed, but it is currently stopped. Start it to manage local containers.",
+        "docker_desktop_linux_missing": "Docker Desktop is not installed. You can open the official Docker Desktop for Linux installation page.",
+        "docker_desktop_linux_install_opened": "The official Docker Desktop for Linux installation page was opened in your browser.",
+        "docker_desktop_linux_install_failed": "Could not open the Docker Desktop for Linux installation page automatically.",
+        "docker_desktop_starting": "Starting Docker Desktop and waiting for the local Docker engine...",
         "first_run_title": "Docker Control Center setup",
         "first_run_intro": "First-run setup checks this computer, Docker and portable SSH profiles.",
         "first_run_system_tab": "1. System",
@@ -769,6 +776,7 @@ TEXTS = {
         "dependencies_intro": "Zainstaluj lub napraw opcjonalne składniki systemowe używane przez Docker Control Center. Stan jest sprawdzany na tym komputerze przy każdym otwarciu lub odświeżeniu okna.",
         "dependencies_docker_windows": "Docker Desktop",
         "dependencies_docker_linux": "Docker Engine",
+        "dependencies_docker_linux_desktop": "Docker Desktop (Linux)",
         "dependencies_ssh": "Klient OpenSSH / Agent SSH",
         "dependencies_ready": "✓ Zainstalowane i dostępne",
         "dependencies_installed_not_running": "Zainstalowane, ale lokalny silnik Docker nie działa lub jest niedostępny.",
@@ -780,6 +788,7 @@ TEXTS = {
         "dependencies_auto_unavailable": "Automatyczna instalacja nie jest dostępna w tym systemie.",
         "dependencies_install_docker_desktop": "Zainstaluj Docker Desktop",
         "dependencies_install_docker": "Zainstaluj Docker",
+        "dependencies_install_docker_engine": "Zainstaluj Docker Engine",
         "dependencies_add_docker_group": "Dodaj użytkownika do grupy Docker",
         "dependencies_docker_group_added": "\u2713 Dodano do grupy Docker",
         "dependencies_docker_group_member": "Użytkownik jest już przypisany do grupy docker.",
@@ -798,6 +807,11 @@ TEXTS = {
         "dependencies_ssh_install_status": "Instalowanie składników OpenSSH Client i Agenta SSH...",
         "dependencies_docker_desktop_install_title": "Instalacja Docker Desktop",
         "dependencies_docker_desktop_install_status": "Instalowanie Docker Desktop przez Menedżer pakietów Windows...",
+        "docker_desktop_linux_stopped": "Docker Desktop jest zainstalowany, ale obecnie jest wyłączony. Uruchom go, aby zarządzać lokalnymi kontenerami.",
+        "docker_desktop_linux_missing": "Docker Desktop nie jest zainstalowany. Możesz otworzyć oficjalną stronę instalacji Docker Desktop dla Linux.",
+        "docker_desktop_linux_install_opened": "Otworzono w przeglądarce oficjalną stronę instalacji Docker Desktop dla Linux.",
+        "docker_desktop_linux_install_failed": "Nie udało się automatycznie otworzyć strony instalacji Docker Desktop dla Linux.",
+        "docker_desktop_starting": "Uruchamianie Docker Desktop i oczekiwanie na lokalny silnik Docker...",
         "first_run_title": "Konfiguracja Docker Control Center",
         "first_run_intro": "Kreator pierwszego uruchomienia sprawdza ten komputer, Docker oraz przenośne profile SSH.",
         "first_run_system_tab": "1. System",
@@ -5655,9 +5669,11 @@ class FirstRunWizardDialog(QDialog):
         self.docker_status.setWordWrap(True)
         docker_layout.addWidget(self.docker_status)
         docker_actions = QHBoxLayout()
+        self.docker_desktop_button = QPushButton()
         self.install_docker_button = QPushButton(self.texts["first_run_install_docker"])
         self.add_docker_group_button = QPushButton(self.texts["first_run_add_docker_group"])
         self.recheck_docker_button = QPushButton(self.texts["first_run_recheck_docker"])
+        docker_actions.addWidget(self.docker_desktop_button)
         docker_actions.addWidget(self.install_docker_button)
         docker_actions.addWidget(self.add_docker_group_button)
         docker_actions.addWidget(self.recheck_docker_button)
@@ -5694,6 +5710,7 @@ class FirstRunWizardDialog(QDialog):
         footer.addWidget(self.finish_button)
         layout.addLayout(footer)
 
+        self.docker_desktop_button.clicked.connect(self.handle_docker_desktop)
         self.install_docker_button.clicked.connect(self.install_docker)
         self.add_docker_group_button.clicked.connect(self.add_to_docker_group)
         self.recheck_docker_button.clicked.connect(self.refresh_state)
@@ -5710,6 +5727,8 @@ class FirstRunWizardDialog(QDialog):
         docker_ready = self.main_window.is_local_docker_available()
         docker_binary = bool(shutil.which("docker"))
         supported = self.main_window.linux_docker_auto_install_supported()
+        desktop_installed = self.main_window.linux_docker_desktop_installed()
+        desktop_selected = self.main_window.linux_docker_desktop_selected()
         group_configured = self.main_window.linux_docker_group_configured()
         group_active = self.main_window.linux_docker_group_active()
         group_supported = self.main_window.linux_docker_group_setup_supported()
@@ -5722,6 +5741,9 @@ class FirstRunWizardDialog(QDialog):
         if docker_ready:
             self.docker_status.setText(self.texts["first_run_docker_ready"])
             self.docker_status.setStyleSheet("color: #58d68d;")
+        elif desktop_installed and desktop_selected:
+            self.docker_status.setText(self.texts["docker_desktop_linux_stopped"])
+            self.docker_status.setStyleSheet("color: #ffcc66;")
         elif docker_binary:
             if not system_socket:
                 self.docker_status.setText(self.texts["dependencies_installed_not_running"])
@@ -5742,7 +5764,15 @@ class FirstRunWizardDialog(QDialog):
         else:
             self.docker_status.setText(self.texts["first_run_docker_unsupported"])
             self.docker_status.setStyleSheet("color: #ff8c8c;")
-        self.install_docker_button.setEnabled((not docker_ready) and (not docker_binary) and supported)
+        desktop_running = self.main_window.linux_docker_desktop_running() if desktop_installed else False
+        self.docker_desktop_button.setText(
+            self.texts["docker_local_open_desktop"]
+            if desktop_installed
+            else self.texts["dependencies_install_docker_desktop"]
+        )
+        self.docker_desktop_button.setEnabled((not desktop_running) if desktop_installed else True)
+        self.install_docker_button.setText(self.texts["first_run_install_docker"])
+        self.install_docker_button.setEnabled((not docker_binary) and supported)
         self.add_docker_group_button.setEnabled(
             docker_binary and (not group_configured) and group_supported
         )
@@ -5752,6 +5782,24 @@ class FirstRunWizardDialog(QDialog):
         self.profiles_count_label.setText(self.texts["first_run_profiles_count"].format(count=len(profiles)))
         self.key_paths_label.setText(self.texts["first_run_key_paths_missing"].format(count=missing))
         self.key_paths_label.setStyleSheet("color: #ffcc66;" if missing else "color: #58d68d;")
+
+    def handle_docker_desktop(self):
+        if self.main_window.linux_docker_desktop_installed():
+            if self.main_window.try_start_docker_desktop():
+                self.main_window.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                QTimer.singleShot(1800, self.main_window.reconnect_local_docker_after_desktop_start)
+            else:
+                QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_local_open_failed"])
+        elif self.main_window.linux_docker_desktop_selected():
+            opened = self.main_window.open_linux_docker_desktop_install_page()
+            QMessageBox.information(
+                self,
+                self.texts["msg_info"],
+                self.texts["docker_desktop_linux_install_opened"]
+                if opened
+                else self.texts["docker_desktop_linux_install_failed"],
+            )
+        self.refresh_state()
 
     def install_docker(self):
         if self.main_window.install_linux_docker_with_progress():
@@ -5797,10 +5845,13 @@ class DependencyManagerDialog(QDialog):
         self.docker_status.setWordWrap(True)
         docker_actions = QHBoxLayout()
         self.docker_action = QPushButton()
+        self.docker_engine_action = QPushButton(self.texts["dependencies_install_docker_engine"])
         self.docker_group_action = QPushButton(self.texts["dependencies_add_docker_group"])
         self.docker_action.clicked.connect(self.handle_docker_action)
+        self.docker_engine_action.clicked.connect(self.handle_docker_engine_action)
         self.docker_group_action.clicked.connect(self.handle_docker_group_action)
         docker_actions.addWidget(self.docker_action)
+        docker_actions.addWidget(self.docker_engine_action)
         docker_actions.addWidget(self.docker_group_action)
         docker_actions.addStretch()
         docker_layout.addWidget(self.docker_title)
@@ -5845,6 +5896,7 @@ class DependencyManagerDialog(QDialog):
         docker_ready = self.main_window.is_local_docker_available()
         if os.name == "nt":
             self.docker_group_action.setVisible(False)
+            self.docker_engine_action.setVisible(False)
             self.docker_title.setText(self.texts["dependencies_docker_windows"])
             installed = self.main_window.windows_docker_desktop_installed()
             if docker_ready:
@@ -5864,18 +5916,27 @@ class DependencyManagerDialog(QDialog):
                 self.docker_action.setEnabled(True)
         else:
             self.docker_group_action.setVisible(True)
-            self.docker_title.setText(self.texts["dependencies_docker_linux"])
+            self.docker_engine_action.setVisible(True)
             docker_binary = bool(shutil.which("docker"))
             supported = self.main_window.linux_docker_auto_install_supported()
+            desktop_installed = self.main_window.linux_docker_desktop_installed()
+            desktop_selected = self.main_window.linux_docker_desktop_selected()
+            desktop_running = self.main_window.linux_docker_desktop_running() if desktop_installed else False
             group_configured = self.main_window.linux_docker_group_configured()
             group_active = self.main_window.linux_docker_group_active()
             group_supported = self.main_window.linux_docker_group_setup_supported()
             system_socket = self.main_window.linux_docker_uses_system_socket() if docker_binary else False
+            self.docker_title.setText(
+                self.texts["dependencies_docker_linux_desktop"]
+                if desktop_installed or desktop_selected
+                else self.texts["dependencies_docker_linux"]
+            )
             if docker_ready:
                 self.docker_status.setText(self.texts["dependencies_ready"])
                 self.docker_status.setStyleSheet("color: #58d68d;")
-                self.docker_action.setText(self.texts["dependencies_install_docker"])
-                self.docker_action.setEnabled(False)
+            elif desktop_installed and (desktop_selected or not system_socket):
+                self.docker_status.setText(self.texts["docker_desktop_linux_stopped"])
+                self.docker_status.setStyleSheet("color: #ffcc66;")
             elif docker_binary:
                 if not system_socket:
                     self.docker_status.setText(self.texts["dependencies_installed_not_running"])
@@ -5893,12 +5954,16 @@ class DependencyManagerDialog(QDialog):
                 self.docker_action.setText(self.texts["dependencies_install_docker"])
                 self.docker_action.setEnabled(False)
             else:
-                self.docker_status.setText(
-                    self.texts["dependencies_missing"] if supported else self.texts["dependencies_auto_unavailable"]
-                )
+                self.docker_status.setText(self.texts["docker_desktop_linux_missing"])
                 self.docker_status.setStyleSheet("color: #ffcc66;")
-                self.docker_action.setText(self.texts["dependencies_install_docker"])
-                self.docker_action.setEnabled(supported)
+
+            self.docker_action.setText(
+                self.texts["docker_local_open_desktop"]
+                if desktop_installed
+                else self.texts["dependencies_install_docker_desktop"]
+            )
+            self.docker_action.setEnabled((not desktop_running) if desktop_installed else True)
+            self.docker_engine_action.setEnabled((not docker_binary) and supported)
             self.docker_group_action.setText(
                 self.texts["dependencies_docker_group_added"]
                 if group_configured
@@ -5937,8 +6002,31 @@ class DependencyManagerDialog(QDialog):
                 if success:
                     self.main_window.try_start_docker_desktop()
         else:
-            success = self.main_window.install_linux_docker_with_progress()
+            if self.main_window.linux_docker_desktop_installed():
+                success = self.main_window.try_start_docker_desktop()
+                if not success:
+                    QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_local_open_failed"])
+                else:
+                    self.main_window.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                    QTimer.singleShot(1800, self.main_window.reconnect_local_docker_after_desktop_start)
+            else:
+                success = self.main_window.open_linux_docker_desktop_install_page()
+                QMessageBox.information(
+                    self,
+                    self.texts["msg_info"],
+                    self.texts["docker_desktop_linux_install_opened"]
+                    if success
+                    else self.texts["docker_desktop_linux_install_failed"],
+                )
         if success:
+            if os.name == "nt":
+                QMessageBox.information(self, self.texts["msg_info"], self.texts["dependencies_install_success"])
+        self.refresh_state()
+
+    def handle_docker_engine_action(self):
+        if os.name == "nt":
+            return
+        if self.main_window.install_linux_docker_with_progress():
             QMessageBox.information(self, self.texts["msg_info"], self.texts["dependencies_install_success"])
         self.refresh_state()
 
@@ -6100,10 +6188,16 @@ class MainWindow(QMainWindow):
         if os.name != "nt" and str(self.settings.value("setup/first_run_complete", "false")).lower() not in {"1", "true", "yes"}:
             first_run_shown = self.run_first_run_wizard()
 
-        if os.name == "nt" and self.auto_start_docker_desktop and not self.is_local_docker_available():
-            self.try_start_docker_desktop()
-            QTimer.singleShot(1500, self.connect_local_docker)
-            return
+        if self.auto_start_docker_desktop and not self.is_local_docker_available():
+            desktop_installed = (
+                self.windows_docker_desktop_installed()
+                if os.name == "nt"
+                else self.linux_docker_desktop_installed()
+            )
+            if desktop_installed and self.try_start_docker_desktop():
+                self.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                QTimer.singleShot(1800, self.reconnect_local_docker_after_desktop_start)
+                return
 
         if os.name != "nt" and not self.is_local_docker_available() and first_run_shown:
             self.client = None
@@ -7248,7 +7342,9 @@ class MainWindow(QMainWindow):
             self.update_glow_timer()
             self._load_theme()
             if self.auto_start_docker_desktop and self.current_backend == "local" and not self.is_local_docker_available():
-                self.try_start_docker_desktop()
+                if self.try_start_docker_desktop():
+                    self.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                    QTimer.singleShot(1800, self.reconnect_local_docker_after_desktop_start)
 
     def open_dependencies_dialog(self):
         DependencyManagerDialog(self, self).exec()
@@ -8426,6 +8522,98 @@ class MainWindow(QMainWindow):
     def windows_docker_auto_install_supported(self) -> bool:
         return os.name == "nt" and bool(shutil.which("winget"))
 
+    def linux_docker_desktop_path(self) -> Optional[Path]:
+        if os.name == "nt":
+            return None
+        detected = shutil.which("docker-desktop")
+        candidates = []
+        if detected:
+            candidates.append(Path(detected))
+        candidates.extend(
+            [
+                Path("/opt/docker-desktop/bin/docker-desktop"),
+                Path.home() / ".local/bin/docker-desktop",
+            ]
+        )
+        for candidate in candidates:
+            try:
+                if candidate.is_file():
+                    return candidate
+            except Exception:
+                continue
+        return None
+
+    def linux_docker_desktop_installed(self) -> bool:
+        if os.name == "nt":
+            return False
+        if self.linux_docker_desktop_path() is not None:
+            return True
+        for marker in (
+            Path("/usr/share/applications/docker-desktop.desktop"),
+            Path("/opt/docker-desktop"),
+        ):
+            try:
+                if marker.exists():
+                    return True
+            except Exception:
+                pass
+        dpkg_query = shutil.which("dpkg-query")
+        if dpkg_query:
+            try:
+                result = subprocess.run(
+                    [dpkg_query, "-W", "-f=${Status}", "docker-desktop"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+                return result.returncode == 0 and "install ok installed" in (result.stdout or "").lower()
+            except Exception:
+                pass
+        return False
+
+    def linux_docker_desktop_selected(self) -> bool:
+        if os.name == "nt":
+            return False
+        try:
+            endpoint, context_name = self._linux_docker_endpoint_info()
+        except Exception:
+            return False
+        endpoint = endpoint.lower()
+        context_name = context_name.lower()
+        return "desktop" in context_name or "/.docker/desktop/" in endpoint or "docker-cli.sock" in endpoint
+
+    def linux_docker_desktop_running(self) -> bool:
+        if os.name == "nt" or not self.linux_docker_desktop_installed():
+            return False
+        if self.linux_docker_desktop_selected() and self.is_local_docker_available():
+            return True
+        systemctl = shutil.which("systemctl")
+        if systemctl:
+            try:
+                result = subprocess.run(
+                    [systemctl, "--user", "is-active", "--quiet", "docker-desktop"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+                if result.returncode == 0:
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def open_linux_docker_desktop_install_page(self) -> bool:
+        if os.name == "nt":
+            return False
+        try:
+            return bool(webbrowser.open("https://docs.docker.com/desktop/setup/install/linux/"))
+        except Exception:
+            return False
+
     def _ssh_program_path(self, program: str) -> Optional[str]:
         detected = shutil.which(program)
         if detected:
@@ -8843,24 +9031,71 @@ class MainWindow(QMainWindow):
         return dialog.success is True
 
     def try_start_docker_desktop(self) -> bool:
-        candidate = self.docker_desktop_path()
+        if os.name == "nt":
+            candidate = self.docker_desktop_path()
+            if candidate is not None:
+                try:
+                    subprocess.Popen([str(candidate)])
+                    return True
+                except Exception:
+                    pass
+            try:
+                subprocess.Popen("start \"\" \"docker-desktop:\"", shell=True, creationflags=CREATE_NO_WINDOW)
+                return True
+            except Exception:
+                return False
+
+        if not self.linux_docker_desktop_installed():
+            return False
+        systemctl = shutil.which("systemctl")
+        if systemctl:
+            try:
+                result = subprocess.run(
+                    [systemctl, "--user", "start", "docker-desktop"],
+                    capture_output=True,
+                    text=True,
+                    timeout=12,
+                    check=False,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+                if result.returncode == 0:
+                    return True
+            except Exception:
+                pass
+        candidate = self.linux_docker_desktop_path()
         if candidate is not None:
             try:
-                subprocess.Popen([str(candidate)])
+                subprocess.Popen(
+                    [str(candidate)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
                 return True
             except Exception:
                 pass
-        try:
-            subprocess.Popen("start \"\" \"docker-desktop:\"", shell=True, creationflags=CREATE_NO_WINDOW)
-            return True
-        except Exception:
-            return False
+        return False
+
+    def reconnect_local_docker_after_desktop_start(self, attempt: int = 0):
+        if self.is_local_docker_available():
+            self.connect_local_docker()
+            return
+        if attempt >= 11:
+            self.connect_local_docker()
+            return
+        self.statusBar().showMessage(self.texts["docker_desktop_starting"])
+        QTimer.singleShot(1800, lambda: self.reconnect_local_docker_after_desktop_start(attempt + 1))
 
     def show_local_docker_unavailable(self, details: str = ""):
         self.update_infrastructure_ui(False)
         linux_group_pending = False
+        linux_desktop_installed = False
+        linux_desktop_selected = False
         if os.name != "nt" and shutil.which("docker"):
             linux_group_pending = self.linux_docker_group_requires_relaunch()
+        if os.name != "nt":
+            linux_desktop_installed = self.linux_docker_desktop_installed()
+            linux_desktop_selected = self.linux_docker_desktop_selected()
         message = QMessageBox(self)
         message.setWindowTitle(self.texts["msg_error"])
         message.setIcon(QMessageBox.Icon.Critical)
@@ -8874,6 +9109,11 @@ class MainWindow(QMainWindow):
             if linux_group_pending
             else self.platform_text("docker_local_unavailable_hint")
         )
+        if os.name != "nt" and not linux_group_pending:
+            if linux_desktop_installed and linux_desktop_selected:
+                info = self.texts["docker_desktop_linux_stopped"] + "\n\n" + info
+            elif not linux_desktop_installed:
+                info = self.texts["docker_desktop_linux_missing"] + "\n\n" + info
         if os.name != "nt" and not linux_group_pending:
             try:
                 endpoint, context_name = self._linux_docker_endpoint_info(refresh=True)
@@ -8889,6 +9129,7 @@ class MainWindow(QMainWindow):
         if self.current_backend == "local":
             primary_button = None
             primary_action = ""
+            linux_engine_button = None
             if os.name == "nt":
                 if self.windows_docker_desktop_installed():
                     primary_button = message.addButton(
@@ -8906,11 +9147,20 @@ class MainWindow(QMainWindow):
                         self.texts["docker_group_restart_app"], QMessageBox.ButtonRole.AcceptRole
                     )
                     primary_action = "restart_linux_group"
-                elif not shutil.which("docker") and self.linux_docker_auto_install_supported():
+                elif linux_desktop_installed:
                     primary_button = message.addButton(
-                        self.texts["docker_local_install_docker"], QMessageBox.ButtonRole.AcceptRole
+                        self.texts["docker_local_open_desktop"], QMessageBox.ButtonRole.AcceptRole
                     )
-                    primary_action = "install_linux"
+                    primary_action = "start_linux_desktop"
+                else:
+                    primary_button = message.addButton(
+                        self.texts["docker_local_install_desktop"], QMessageBox.ButtonRole.AcceptRole
+                    )
+                    primary_action = "install_linux_desktop"
+                    if not shutil.which("docker") and self.linux_docker_auto_install_supported():
+                        linux_engine_button = message.addButton(
+                            self.texts["dependencies_install_docker_engine"], QMessageBox.ButtonRole.ActionRole
+                        )
 
             dependencies_button = message.addButton(
                 self.texts["dependencies_open"], QMessageBox.ButtonRole.ActionRole
@@ -8920,6 +9170,9 @@ class MainWindow(QMainWindow):
             clicked = message.clickedButton()
             if clicked == dependencies_button:
                 self.open_dependencies_dialog()
+            elif linux_engine_button is not None and clicked == linux_engine_button:
+                if self.install_linux_docker_with_progress():
+                    QTimer.singleShot(1200, self.connect_local_docker)
             elif primary_button is not None and clicked == primary_button:
                 if primary_action == "start_windows":
                     if not self.try_start_docker_desktop():
@@ -8933,6 +9186,21 @@ class MainWindow(QMainWindow):
                 elif primary_action == "install_linux":
                     if self.install_linux_docker_with_progress():
                         QTimer.singleShot(1200, self.connect_local_docker)
+                elif primary_action == "start_linux_desktop":
+                    if not self.try_start_docker_desktop():
+                        QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_local_open_failed"])
+                    else:
+                        self.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                        QTimer.singleShot(1800, self.reconnect_local_docker_after_desktop_start)
+                elif primary_action == "install_linux_desktop":
+                    opened = self.open_linux_docker_desktop_install_page()
+                    QMessageBox.information(
+                        self,
+                        self.texts["msg_info"],
+                        self.texts["docker_desktop_linux_install_opened"]
+                        if opened
+                        else self.texts["docker_desktop_linux_install_failed"],
+                    )
                 elif primary_action == "restart_linux_group":
                     if not self.restart_with_linux_docker_group():
                         QMessageBox.warning(

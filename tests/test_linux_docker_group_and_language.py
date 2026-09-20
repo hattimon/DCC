@@ -167,6 +167,9 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
         main_window = SimpleNamespace(
             is_local_docker_available=lambda: False,
             linux_docker_auto_install_supported=lambda: True,
+            linux_docker_desktop_installed=lambda: False,
+            linux_docker_desktop_selected=lambda: False,
+            linux_docker_desktop_running=lambda: False,
             linux_docker_group_configured=lambda: True,
             linux_docker_group_active=lambda: False,
             linux_docker_group_setup_supported=lambda: True,
@@ -178,6 +181,7 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
             main_window=main_window,
             system_label=Mock(),
             docker_status=Mock(),
+            docker_desktop_button=Mock(),
             install_docker_button=Mock(),
             add_docker_group_button=Mock(),
             profiles_count_label=Mock(),
@@ -194,6 +198,94 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
         stub.docker_status.setStyleSheet.assert_called_with("color: #58d68d;")
         stub.add_docker_group_button.setText.assert_called_with(dcc.TEXTS["EN"]["first_run_docker_group_added"])
         stub.add_docker_group_button.setEnabled.assert_called_with(False)
+
+    def test_first_run_reports_stopped_linux_docker_desktop(self):
+        main_window = SimpleNamespace(
+            is_local_docker_available=lambda: False,
+            linux_docker_auto_install_supported=lambda: True,
+            linux_docker_desktop_installed=lambda: True,
+            linux_docker_desktop_selected=lambda: True,
+            linux_docker_desktop_running=lambda: False,
+            linux_docker_group_configured=lambda: False,
+            linux_docker_group_active=lambda: False,
+            linux_docker_group_setup_supported=lambda: True,
+            linux_docker_uses_system_socket=lambda: False,
+            remote_profiles=[],
+        )
+        stub = SimpleNamespace(
+            texts=dcc.TEXTS["EN"],
+            main_window=main_window,
+            system_label=Mock(),
+            docker_status=Mock(),
+            docker_desktop_button=Mock(),
+            install_docker_button=Mock(),
+            add_docker_group_button=Mock(),
+            profiles_count_label=Mock(),
+            key_paths_label=Mock(),
+        )
+
+        with (
+            patch.object(dcc.shutil, "which", side_effect=lambda name: "/usr/bin/docker" if name == "docker" else None),
+            patch.object(dcc, "detect_local_os_name", return_value="MX Linux"),
+        ):
+            dcc.FirstRunWizardDialog.refresh_state(stub)
+
+        stub.docker_status.setText.assert_called_with(dcc.TEXTS["EN"]["docker_desktop_linux_stopped"])
+        stub.docker_desktop_button.setText.assert_called_with(dcc.TEXTS["EN"]["docker_local_open_desktop"])
+        stub.docker_desktop_button.setEnabled.assert_called_with(True)
+
+    def test_linux_docker_desktop_install_detection_uses_desktop_binary(self):
+        stub = SimpleNamespace(linux_docker_desktop_path=lambda: dcc.Path("/opt/docker-desktop/bin/docker-desktop"))
+        with patch.object(dcc.os, "name", "posix"):
+            self.assertTrue(dcc.MainWindow.linux_docker_desktop_installed(stub))
+
+    def test_linux_docker_desktop_start_uses_user_systemd_service(self):
+        stub = SimpleNamespace(
+            linux_docker_desktop_installed=lambda: True,
+            linux_docker_desktop_path=lambda: None,
+        )
+        started = subprocess.CompletedProcess(
+            ["systemctl", "--user", "start", "docker-desktop"], 0, "", ""
+        )
+        with (
+            patch.object(dcc.os, "name", "posix"),
+            patch.object(dcc.shutil, "which", side_effect=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None),
+            patch.object(dcc.subprocess, "run", return_value=started) as run,
+        ):
+            result = dcc.MainWindow.try_start_docker_desktop(stub)
+
+        self.assertTrue(result)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0], ["/usr/bin/systemctl", "--user", "start", "docker-desktop"])
+
+    def test_linux_startup_autostarts_installed_docker_desktop(self):
+        scheduled = []
+        status_bar = Mock()
+        settings = Mock()
+        settings.value.return_value = "true"
+        stub = SimpleNamespace(
+            settings=settings,
+            auto_start_docker_desktop=True,
+            texts=dcc.TEXTS["EN"],
+            is_local_docker_available=Mock(return_value=False),
+            linux_docker_desktop_installed=Mock(return_value=True),
+            try_start_docker_desktop=Mock(return_value=True),
+            reconnect_local_docker_after_desktop_start=Mock(),
+            statusBar=lambda: status_bar,
+            connect_local_docker=Mock(),
+        )
+        with (
+            patch.object(dcc.os, "name", "posix"),
+            patch.object(dcc.QTimer, "singleShot", side_effect=lambda delay, callback: scheduled.append((delay, callback))),
+        ):
+            dcc.MainWindow.initialize_runtime(stub)
+
+        stub.linux_docker_desktop_installed.assert_called_once_with()
+        stub.try_start_docker_desktop.assert_called_once_with()
+        stub.connect_local_docker.assert_not_called()
+        status_bar.showMessage.assert_called_with(dcc.TEXTS["EN"]["docker_desktop_starting"])
+        self.assertEqual(len(scheduled), 1)
+        self.assertEqual(scheduled[0][0], 1800)
 
     def test_linux_platform_text_uses_linux_specific_description(self):
         stub = SimpleNamespace(texts=dcc.TEXTS["EN"])

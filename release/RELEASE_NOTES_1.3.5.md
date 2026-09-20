@@ -38,6 +38,9 @@ Docker Control Center 1.3.5 is the first public release after v1.1.1 that consol
 - **Fixed Linux Docker Desktop local mode**: DCC now follows `DOCKER_HOST` and the active Docker CLI context, including `desktop-linux` and user sockets such as `~/.docker/desktop/docker-cli.sock`, instead of always forcing `/var/run/docker.sock`.
 - DCC now distinguishes Docker Desktop/rootless user sockets from the system Docker socket. Docker-group re-login/relaunch logic is only used when the selected endpoint actually requires `/var/run/docker.sock` access.
 - Linux Docker setup now detects the real desktop account instead of blindly using `root`; it prefers the original `sudo`/PolicyKit user and uses that account for Docker-group configuration and Docker installation setup.
+- DCC now detects Docker Desktop for Linux separately from Docker Engine. If Docker Desktop is installed but stopped, **Connect local**, the first-run wizard and **Configure -> Dependencies** show that state explicitly and offer **Start Docker Desktop**.
+- If Docker Desktop for Linux is not installed, DCC offers the official Docker Desktop installation page while keeping **Install Docker Engine** as a separate choice.
+- The existing **Start Docker Desktop when DCC starts** setting now works on Linux too. DCC starts the per-user `docker-desktop` service and polls the local Docker endpoint in the background until it becomes available, instead of immediately showing another connection error while Docker Desktop is still starting.
 - If Docker is already installed but the current Linux user has no daemon access, the first-run wizard can now add that user to the `docker` group through the system PolicyKit password prompt; DCC never reads or stores the password.
 - DCC can detect a missing Docker Engine and offer installation on supported Debian-family distributions.
 - Added `Configure -> Dependencies` for Docker/Docker Desktop and OpenSSH/SSH Agent checks and later installation.
@@ -198,6 +201,9 @@ Model lists can be detected/refreshed where supported, and provider credentials 
 - **Poprawiono lokalny Docker Desktop na Linuxie**: DCC korzysta teraz z `DOCKER_HOST` i aktywnego kontekstu Docker CLI, w tym `desktop-linux` oraz socketów użytkownika takich jak `~/.docker/desktop/docker-cli.sock`, zamiast zawsze wymuszać `/var/run/docker.sock`.
 - DCC rozróżnia socket Docker Desktop/rootless od systemowego socketu Dockera. Logika grupy `docker` i ponownego uruchomienia sesji jest stosowana tylko wtedy, gdy wybrany endpoint rzeczywiście wymaga dostępu do `/var/run/docker.sock`.
 - Konfiguracja Dockera na Linuxie wykrywa teraz rzeczywiste konto użytkownika pulpitu zamiast bezwarunkowo używać `root`; preferowany jest pierwotny użytkownik `sudo`/PolicyKit i to konto jest dodawane do grupy `docker`.
+- DCC rozpoznaje teraz Docker Desktop dla Linux osobno od Docker Engine. Gdy Docker Desktop jest zainstalowany, ale wyłączony, **Połącz lokalnie**, kreator pierwszego uruchomienia i **Konfiguruj -> Zależności** pokazują ten stan i proponują **Uruchom Docker Desktop**.
+- Gdy Docker Desktop dla Linux nie jest zainstalowany, DCC proponuje otwarcie oficjalnej strony instalacyjnej Docker Desktop, a **Zainstaluj Docker Engine** pozostaje osobną opcją.
+- Ustawienie **Uruchamiaj Docker Desktop przy starcie DCC** działa teraz również na Linuxie. DCC uruchamia usługę użytkownika `docker-desktop` i w tle ponawia sprawdzanie lokalnego Dockera aż do uzyskania połączenia, zamiast od razu pokazywać kolejny błąd podczas startu Docker Desktop.
 - Jeżeli Docker jest już zainstalowany, ale bieżący użytkownik Linux nie ma dostępu do demona, kreator może teraz dodać go do grupy `docker` przez systemowe okno PolicyKit. DCC nie odczytuje ani nie zapisuje hasła.
 - DCC wykrywa brak Dockera i może zaproponować instalację Docker Engine na wspieranych systemach Debian-family.
 - Dodano `Konfiguruj -> Zależności` do sprawdzania/instalacji Docker/Docker Desktop i OpenSSH/Agenta SSH.
@@ -324,5 +330,5 @@ Lista modeli może być wykrywana/odświeżana tam, gdzie dostawca to wspiera, a
 
 - Windows packaged runtime `--self-check`: **OK**
 - Linux packaged runtime `--self-check`: **OK**
-- Automated Python regression tests: **30/30 passed**
+- Automated Python regression tests: **34/34 passed**
 - Installed local Windows version after update: **1.3.5**
