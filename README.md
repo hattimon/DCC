@@ -24,6 +24,8 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 - Added automated upstream release tracking and a reviewed candidate-discovery workflow for new self-hosted/container applications.
 - Expanded Windows + Linux support, dependency setup, SSH profiles/agent support, container resource monitoring, grouping, search and sortable CPU/RAM columns.
 
+![Docker Control Center v1.3.5 - English overview](images/release-1.3.5/09-v1.3.5-overview-en.png)
+
 ### PL
 - Dodano ręczną konfigurację kontenera z edycją obrazu, portów, parametrów, komendy i pełnego polecenia `docker run`.
 - Poprawiono `Konfiguruj -> Edytuj start`: okno pokazuje rzeczywiście wybrany kontener i zachowuje jego aktualną konfigurację zamiast podstawiać pierwszy preset ze sklepu.
@@ -31,6 +33,8 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 - Wdrożenia z katalogu pobierają świeży obraz Docker, a ręczne/lokalne obrazy pozostają bez wymuszonego pobierania.
 - Dodano automatyczne śledzenie release'ów upstream oraz workflow odkrywający nowe aplikacje jako kandydatów wymagających przeglądu.
 - Rozbudowano obsługę Windows + Linux, zależności, profile SSH/ssh-agent, monitoring CPU/RAM, grupowanie, wyszukiwarkę i sortowanie kolumn CPU/RAM.
+
+![Docker Control Center v1.3.5 - polskie podsumowanie](images/release-1.3.5/08-v1.3.5-overview-pl.png)
 
 ## English
 
