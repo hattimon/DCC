@@ -14,6 +14,8 @@ Docker Control Center 1.3.5 is the first public release after v1.1.1 that consol
 - **Container search** — live filtering while typing container names.
 - **Project/network grouping** — containers can be grouped by project/Compose relationship or shared networks with collapsible groups.
 - **More compact container table** — optimized WWW/link controls, narrower autostart column, movable column widths and better use of vertical space.
+- **Persistent column layout** — manually adjusted column widths are saved and restored after restarting DCC; visible three-dot grips mark the draggable separators between columns.
+- **Optional Magnet mode** — enabled by default; keeps the user-defined column proportions while automatically fitting the whole table to the current window width, including during live window resizing.
 - **Improved port/link detection** — better detection and display of published addresses, IPs, web panels and exposed ports without clipping.
 - **UI scaling** — `Ctrl + mouse wheel` zoom for the container area, improved resize behavior, scrollable dialogs, smaller minimum window size and full-screen/maximize support.
 - **Opaque status area by default** — status text no longer blends with the background unless transparency is explicitly enabled.
@@ -44,6 +46,7 @@ Docker Control Center 1.3.5 is the first public release after v1.1.1 that consol
 - Automatic update checks are enabled by default and can be disabled.
 - Update notifications can be disabled independently.
 - Added manual **Check for updates**.
+- The README **Download Latest Version** buttons now link directly to the current Windows installer and Linux `.deb` assets instead of opening the release/repository page first.
 - Update prompt supports update now / remind later / cancel behavior.
 - Added **Reset application settings** while preserving connection profiles.
 - Added a separate **Factory reset** with an explicit warning explaining that profiles, saved credentials, LLM settings and local DCC data will be removed while Docker-host data remains untouched.
@@ -159,6 +162,8 @@ Model lists can be detected/refreshed where supported, and provider credentials 
 - **Wyszukiwarka kontenerów** — filtrowanie listy już podczas wpisywania nazwy.
 - **Grupowanie projektów i sieci** — kontenery mogą być grupowane wg projektu/Compose lub wspólnych sieci z rozwijanymi grupami.
 - **Bardziej kompaktowa tabela** — zoptymalizowane WWW/linki, węższy autostart, przesuwane szerokości kolumn i więcej miejsca na listę kontenerów.
+- **Zapamiętywanie szerokości kolumn** — ręcznie ustawione szerokości są zapisywane i odtwarzane po ponownym uruchomieniu DCC; trzy pionowe kropki pokazują miejsca, w których można złapać separator kolumn.
+- **Opcjonalny tryb Magnes** — domyślnie włączony; zachowuje ręcznie ustawione proporcje kolumn i automatycznie dopasowuje całą tabelę do szerokości okna podczas jego rozciągania lub zwężania.
 - **Lepsze wykrywanie IP/portów/paneli WWW** — poprawione adresy wystawionych usług i brak ucinania portów.
 - **Skalowanie UI** — `Ctrl + scroll` zmienia skalę obszaru kontenerów; poprawiono minimalny rozmiar okna, paski przewijania i pełny ekran/maksymalizację.
 - **Nieprzezroczysty status domyślnie** — tekst statusu nie zlewa się z tłem, dopóki użytkownik sam nie włączy przezroczystości.
@@ -189,6 +194,7 @@ Model lists can be detected/refreshed where supported, and provider credentials 
 - Automatyczne sprawdzanie aktualizacji jest domyślnie włączone i można je wyłączyć.
 - Powiadomienia o aktualizacjach można wyłączyć osobno.
 - Dodano ręczne **Sprawdź aktualizacje**.
+- Przyciski **Download Latest Version** w README prowadzą teraz bezpośrednio do aktualnego instalatora Windows i pakietu Linux `.deb`, zamiast najpierw otwierać stronę release/repozytorium.
 - Okno aktualizacji obsługuje aktualizację teraz / przypomnij później / anuluj.
 - Dodano **Reset ustawień aplikacji** bez usuwania profili połączeń.
 - Dodano osobny **Reset do ustawień fabrycznych** z ostrzeżeniem, które dokładnie opisuje usuwane profile, dane logowania, konfigurację LLM i dane DCC. Dane Dockera na hostach nie są usuwane.
