@@ -16,19 +16,46 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
             settings=settings,
             apply_language=lambda: calls.append("apply"),
             _build_menus=lambda: calls.append("menus"),
+            _apply_language_after_menu_close=lambda: calls.extend(["apply", "menus"]),
         )
         scheduled = []
 
-        with patch.object(dcc.QTimer, "singleShot", side_effect=lambda delay, callback: scheduled.append((delay, callback))):
+        with (
+            patch.object(dcc.os, "name", "posix"),
+            patch.object(dcc.QTimer, "singleShot", side_effect=lambda delay, callback: scheduled.append((delay, callback))),
+        ):
             dcc.MainWindow.set_language(stub, "PL")
 
         self.assertEqual(stub.lang, "PL")
         self.assertIs(stub.texts, dcc.TEXTS["PL"])
         settings.setValue.assert_called_once_with("language", "PL")
-        self.assertEqual(calls, ["apply"])
+        self.assertEqual(calls, [])
         self.assertEqual(len(scheduled), 1)
-        self.assertEqual(scheduled[0][0], 0)
+        self.assertGreaterEqual(scheduled[0][0], 100)
 
+        scheduled[0][1]()
+        self.assertEqual(calls, ["apply", "menus"])
+
+    def test_windows_language_change_keeps_existing_immediate_behavior(self):
+        calls = []
+        settings = Mock()
+        stub = SimpleNamespace(
+            lang="EN",
+            texts=dcc.TEXTS["EN"],
+            settings=settings,
+            apply_language=lambda: calls.append("apply"),
+            _build_menus=lambda: calls.append("menus"),
+        )
+        scheduled = []
+
+        with (
+            patch.object(dcc.os, "name", "nt"),
+            patch.object(dcc.QTimer, "singleShot", side_effect=lambda delay, callback: scheduled.append((delay, callback))),
+        ):
+            dcc.MainWindow.set_language(stub, "PL")
+
+        self.assertEqual(calls, ["apply"])
+        self.assertEqual(scheduled[0][0], 0)
         scheduled[0][1]()
         self.assertEqual(calls, ["apply", "menus"])
 
@@ -76,6 +103,37 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(captured, [["/usr/bin/pkexec", "/usr/sbin/usermod", "-aG", "docker", "alice"]])
         self.assertEqual(output, ["adding"])
+
+    def test_first_run_confirms_group_configured_while_relogin_is_pending(self):
+        main_window = SimpleNamespace(
+            is_local_docker_available=lambda: False,
+            linux_docker_auto_install_supported=lambda: True,
+            linux_docker_group_configured=lambda: True,
+            linux_docker_group_active=lambda: False,
+            linux_docker_group_setup_supported=lambda: True,
+            remote_profiles=[],
+        )
+        stub = SimpleNamespace(
+            texts=dcc.TEXTS["EN"],
+            main_window=main_window,
+            system_label=Mock(),
+            docker_status=Mock(),
+            install_docker_button=Mock(),
+            add_docker_group_button=Mock(),
+            profiles_count_label=Mock(),
+            key_paths_label=Mock(),
+        )
+
+        with (
+            patch.object(dcc.shutil, "which", side_effect=lambda name: "/usr/bin/docker" if name == "docker" else None),
+            patch.object(dcc, "detect_local_os_name", return_value="MX Linux"),
+        ):
+            dcc.FirstRunWizardDialog.refresh_state(stub)
+
+        stub.docker_status.setText.assert_called_with(dcc.TEXTS["EN"]["dependencies_docker_group_session"])
+        stub.docker_status.setStyleSheet.assert_called_with("color: #58d68d;")
+        stub.add_docker_group_button.setText.assert_called_with(dcc.TEXTS["EN"]["first_run_docker_group_added"])
+        stub.add_docker_group_button.setEnabled.assert_called_with(False)
 
 
 if __name__ == "__main__":

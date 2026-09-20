@@ -269,9 +269,11 @@ TEXTS = {
         "dependencies_install_docker_desktop": "Install Docker Desktop",
         "dependencies_install_docker": "Install Docker",
         "dependencies_add_docker_group": "Add user to Docker group",
+        "dependencies_docker_group_added": "\u2713 Added to Docker group",
         "dependencies_docker_group_member": "User is already assigned to the docker group.",
         "dependencies_docker_group_missing": "Docker is installed, but this user is not assigned to the docker group yet.",
-        "dependencies_docker_group_session": "The user belongs to the docker group, but this session still cannot access Docker. If the group was just added, sign out and back in once; otherwise check that the Docker service is running.",
+        "dependencies_docker_group_session": "\u2713 Docker group configured successfully. This DCC session was started before the permission was added, so sign out and back in once to activate Docker access.",
+        "dependencies_docker_group_active_no_daemon": "\u2713 Docker group permission is active, but the Docker daemon is not reachable. Check that the Docker service is running.",
         "dependencies_install_ssh": "Install SSH tools",
         "dependencies_open": "Dependencies...",
         "dependencies_install_success": "Installation completed. Dependency status will be checked again.",
@@ -292,6 +294,7 @@ TEXTS = {
         "first_run_docker_unsupported": "Automatic Docker installation is available on Debian/Ubuntu/MX and other apt-based systems. Install Docker manually on this system.",
         "first_run_install_docker": "Install Docker",
         "first_run_add_docker_group": "Add me to the Docker group",
+        "first_run_docker_group_added": "\u2713 Added to Docker group",
         "first_run_recheck_docker": "Check again",
         "first_run_install_title": "Installing Docker",
         "first_run_install_status": "Installing Docker and configuring the local service...",
@@ -769,9 +772,11 @@ TEXTS = {
         "dependencies_install_docker_desktop": "Zainstaluj Docker Desktop",
         "dependencies_install_docker": "Zainstaluj Docker",
         "dependencies_add_docker_group": "Dodaj użytkownika do grupy Docker",
+        "dependencies_docker_group_added": "\u2713 Dodano do grupy Docker",
         "dependencies_docker_group_member": "Użytkownik jest już przypisany do grupy docker.",
         "dependencies_docker_group_missing": "Docker jest zainstalowany, ale ten użytkownik nie jest jeszcze przypisany do grupy docker.",
-        "dependencies_docker_group_session": "Użytkownik należy do grupy docker, ale ta sesja nadal nie ma dostępu do Dockera. Jeżeli grupa została dodana przed chwilą, wyloguj się i zaloguj ponownie; w innym przypadku sprawdź, czy usługa Docker działa.",
+        "dependencies_docker_group_session": "\u2713 Grupa docker zosta\u0142a skonfigurowana poprawnie. Ta sesja DCC zosta\u0142a uruchomiona przed nadaniem uprawnienia, dlatego wyloguj si\u0119 i zaloguj ponownie jeden raz, aby aktywowa\u0107 dost\u0119p do Dockera.",
+        "dependencies_docker_group_active_no_daemon": "\u2713 Uprawnienie grupy docker jest aktywne, ale demon Docker jest niedost\u0119pny. Sprawd\u017a, czy us\u0142uga Docker jest uruchomiona.",
         "dependencies_install_ssh": "Zainstaluj narzędzia SSH",
         "dependencies_open": "Zależności...",
         "dependencies_install_success": "Instalacja zakończona. Stan zależności zostanie sprawdzony ponownie.",
@@ -792,6 +797,7 @@ TEXTS = {
         "first_run_docker_unsupported": "Automatyczna instalacja Dockera jest dostępna dla Debian/Ubuntu/MX i innych systemów opartych na apt. W tym systemie zainstaluj Docker ręcznie.",
         "first_run_install_docker": "Zainstaluj Docker",
         "first_run_add_docker_group": "Dodaj mnie do grupy Docker",
+        "first_run_docker_group_added": "\u2713 Dodano do grupy Docker",
         "first_run_recheck_docker": "Sprawdź ponownie",
         "first_run_install_title": "Instalacja Dockera",
         "first_run_install_status": "Instalowanie Dockera i konfigurowanie lokalnej usługi...",
@@ -5687,16 +5693,27 @@ class FirstRunWizardDialog(QDialog):
         docker_binary = bool(shutil.which("docker"))
         supported = self.main_window.linux_docker_auto_install_supported()
         group_configured = self.main_window.linux_docker_group_configured()
+        group_active = self.main_window.linux_docker_group_active()
         group_supported = self.main_window.linux_docker_group_setup_supported()
+        self.add_docker_group_button.setText(
+            self.texts["first_run_docker_group_added"]
+            if group_configured
+            else self.texts["first_run_add_docker_group"]
+        )
         if docker_ready:
             self.docker_status.setText(self.texts["first_run_docker_ready"])
             self.docker_status.setStyleSheet("color: #58d68d;")
         elif docker_binary:
             if group_configured:
-                self.docker_status.setText(self.texts["dependencies_docker_group_session"])
+                if group_active:
+                    self.docker_status.setText(self.texts["dependencies_docker_group_active_no_daemon"])
+                    self.docker_status.setStyleSheet("color: #ffcc66;")
+                else:
+                    self.docker_status.setText(self.texts["dependencies_docker_group_session"])
+                    self.docker_status.setStyleSheet("color: #58d68d;")
             else:
                 self.docker_status.setText(self.texts["dependencies_docker_group_missing"])
-            self.docker_status.setStyleSheet("color: #ffcc66;")
+                self.docker_status.setStyleSheet("color: #ffcc66;")
         elif supported:
             self.docker_status.setText(self.texts["first_run_docker_missing"])
             self.docker_status.setStyleSheet("color: #ffcc66;")
@@ -5829,6 +5846,7 @@ class DependencyManagerDialog(QDialog):
             docker_binary = bool(shutil.which("docker"))
             supported = self.main_window.linux_docker_auto_install_supported()
             group_configured = self.main_window.linux_docker_group_configured()
+            group_active = self.main_window.linux_docker_group_active()
             group_supported = self.main_window.linux_docker_group_setup_supported()
             if docker_ready:
                 self.docker_status.setText(self.texts["dependencies_ready"])
@@ -5837,10 +5855,15 @@ class DependencyManagerDialog(QDialog):
                 self.docker_action.setEnabled(False)
             elif docker_binary:
                 if group_configured:
-                    self.docker_status.setText(self.texts["dependencies_docker_group_session"])
+                    if group_active:
+                        self.docker_status.setText(self.texts["dependencies_docker_group_active_no_daemon"])
+                        self.docker_status.setStyleSheet("color: #ffcc66;")
+                    else:
+                        self.docker_status.setText(self.texts["dependencies_docker_group_session"])
+                        self.docker_status.setStyleSheet("color: #58d68d;")
                 else:
                     self.docker_status.setText(self.texts["dependencies_docker_group_missing"])
-                self.docker_status.setStyleSheet("color: #ffcc66;")
+                    self.docker_status.setStyleSheet("color: #ffcc66;")
                 self.docker_action.setText(self.texts["dependencies_install_docker"])
                 self.docker_action.setEnabled(False)
             else:
@@ -5850,7 +5873,11 @@ class DependencyManagerDialog(QDialog):
                 self.docker_status.setStyleSheet("color: #ffcc66;")
                 self.docker_action.setText(self.texts["dependencies_install_docker"])
                 self.docker_action.setEnabled(supported)
-            self.docker_group_action.setText(self.texts["dependencies_add_docker_group"])
+            self.docker_group_action.setText(
+                self.texts["dependencies_docker_group_added"]
+                if group_configured
+                else self.texts["dependencies_add_docker_group"]
+            )
             self.docker_group_action.setEnabled(
                 (not docker_ready) and docker_binary and (not group_configured) and group_supported
             )
@@ -6916,11 +6943,19 @@ class MainWindow(QMainWindow):
         self.lang = lang
         self.texts = TEXTS[self.lang]
         self.settings.setValue("language", self.lang)
+        if os.name != "nt":
+            # Some Linux Qt/X11 combinations (including MX/Xfce) can crash if
+            # widgets are translated while the QAction from an open popup menu
+            # is still dispatching. Defer the entire UI refresh until after the
+            # popup has had time to close and the menu event has fully unwound.
+            QTimer.singleShot(120, self._apply_language_after_menu_close)
+            return
         self.apply_language()
-        # Rebuilding/clearing the menu bar from inside the QAction that opened
-        # the language submenu can crash Qt on Linux (the triggering menu is
-        # still dispatching its signal). Rebuild it on the next event-loop turn.
         QTimer.singleShot(0, self._build_menus)
+
+    def _apply_language_after_menu_close(self):
+        self.apply_language()
+        self._build_menus()
 
     def apply_compact_action_labels(self):
         actions = [
