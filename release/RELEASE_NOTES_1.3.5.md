@@ -1,20 +1,298 @@
 # Docker Control Center v1.3.5
 
-## Changes
-- Added a real manual container configuration mode. Creating a container no longer forces the first catalog preset to be selected.
-- Fixed `Configure -> Edit start`: the header and form now stay attached to the actual container being edited, and background catalog refresh cannot replace its values with Agent Zero or another preset.
-- Expanded reconstruction of existing `docker run` settings, including user/workdir, custom networks, capabilities, DNS, extra hosts, devices, memory/CPU limits, tmpfs, labels, named volumes and entrypoint handling.
-- Fixed named-volume reconstruction so Docker volume names are preserved instead of being converted into `/var/lib/docker/volumes/...` bind mounts.
-- Catalog presets deployed through Docker now use `--pull always`, so moving tags such as `latest` and `main` fetch the current image before start/recreate. Manual/local-image configurations are left unchanged.
-- The main DCC application catalog is refreshed asynchronously at DCC startup and again when the deployment catalog is opened.
-- Added upstream GitHub release metadata to catalog entries and display of the latest upstream release in the application card.
-- Added `tools/update_catalog_metadata.py` and a scheduled GitHub Actions workflow that refreshes release metadata for existing catalog apps.
-- Added automated discovery of popular self-hosted/container projects into `catalog/candidates.json`. Discovered projects require review before they can enter the installable catalog.
+Docker Control Center 1.3.5 is the first public release after v1.1.1 that consolidates the large Windows, Linux, SSH, deployment-catalog, monitoring and AI-assistance work completed across the 1.2.x–1.3.x development builds.
 
-## Validation
-- Python source and catalog-maintenance script compile successfully.
-- Catalog, edit-mode and catalog-maintenance regression suite: 10 tests passing.
+## English
 
-## Packages
-- Windows installer: `DockerControlCenter-Setup-1.3.5.exe`
-- Debian/Ubuntu/MX Linux package: `DockerControlCenter_1.3.5_amd64.deb`
+### Highlights
+
+- **Windows + Linux desktop app** — Windows 10/11 support plus a native `.deb` package for Debian/Ubuntu/Linux Mint/MX Linux and other Debian-family systems.
+- **Local Docker, WSL and remote hosts** — manage Docker Desktop, Docker inside WSL/WSL2, normal Linux Docker hosts and Balena OS devices over SSH.
+- **Improved Docker Desktop stability** — local Docker connection handling was hardened for newer Docker Desktop versions on Windows 11.
+- **Host recognition and health information** — better detection of Debian, Ubuntu, Balena OS, WSL and related Linux variants, with CPU/RAM information for connected hosts.
+- **Container resource monitoring** — CPU and RAM usage for individual containers plus overall host/container load; CPU and RAM columns support three-state sorting (descending, ascending, neutral).
+- **Container search** — live filtering while typing container names.
+- **Project/network grouping** — containers can be grouped by project/Compose relationship or shared networks with collapsible groups.
+- **More compact container table** — optimized WWW/link controls, narrower autostart column, movable column widths and better use of vertical space.
+- **Improved port/link detection** — better detection and display of published addresses, IPs, web panels and exposed ports without clipping.
+- **UI scaling** — `Ctrl + mouse wheel` zoom for the container area, improved resize behavior, scrollable dialogs, smaller minimum window size and full-screen/maximize support.
+- **Opaque status area by default** — status text no longer blends with the background unless transparency is explicitly enabled.
+
+### SSH profiles and remote-host workflow
+
+- Added **SSH Agent** as an authentication mode.
+- Added **Copy profile** for quickly cloning a connection profile and changing only selected fields such as IP/hostname.
+- Added profile **Import / Export** both in the profiles dialog and the File menu.
+- Imported profiles intentionally omit passwords/passphrases; key paths can be changed after moving a profile to another computer or OS.
+- Added editable SSH key path on Windows and Linux.
+- Improved direct SSH, tunnel and Balena command handling.
+- Remote restart no longer reports a false error simply because the SSH session drops during reboot.
+- After a requested host restart DCC performs non-blocking reconnect checks, shows restart/recovery status and refreshes containers when the host comes back.
+- Automatic reconnect checks can be cancelled without freezing the main window.
+
+### First-run setup and dependencies
+
+- Added a first-run wizard on Linux.
+- DCC can detect a missing Docker Engine and offer installation on supported Debian-family distributions.
+- Added `Configure -> Dependencies` for Docker/Docker Desktop and OpenSSH/SSH Agent checks and later installation.
+- Local-mode errors now provide a direct path to install/start Docker when it is unavailable.
+- Windows installer performs packaged-runtime checks and verifies required integration components.
+- Linux package declares the Qt/XCB/OpenSSH/PolicyKit runtime dependencies needed by the desktop app.
+
+### Application updates and settings
+
+- Automatic update checks are enabled by default and can be disabled.
+- Update notifications can be disabled independently.
+- Added manual **Check for updates**.
+- Update prompt supports update now / remind later / cancel behavior.
+- Added **Reset application settings** while preserving connection profiles.
+- Added a separate **Factory reset** with an explicit warning explaining that profiles, saved credentials, LLM settings and local DCC data will be removed while Docker-host data remains untouched.
+
+### Deployment catalog / app store
+
+- Added an application-store style deployment catalog with categories, descriptions, icons, project links, documentation and GitHub/source links.
+- The permanent primary catalog is now **`https://github.com/hattimon/DCC`**.
+- The installable manifest is **`dcc-catalog.json`** in the repository root.
+- DCC refreshes the catalog asynchronously at application startup and again when the deployment catalog is opened.
+- Catalog data is cached locally so the store remains usable during temporary GitHub/network failures.
+- Users can add/remove extra catalog repositories while the main DCC repository remains protected as the primary source.
+- Added manual **Refresh catalogs**.
+- Added Vane (formerly Perplexica) and a much larger set of self-hosted, AI, automation, monitoring, administration, storage and media applications.
+- Catalog Docker presets use `--pull always`, so moving tags such as `latest`/`main` fetch a fresh image before deployment.
+- Manual/local-image configurations do not force a pull, preserving private/local images.
+
+### Automated catalog maintenance
+
+- Added scheduled GitHub Actions maintenance for existing catalog applications.
+- Existing GitHub-backed apps can track upstream release/tag metadata.
+- The app card can display the latest known upstream release.
+- Added automated discovery of popular self-hosted/container repositories.
+- Newly discovered projects are written only to `catalog/candidates.json` and proposed for review; they are **not** automatically made installable.
+- This keeps automated discovery separate from trusted deployment commands and avoids publishing unsafe mounts/privileges without review.
+
+### Manual deployment and Edit start
+
+- Added a real **Manual configuration** mode for new containers.
+- A new container no longer forces the first store preset (previously Agent Zero) to be selected.
+- Users can type the image, name, host/container ports, additional parameters, command or a complete `docker run` command manually.
+- Fixed `Configure -> Edit start` so the header identifies the actual selected container rather than showing a catalog preset.
+- Background catalog refresh can no longer overwrite the edited container with the first catalog item.
+- Existing container configuration reconstruction was expanded to preserve more real runtime settings:
+  - restart policy
+  - environment variables
+  - bind mounts and named volumes
+  - published ports
+  - user and working directory
+  - network mode
+  - privileged/read-only/auto-remove flags
+  - added/dropped capabilities
+  - DNS and extra hosts
+  - devices
+  - CPU and memory limits
+  - shared memory size
+  - tmpfs mounts
+  - labels
+  - entrypoint and command
+- Named Docker volumes remain named volumes instead of being reconstructed as `/var/lib/docker/volumes/...` bind mounts.
+
+### Safer deployment and automatic repair
+
+- Improved deterministic port-conflict detection against currently running containers.
+- DCC can propose safe port/name corrections before deployment.
+- Deployment runs through a progress window with clear **Success / Failure** state and localized messages.
+- Failed deployments can be diagnosed and retried while preserving unrelated configuration.
+- Optional AI-assisted repair can analyze a failed `docker run` command and propose a corrected command using current host/container/port context.
+- Risky options such as privileged mode, host networking, devices, Docker socket mounts or host-root mounts remain visible and require explicit confirmation.
+
+### AI / LLM providers
+
+The LLM configuration now supports:
+
+- Local Ollama
+- OpenAI
+- Anthropic Claude
+- Google Gemini
+- Groq
+- Mistral AI
+- OpenRouter
+- DeepSeek
+- xAI / Grok
+
+Model lists can be detected/refreshed where supported, and provider credentials remain in the local secret store rather than the public repository.
+
+### Screenshots
+
+![Main window](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/01-main-window.png)
+
+![Manual container configuration](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/02-manual-container-configuration.png)
+
+![Edit existing container](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/03-edit-existing-container.png)
+
+![Catalog repositories](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/04-catalog-repositories.png)
+
+![Connection profiles](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/05-connection-profiles.png)
+
+![Dependencies](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/06-dependencies.png)
+
+![LLM providers](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/07-llm-providers.png)
+
+### Downloads
+
+- **Windows installer:** `DockerControlCenter-Setup.exe`
+- **Windows portable:** `DockerControlCenter-Portable.zip`
+- **Debian / Ubuntu / MX Linux:** `DockerControlCenter_1.3.5_amd64.deb`
+- **Catalog manifest:** `dcc-catalog.json`
+- **Checksums:** `SHA256SUMS-1.3.5.txt`
+- GitHub also provides automatic source-code ZIP and TAR archives for the tag.
+
+---
+
+## Polski
+
+### Najważniejsze zmiany
+
+- **Windows + Linux** — obsługa Windows 10/11 oraz natywny pakiet `.deb` dla Debian/Ubuntu/Linux Mint/MX Linux i innych systemów bazujących na Debianie.
+- **Docker lokalny, WSL i hosty zdalne** — obsługa Docker Desktop, Dockera w WSL/WSL2, zwykłych hostów Linux oraz urządzeń Balena OS przez SSH.
+- **Stabilniejsze połączenie z Docker Desktop** — poprawiono obsługę lokalnego Dockera z nowszym Docker Desktop na Windows 11.
+- **Lepsze rozpoznawanie hosta** — Debian, Ubuntu, Balena OS, WSL i pokrewne systemy oraz informacje CPU/RAM hosta.
+- **Monitoring zasobów kontenerów** — CPU i RAM dla każdego kontenera oraz ogólne obciążenie; kolumny CPU/RAM mają sortowanie malejąco, rosnąco i tryb neutralny.
+- **Wyszukiwarka kontenerów** — filtrowanie listy już podczas wpisywania nazwy.
+- **Grupowanie projektów i sieci** — kontenery mogą być grupowane wg projektu/Compose lub wspólnych sieci z rozwijanymi grupami.
+- **Bardziej kompaktowa tabela** — zoptymalizowane WWW/linki, węższy autostart, przesuwane szerokości kolumn i więcej miejsca na listę kontenerów.
+- **Lepsze wykrywanie IP/portów/paneli WWW** — poprawione adresy wystawionych usług i brak ucinania portów.
+- **Skalowanie UI** — `Ctrl + scroll` zmienia skalę obszaru kontenerów; poprawiono minimalny rozmiar okna, paski przewijania i pełny ekran/maksymalizację.
+- **Nieprzezroczysty status domyślnie** — tekst statusu nie zlewa się z tłem, dopóki użytkownik sam nie włączy przezroczystości.
+
+### Profile SSH i hosty zdalne
+
+- Dodano logowanie przez **Agenta SSH**.
+- Dodano **Kopiuj profil**, aby szybko zmienić np. tylko IP/host.
+- Dodano **Import / Eksport profili** w oknie profili i w menu Plik.
+- Eksport/import celowo nie przenosi haseł ani haseł do kluczy; po przeniesieniu profilu można wskazać nową ścieżkę klucza.
+- Ścieżka klucza SSH jest edytowalna na Windows i Linux.
+- Poprawiono Direct SSH, tunele TCP oraz komendy Balena.
+- Restart hosta nie zgłasza już fałszywego błędu tylko dlatego, że SSH znika w trakcie restartu.
+- Po restarcie DCC nie blokuje okna: w tle sprawdza odzyskanie połączenia, pokazuje stan restartu i automatycznie odświeża kontenery po powrocie hosta.
+- Automatyczne próby odzyskania połączenia można anulować.
+
+### Pierwsze uruchomienie i zależności
+
+- Dodano kreator pierwszego uruchomienia na Linux.
+- DCC wykrywa brak Dockera i może zaproponować instalację Docker Engine na wspieranych systemach Debian-family.
+- Dodano `Konfiguruj -> Zależności` do sprawdzania/instalacji Docker/Docker Desktop i OpenSSH/Agenta SSH.
+- Przy braku lokalnego Dockera komunikat prowadzi bezpośrednio do instalacji/uruchomienia.
+- Instalator Windows wykonuje test spakowanego runtime.
+- Pakiet Linux deklaruje wymagane zależności Qt/XCB/OpenSSH/PolicyKit.
+
+### Aktualizacje i ustawienia
+
+- Automatyczne sprawdzanie aktualizacji jest domyślnie włączone i można je wyłączyć.
+- Powiadomienia o aktualizacjach można wyłączyć osobno.
+- Dodano ręczne **Sprawdź aktualizacje**.
+- Okno aktualizacji obsługuje aktualizację teraz / przypomnij później / anuluj.
+- Dodano **Reset ustawień aplikacji** bez usuwania profili połączeń.
+- Dodano osobny **Reset do ustawień fabrycznych** z ostrzeżeniem, które dokładnie opisuje usuwane profile, dane logowania, konfigurację LLM i dane DCC. Dane Dockera na hostach nie są usuwane.
+
+### Katalog wdrożeń / sklep aplikacji
+
+- Dodano katalog aplikacji w stylu sklepu: kategorie, opisy, ikonki, link do projektu, dokumentacji i GitHuba/źródła.
+- Stałym głównym repozytorium katalogu jest **`https://github.com/hattimon/DCC`**.
+- Instalowalny manifest znajduje się w **`dcc-catalog.json`** w katalogu głównym repo.
+- DCC odświeża katalog w tle przy starcie aplikacji oraz ponownie po wejściu do katalogu wdrożeń.
+- Katalog jest cache'owany lokalnie, więc działa również przy chwilowej niedostępności GitHuba/sieci.
+- Można dodawać i usuwać dodatkowe repozytoria katalogów; głównego repo DCC nie można przypadkowo usunąć.
+- Dodano ręczne **Odśwież katalogi**.
+- Dodano Vane (dawniej Perplexica) i znacznie większy zestaw aplikacji self-hosted, AI, automatyzacji, monitoringu, administracji, storage i media.
+- Presety katalogu dla Dockera używają `--pull always`, dzięki czemu tagi `latest`/`main` pobierają świeży obraz przed wdrożeniem.
+- Tryb ręczny i lokalne/prywatne obrazy nie wymuszają pobierania.
+
+### Automatyczne utrzymywanie katalogu
+
+- Dodano cykliczny GitHub Actions do sprawdzania istniejących aplikacji katalogu.
+- Wpisy GitHub mogą otrzymywać informacje o najnowszym release/tagu upstream.
+- Karta aplikacji może pokazywać najnowszą znaną wersję upstream.
+- Dodano automatyczne wyszukiwanie popularnych projektów self-hosted/kontenerowych.
+- Nowo znalezione projekty trafiają wyłącznie do `catalog/candidates.json` do przeglądu i **nie są automatycznie publikowane jako instalowalne**.
+- Dzięki temu automat nie publikuje bez kontroli komend z ryzykownymi mountami/uprawnieniami.
+
+### Ręczna instalacja i Edytuj start
+
+- Dodano prawdziwy tryb **Konfiguracja ręczna**.
+- Nowy kontener nie ma już automatycznie wybranego pierwszego presetu (wcześniej Agent Zero).
+- Można ręcznie wpisać obraz, nazwę, port hosta/kontenera, dodatkowe parametry, komendę lub pełny `docker run`.
+- Poprawiono `Konfiguruj -> Edytuj start`: nagłówek pokazuje faktycznie edytowany kontener.
+- Odświeżenie katalogu w tle nie może już nadpisać formularza pierwszym presetem.
+- Rozszerzono odtwarzanie prawdziwej konfiguracji istniejącego kontenera o:
+  - restart policy
+  - zmienne środowiskowe
+  - bind mounty i named volumes
+  - porty
+  - user/workdir
+  - network mode
+  - privileged/read-only/auto-remove
+  - capabilities
+  - DNS/extra hosts
+  - devices
+  - limity CPU/RAM
+  - shm-size
+  - tmpfs
+  - labels
+  - entrypoint i command
+- Nazwane wolumeny Dockera pozostają named volumes, zamiast zmieniać się w bind mount `/var/lib/docker/volumes/...`.
+
+### Bezpieczniejsze wdrażanie i automatyczna naprawa
+
+- Rozbudowano deterministyczne wykrywanie konfliktów portów z aktualnymi kontenerami.
+- DCC może zaproponować bezpieczne korekty portu/nazwy przed instalacją.
+- Wdrożenie ma czytelne okno postępu i jednoznaczny stan **Sukces / Błąd**, zgodny z językiem aplikacji.
+- Nieudane wdrożenie może zostać przeanalizowane i ponowione bez utraty niezwiązanej konfiguracji.
+- Opcjonalna naprawa AI analizuje błąd `docker run` razem z aktualnym kontekstem hosta, portów i kontenerów i proponuje poprawioną komendę.
+- Ryzykowne opcje, np. privileged, host networking, devices, Docker socket czy mount katalogu root, nadal wymagają jawnego potwierdzenia.
+
+### AI / dostawcy LLM
+
+Konfiguracja LLM obsługuje teraz:
+
+- lokalną Ollama
+- OpenAI
+- Anthropic Claude
+- Google Gemini
+- Groq
+- Mistral AI
+- OpenRouter
+- DeepSeek
+- xAI / Grok
+
+Lista modeli może być wykrywana/odświeżana tam, gdzie dostawca to wspiera, a klucze pozostają w lokalnym magazynie sekretów i nie trafiają do publicznego repozytorium.
+
+### Zrzuty ekranu
+
+![Główne okno](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/01-main-window.png)
+
+![Ręczna konfiguracja kontenera](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/02-manual-container-configuration.png)
+
+![Edycja istniejącego kontenera](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/03-edit-existing-container.png)
+
+![Repozytoria katalogów](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/04-catalog-repositories.png)
+
+![Profile połączeń](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/05-connection-profiles.png)
+
+![Zależności](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/06-dependencies.png)
+
+![Dostawcy LLM](https://raw.githubusercontent.com/hattimon/DCC/main/images/release-1.3.5/07-llm-providers.png)
+
+### Pliki do pobrania
+
+- **Windows instalator:** `DockerControlCenter-Setup.exe`
+- **Windows portable:** `DockerControlCenter-Portable.zip`
+- **Debian / Ubuntu / MX Linux:** `DockerControlCenter_1.3.5_amd64.deb`
+- **Manifest katalogu aplikacji:** `dcc-catalog.json`
+- **Sumy kontrolne:** `SHA256SUMS-1.3.5.txt`
+- GitHub automatycznie udostępnia również archiwa ZIP/TAR kodu źródłowego dla tagu.
+
+## Validation / Walidacja
+
+- Windows packaged runtime `--self-check`: **OK**
+- Linux packaged runtime `--self-check`: **OK**
+- Automated Python regression tests: **13/13 passed**
+- Installed local Windows version after update: **1.3.5**
