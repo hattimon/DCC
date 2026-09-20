@@ -1,0 +1,65 @@
+{
+  "name": "Example Docker Control Center catalog",
+  "apps": [
+    {
+      "name": "Agent Zero",
+      "image": "agent0ai/agent-zero:latest",
+      "category": "AI / Agents",
+      "description": "Autonomous AI agent framework with a web UI and persistent workspace.",
+      "default_name": "agent-zero",
+      "container_port": "80",
+      "host_port": "5080",
+      "extra": "-v a0_usr:/a0/usr --restart unless-stopped",
+      "source_url": "https://github.com/agent0ai/agent-zero",
+      "docs_url": "https://github.com/agent0ai/agent-zero/blob/main/docs/setup/installation.md",
+      "homepage_url": "https://www.agent-zero.ai/",
+      "icon_text": "A0",
+      "engines": ["docker"],
+      "archs": []
+    },
+    {
+      "name": "IT-Tools",
+      "image": "ghcr.io/corentinth/it-tools:latest",
+      "category": "Tools / Developer",
+      "description": "Lightweight self-hosted collection of utilities for developers.",
+      "default_name": "it-tools",
+      "container_port": "80",
+      "host_port": "8092",
+      "extra": "--restart unless-stopped",
+      "source_url": "https://github.com/CorentinTh/it-tools",
+      "homepage_url": "https://it-tools.tech/",
+      "icon_text": "IT",
+      "engines": ["docker", "balena"],
+      "archs": ["x86_64", "amd64", "aarch64", "arm64"]
+    },
+    {
+      "name": "Vane (formerly Perplexica)",
+      "image": "itzcrazykns1337/vane:latest",
+      "category": "AI / Search",
+      "description": "Privacy-focused AI answering engine with bundled SearXNG.",
+      "default_name": "vane",
+      "container_port": "3000",
+      "host_port": "3100",
+      "extra": "-v vane-data:/home/vane/data --restart unless-stopped",
+      "source_url": "https://github.com/ItzCrazyKns/Vane",
+      "docs_url": "https://github.com/ItzCrazyKns/Vane/tree/master/docs/installation",
+      "homepage_url": "https://github.com/ItzCrazyKns/Vane",
+      "icon_text": "VA",
+      "engines": ["docker"],
+      "archs": []
+    },
+    {
+      "name": "Uptime Kuma",
+      "image": "louislam/uptime-kuma:1",
+      "category": "Monitoring",
+      "description": "Self-hosted uptime monitoring dashboard.",
+      "default_name": "uptime-kuma",
+      "container_port": "3001",
+      "host_port": "3002",
+      "extra": "-v uptime_kuma:/app/data --restart unless-stopped",
+      "source_url": "https://github.com/louislam/uptime-kuma",
+      "homepage_url": "https://uptime.kuma.pet/",
+      "icon_text": "UK"
+    }
+  ]
+}

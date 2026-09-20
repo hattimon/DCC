@@ -8,28 +8,29 @@
 ![Docker](https://img.shields.io/badge/Docker-Local%20%7C%20WSL%20%7C%20SSH-2496ED?logo=docker&logoColor=white)
 ![Languages](https://img.shields.io/badge/Languages-EN%20%7C%20PL-F7DF1E?logo=googletranslate&logoColor=black)
 
-A polished Windows control panel for managing Docker locally, through WSL/WSL2, and on remote hosts over SSH.
+A cross-platform desktop control panel for managing Docker on Windows and Debian-family Linux, locally, through WSL/WSL2, and on remote hosts over SSH or Balena OS.
 
 ### Download Latest Version
 [![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/latest)
+[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/latest)
 
-## What's New in v1.1.1
+## What's New in v1.3.5
 
 ### EN
-- Added theme + neon palette controls in `Configure -> Application` (static or animated).
-- Improved Balena OS autostart detection and Balena-aware AI command handling (`balena run`).
-- Added infrastructure info + restart button with host status indicator.
-- Improved local Docker detection (Docker Desktop/WSL) and WSL info behavior.
-- Added Info menu with app version, changelog, and automatic update checks.
-- Window size now persists between launches.
+- Added a manual container configuration mode with editable image, ports, parameters, command and full `docker run` input.
+- Fixed `Configure -> Edit start` so it shows the actual selected container and preserves its current runtime configuration instead of selecting the first app-store preset.
+- Added a central application catalog from `hattimon/DCC`, automatic refresh at startup, extra catalog repositories and cached offline fallback.
+- Catalog deployments pull fresh Docker images, while local/private manual images remain untouched.
+- Added automated upstream release tracking and a reviewed candidate-discovery workflow for new self-hosted/container applications.
+- Expanded Windows + Linux support, dependency setup, SSH profiles/agent support, container resource monitoring, grouping, search and sortable CPU/RAM columns.
 
 ### PL
-- Dodano ustawienia motywu i palety neonu w `Konfiguruj -> Aplikacja` (statyczny lub animowany).
-- Poprawiono autostart na Balena OS oraz obsluge polecen AI z `balena run`.
-- Dodano przycisk informacji o infrastrukturze i restartu hosta z indikacja statusu.
-- Poprawiono wykrywanie lokalnego Dockera (Docker Desktop/WSL) i zachowanie informacji WSL.
-- Dodano sekcje Info z wersja aplikacji, changelogiem i automatycznym sprawdzaniem aktualizacji.
-- Zapamietywanie rozmiaru okna miedzy uruchomieniami.
+- Dodano ręczną konfigurację kontenera z edycją obrazu, portów, parametrów, komendy i pełnego polecenia `docker run`.
+- Poprawiono `Konfiguruj -> Edytuj start`: okno pokazuje rzeczywiście wybrany kontener i zachowuje jego aktualną konfigurację zamiast podstawiać pierwszy preset ze sklepu.
+- Dodano centralny katalog aplikacji z `hattimon/DCC`, automatyczne odświeżanie przy starcie, dodatkowe repozytoria katalogów i cache offline.
+- Wdrożenia z katalogu pobierają świeży obraz Docker, a ręczne/lokalne obrazy pozostają bez wymuszonego pobierania.
+- Dodano automatyczne śledzenie release'ów upstream oraz workflow odkrywający nowe aplikacje jako kandydatów wymagających przeglądu.
+- Rozbudowano obsługę Windows + Linux, zależności, profile SSH/ssh-agent, monitoring CPU/RAM, grupowanie, wyszukiwarkę i sortowanie kolumn CPU/RAM.
 
 ## English
 
@@ -85,7 +86,7 @@ Screenshots below use the English UI.
 - WSL / WSL2 integration helpers
 - SSH profiles with key, passphrase, or password auth
 - Balena OS auto-detection (`balena ps` / `balena run`)
-- Curated catalog of 40+ popular images, including lightweight Raspberry Pi options
+- Curated catalog of 50+ popular images, including lightweight Raspberry Pi options
 - AI assistant for `docker run` command editing
 - Per-theme custom backgrounds
 - Music toggle and futuristic desktop UI

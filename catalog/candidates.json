@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "note": "Discovery only. Entries are not published to DCC until reviewed and copied into dcc-catalog.json.",
+  "candidates": []
+}

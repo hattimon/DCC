@@ -10,8 +10,12 @@ __pycache__/
 # Build artifacts
 /build/
 /dist/
-/release/
+/release/*
+!/release/RELEASE_NOTES_*.md
+!/release/SHA256SUMS-*.txt
 *.spec
+!DockerControlCenter.spec
+!DockerControlCenterDebug.spec
 
 # Temporary local files
 /_tmp*.txt

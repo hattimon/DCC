@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Docker Control Center
+Comment=Manage local and remote Docker/Balena containers
+Exec=/usr/bin/docker-control-center
+Icon=docker-control-center
+Terminal=false
+Categories=System;Utility;
+Keywords=Docker;Balena;Containers;SSH;
+StartupNotify=true
