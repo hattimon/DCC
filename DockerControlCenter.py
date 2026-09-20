@@ -2906,7 +2906,7 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         background: rgba(255,255,255,0.04);
         border: 0;
         border-bottom: 1px solid {palette['border']};
-        padding: 5px 6px;
+        padding: 5px 10px 5px 6px;
         color: {palette['glow_text']};
         font-weight: 700;
     }}
@@ -2927,6 +2927,29 @@ def make_colored_icon(color: QColor, size: int = 14) -> QIcon:
     painter.drawEllipse(1, 1, radius * 2, radius * 2)
     painter.end()
     return QIcon(pix)
+
+
+class ResizeGripHeader(QHeaderView):
+    """Interactive table header with a visible resize grip at each divider."""
+
+    def paintSection(self, painter: QPainter, rect, logical_index: int):
+        super().paintSection(painter, rect, logical_index)
+        if (
+            not rect.isValid()
+            or logical_index < 0
+            or self.visualIndex(logical_index) >= self.count() - 1
+        ):
+            return
+        painter.save()
+        grip_color = self.palette().color(self.foregroundRole())
+        grip_color.setAlpha(150)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(grip_color)
+        x = rect.right() - 3.0
+        center_y = rect.center().y()
+        for offset in (-4.0, 0.0, 4.0):
+            painter.drawEllipse(QRectF(x - 1.15, center_y + offset - 1.15, 2.3, 2.3))
+        painter.restore()
 
 
 def resolve_background_path(theme: str) -> Path:
@@ -5973,6 +5996,9 @@ class MainWindow(QMainWindow):
                 self.settings.setValue("window_height", size.height())
             except Exception:
                 pass
+        if hasattr(self, "table"):
+            self._save_container_column_widths()
+        self.settings.sync()
         super().closeEvent(event)
 
     def resizeEvent(self, event):
@@ -6065,6 +6091,45 @@ class MainWindow(QMainWindow):
         if self.last_containers:
             self.render_container_table(self.last_containers)
         self.statusBar().showMessage(self.texts["container_zoom_status"].format(percent=new_percent), 3500)
+
+    def _restore_container_column_widths(self):
+        if not hasattr(self, "table"):
+            return False
+        raw = self.settings.value("containers/column_widths_v1", "")
+        if not raw:
+            return False
+        try:
+            widths = json.loads(str(raw))
+            if not isinstance(widths, list) or len(widths) != self.table.columnCount():
+                return False
+            zoom_factor = max(0.01, self.container_table_zoom / 100.0)
+            self._restoring_container_column_widths = True
+            try:
+                for column, saved_width in enumerate(widths):
+                    base_width = max(24.0, float(saved_width))
+                    self.table.setColumnWidth(column, max(24, round(base_width * zoom_factor)))
+            finally:
+                self._restoring_container_column_widths = False
+            return True
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return False
+
+    def _save_container_column_widths(self):
+        if not hasattr(self, "table") or getattr(self, "_restoring_container_column_widths", False):
+            return
+        zoom_factor = max(0.01, self.container_table_zoom / 100.0)
+        widths = [
+            round(self.table.columnWidth(column) / zoom_factor, 2)
+            for column in range(self.table.columnCount())
+        ]
+        self.settings.setValue("containers/column_widths_v1", json.dumps(widths, separators=(",", ":")))
+
+    def _queue_container_column_width_save(self, *_args):
+        if getattr(self, "_restoring_container_column_widths", False):
+            return
+        timer = getattr(self, "_column_width_save_timer", None)
+        if timer is not None:
+            timer.start()
 
     def show_shortcuts_dialog(self):
         QMessageBox.information(
@@ -6308,6 +6373,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(view_panel)
 
         self.table = QTableWidget(0, 12)
+        self.table.setHorizontalHeader(ResizeGripHeader(Qt.Orientation.Horizontal, self.table))
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.container_table_base_font = QFont(self.table.font())
         base_font_size = self.container_table_base_font.pointSizeF()
@@ -6332,6 +6398,13 @@ class MainWindow(QMainWindow):
         zoom_factor = self.container_table_zoom / 100.0
         for column, base_width in enumerate(base_widths):
             self.table.setColumnWidth(column, max(24, round(base_width * zoom_factor)))
+        self._restoring_container_column_widths = False
+        self._restore_container_column_widths()
+        self._column_width_save_timer = QTimer(self)
+        self._column_width_save_timer.setSingleShot(True)
+        self._column_width_save_timer.setInterval(250)
+        self._column_width_save_timer.timeout.connect(self._save_container_column_widths)
+        header.sectionResized.connect(self._queue_container_column_width_save)
         self.table.setWordWrap(True)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
