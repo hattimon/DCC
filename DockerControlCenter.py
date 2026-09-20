@@ -429,6 +429,8 @@ TEXTS = {
         "col_networks": "Networks",
         "col_autostart": "Autostart",
         "select_all": "Select all",
+        "column_magnet": "Magnet",
+        "column_magnet_tooltip": "Keep the manually set column proportions and fit them to the table width when the window is resized.",
         "container_search_placeholder": "Search containers by name...",
         "group_by_label": "Group",
         "group_by_project": "Projects",
@@ -910,6 +912,8 @@ TEXTS = {
         "col_networks": "Sieci",
         "col_autostart": "Autostart",
         "select_all": "Zaznacz wszystkie",
+        "column_magnet": "Magnes",
+        "column_magnet_tooltip": "Zachowuj ręcznie ustawione proporcje kolumn i dopasowuj je do szerokości tabeli przy zmianie rozmiaru okna.",
         "container_search_placeholder": "Szukaj kontenera po nazwie...",
         "group_by_label": "Grupuj",
         "group_by_project": "Projekty",
@@ -5845,6 +5849,12 @@ class MainWindow(QMainWindow):
         except Exception:
             self.container_table_zoom = 100
         self.container_table_zoom = max(70, min(160, self.container_table_zoom))
+        self.container_column_magnet = str(
+            self.settings.value("containers/column_magnet", "true")
+        ).lower() in {"1", "true", "yes"}
+        self._container_column_base_widths: Optional[List[float]] = None
+        self._restoring_container_column_widths = False
+        self._applying_column_magnet = False
         self.music_enabled = str(self.settings.value("music_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
@@ -6005,6 +6015,9 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         if not self.isFullScreen() and not self.isMaximized():
             self._last_normal_geometry = self.geometry()
+        timer = getattr(self, "_column_magnet_resize_timer", None)
+        if self.container_column_magnet and timer is not None:
+            timer.start()
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -6083,11 +6096,17 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setFont(header_font)
         self.table.verticalHeader().setDefaultSectionSize(max(28, round(34 * new_percent / 100.0)))
 
-        for column in range(self.table.columnCount()):
-            current_width = self.table.columnWidth(column)
-            self.table.setColumnWidth(column, max(24, round(current_width * ratio)))
+        self._restoring_container_column_widths = True
+        try:
+            for column in range(self.table.columnCount()):
+                current_width = self.table.columnWidth(column)
+                self.table.setColumnWidth(column, max(24, round(current_width * ratio)))
+        finally:
+            self._restoring_container_column_widths = False
 
         self.settings.setValue("container_table_zoom", new_percent)
+        if self.container_column_magnet:
+            QTimer.singleShot(0, self._apply_container_column_magnet)
         if self.last_containers:
             self.render_container_table(self.last_containers)
         self.statusBar().showMessage(self.texts["container_zoom_status"].format(percent=new_percent), 3500)
@@ -6102,11 +6121,11 @@ class MainWindow(QMainWindow):
             widths = json.loads(str(raw))
             if not isinstance(widths, list) or len(widths) != self.table.columnCount():
                 return False
+            self._container_column_base_widths = [max(24.0, float(value)) for value in widths]
             zoom_factor = max(0.01, self.container_table_zoom / 100.0)
             self._restoring_container_column_widths = True
             try:
-                for column, saved_width in enumerate(widths):
-                    base_width = max(24.0, float(saved_width))
+                for column, base_width in enumerate(self._container_column_base_widths):
                     self.table.setColumnWidth(column, max(24, round(base_width * zoom_factor)))
             finally:
                 self._restoring_container_column_widths = False
@@ -6115,21 +6134,95 @@ class MainWindow(QMainWindow):
             return False
 
     def _save_container_column_widths(self):
-        if not hasattr(self, "table") or getattr(self, "_restoring_container_column_widths", False):
+        if (
+            not hasattr(self, "table")
+            or getattr(self, "_restoring_container_column_widths", False)
+            or getattr(self, "_applying_column_magnet", False)
+        ):
             return
         zoom_factor = max(0.01, self.container_table_zoom / 100.0)
         widths = [
             round(self.table.columnWidth(column) / zoom_factor, 2)
             for column in range(self.table.columnCount())
         ]
+        self._container_column_base_widths = list(widths)
         self.settings.setValue("containers/column_widths_v1", json.dumps(widths, separators=(",", ":")))
 
     def _queue_container_column_width_save(self, *_args):
-        if getattr(self, "_restoring_container_column_widths", False):
+        if (
+            getattr(self, "_restoring_container_column_widths", False)
+            or getattr(self, "_applying_column_magnet", False)
+        ):
             return
         timer = getattr(self, "_column_width_save_timer", None)
         if timer is not None:
             timer.start()
+
+    def _commit_container_column_widths(self):
+        self._save_container_column_widths()
+        if self.container_column_magnet:
+            self._apply_container_column_magnet()
+
+    def set_container_column_magnet(self, enabled: bool):
+        self._save_container_column_widths()
+        self.container_column_magnet = bool(enabled)
+        self.settings.setValue("containers/column_magnet", "true" if self.container_column_magnet else "false")
+        self.settings.sync()
+        if self.container_column_magnet:
+            QTimer.singleShot(0, self._apply_container_column_magnet)
+
+    def _apply_container_column_magnet(self):
+        if not self.container_column_magnet or not hasattr(self, "table"):
+            return
+        target_width = self.table.viewport().width()
+        if target_width <= 0 or self.table.columnCount() <= 0:
+            return
+        zoom_factor = max(0.01, self.container_table_zoom / 100.0)
+        base_widths = self._container_column_base_widths
+        if not base_widths or len(base_widths) != self.table.columnCount():
+            base_widths = [
+                max(24.0, self.table.columnWidth(column) / zoom_factor)
+                for column in range(self.table.columnCount())
+            ]
+            self._container_column_base_widths = list(base_widths)
+
+        weights = [max(1.0, float(width)) for width in base_widths]
+        minimum = 24
+        if target_width <= minimum * len(weights):
+            scaled = [minimum] * len(weights)
+        else:
+            total = sum(weights) or float(len(weights))
+            scaled = [max(minimum, round(target_width * weight / total)) for weight in weights]
+            delta = target_width - sum(scaled)
+            visual_order = [
+                self.table.horizontalHeader().logicalIndex(visual)
+                for visual in range(self.table.columnCount())
+            ]
+            if delta > 0:
+                index = 0
+                while delta > 0:
+                    logical = visual_order[index % len(visual_order)]
+                    scaled[logical] += 1
+                    delta -= 1
+                    index += 1
+            elif delta < 0:
+                index = len(visual_order) - 1
+                remaining = -delta
+                guard = 0
+                while remaining > 0 and guard < target_width * 2:
+                    logical = visual_order[index % len(visual_order)]
+                    if scaled[logical] > minimum:
+                        scaled[logical] -= 1
+                        remaining -= 1
+                    index -= 1
+                    guard += 1
+
+        self._applying_column_magnet = True
+        try:
+            for column, width in enumerate(scaled):
+                self.table.setColumnWidth(column, width)
+        finally:
+            self._applying_column_magnet = False
 
     def show_shortcuts_dialog(self):
         QMessageBox.information(
@@ -6347,6 +6440,11 @@ class MainWindow(QMainWindow):
         self.host_metrics_label.setWordWrap(False)
         self.host_metrics_label.setMaximumWidth(420)
         self.host_metrics_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.column_magnet_checkbox = QCheckBox(self.texts["column_magnet"])
+        self.column_magnet_checkbox.setChecked(self.container_column_magnet)
+        self.column_magnet_checkbox.setToolTip(self.texts["column_magnet_tooltip"])
+        self.column_magnet_checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.column_magnet_checkbox.toggled.connect(self.set_container_column_magnet)
 
         view_panel = QFrame()
         view_panel.setObjectName("controlPanel")
@@ -6363,6 +6461,7 @@ class MainWindow(QMainWindow):
         infra_layout.addWidget(self.group_by_label)
         infra_layout.addWidget(self.group_by_combo)
         infra_layout.addWidget(self.host_metrics_label, 1)
+        infra_layout.addWidget(self.column_magnet_checkbox, 0)
         view_panel_layout.addLayout(infra_layout)
 
         host_actions_layout = QHBoxLayout()
@@ -6399,12 +6498,18 @@ class MainWindow(QMainWindow):
         for column, base_width in enumerate(base_widths):
             self.table.setColumnWidth(column, max(24, round(base_width * zoom_factor)))
         self._restoring_container_column_widths = False
-        self._restore_container_column_widths()
+        restored_widths = self._restore_container_column_widths()
+        if not restored_widths:
+            self._container_column_base_widths = [float(width) for width in base_widths]
         self._column_width_save_timer = QTimer(self)
         self._column_width_save_timer.setSingleShot(True)
         self._column_width_save_timer.setInterval(250)
-        self._column_width_save_timer.timeout.connect(self._save_container_column_widths)
+        self._column_width_save_timer.timeout.connect(self._commit_container_column_widths)
         header.sectionResized.connect(self._queue_container_column_width_save)
+        self._column_magnet_resize_timer = QTimer(self)
+        self._column_magnet_resize_timer.setSingleShot(True)
+        self._column_magnet_resize_timer.setInterval(35)
+        self._column_magnet_resize_timer.timeout.connect(self._apply_container_column_magnet)
         self.table.setWordWrap(True)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
@@ -6419,6 +6524,8 @@ class MainWindow(QMainWindow):
         self.table.installEventFilter(self)
         self.table.viewport().installEventFilter(self)
         main_layout.addWidget(self.table, 1)
+        if self.container_column_magnet:
+            QTimer.singleShot(0, self._apply_container_column_magnet)
 
         self.main_scroll_area = QScrollArea(self)
         self.main_scroll_area.setObjectName("mainScrollArea")
@@ -6779,6 +6886,9 @@ class MainWindow(QMainWindow):
         self.container_section_title.setText(self.texts["controls_containers"])
         self.view_section_title.setText(self.texts["controls_view"])
         self.select_all_checkbox.setText(self.texts["select_all"])
+        if hasattr(self, "column_magnet_checkbox"):
+            self.column_magnet_checkbox.setText(self.texts["column_magnet"])
+            self.column_magnet_checkbox.setToolTip(self.texts["column_magnet_tooltip"])
         self.container_search.setPlaceholderText(self.texts["container_search_placeholder"])
         self.group_by_label.setText(self.texts["group_by_label"])
         self.populate_group_mode_combo()
