@@ -12,7 +12,7 @@ Docker Control Center 1.3.5 is the first public release after v1.1.1 that consol
 - **Host recognition and health information** — better detection of Debian, Ubuntu, Balena OS, WSL and related Linux variants, with CPU/RAM information for connected hosts.
 - **Container resource monitoring** — CPU and RAM usage for individual containers plus overall host/container load; CPU and RAM columns support three-state sorting (descending, ascending, neutral).
 - **Container search** — live filtering while typing container names.
-- **Project/network grouping** — containers can be grouped by project/Compose relationship or shared networks with collapsible groups.
+- **Project/network grouping** — containers can be grouped by project/Compose relationship or shared networks with collapsible groups. Each group header now has its own checkbox, so the whole group can be selected at once for bulk Start/Stop/Restart and other container actions.
 - **More compact container table** — optimized WWW/link controls, narrower autostart column, movable column widths and better use of vertical space.
 - **Persistent column layout** — manually adjusted column widths are saved and restored after restarting DCC; visible three-dot grips mark the draggable separators between columns.
 - **Optional Magnet mode** — enabled by default; keeps the user-defined column proportions while automatically fitting the whole table to the current window width, including during live window resizing.
@@ -161,7 +161,7 @@ Model lists can be detected/refreshed where supported, and provider credentials 
 - **Lepsze rozpoznawanie hosta** — Debian, Ubuntu, Balena OS, WSL i pokrewne systemy oraz informacje CPU/RAM hosta.
 - **Monitoring zasobów kontenerów** — CPU i RAM dla każdego kontenera oraz ogólne obciążenie; kolumny CPU/RAM mają sortowanie malejąco, rosnąco i tryb neutralny.
 - **Wyszukiwarka kontenerów** — filtrowanie listy już podczas wpisywania nazwy.
-- **Grupowanie projektów i sieci** — kontenery mogą być grupowane wg projektu/Compose lub wspólnych sieci z rozwijanymi grupami.
+- **Grupowanie projektów i sieci** — kontenery mogą być grupowane wg projektu/Compose lub wspólnych sieci z rozwijanymi grupami. Każda belka grupy ma teraz własny checkbox, który zaznacza wszystkie kontenery w grupie do zbiorczych akcji Start/Stop/Restart i pozostałych operacji.
 - **Bardziej kompaktowa tabela** — zoptymalizowane WWW/linki, węższy autostart, przesuwane szerokości kolumn i więcej miejsca na listę kontenerów.
 - **Zapamiętywanie szerokości kolumn** — ręcznie ustawione szerokości są zapisywane i odtwarzane po ponownym uruchomieniu DCC; trzy pionowe kropki pokazują miejsca, w których można złapać separator kolumn.
 - **Opcjonalny tryb Magnes** — domyślnie włączony; zachowuje ręcznie ustawione proporcje kolumn i automatycznie dopasowuje całą tabelę do szerokości okna podczas jego rozciągania lub zwężania.
@@ -302,5 +302,5 @@ Lista modeli może być wykrywana/odświeżana tam, gdzie dostawca to wspiera, a
 
 - Windows packaged runtime `--self-check`: **OK**
 - Linux packaged runtime `--self-check`: **OK**
-- Automated Python regression tests: **15/15 passed**
+- Automated Python regression tests: **17/17 passed**
 - Installed local Windows version after update: **1.3.5**

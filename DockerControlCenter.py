@@ -448,6 +448,7 @@ TEXTS = {
         "group_summary": "{count} containers · {running} running · networks: {networks}",
         "group_display_expand": "Expand group",
         "group_display_collapse": "Collapse group",
+        "group_select_all": "Select all containers in this group",
         "controls_connection": "CONNECTIONS",
         "controls_containers": "CONTAINERS",
         "controls_view": "VIEW & HOST",
@@ -936,6 +937,7 @@ TEXTS = {
         "group_summary": "{count} kontenerów · {running} uruchomionych · sieci: {networks}",
         "group_display_expand": "Rozwiń grupę",
         "group_display_collapse": "Zwiń grupę",
+        "group_select_all": "Zaznacz wszystkie kontenery w tej grupie",
         "controls_connection": "POŁĄCZENIA",
         "controls_containers": "KONTENERY",
         "controls_view": "WIDOK I HOST",
@@ -9081,14 +9083,34 @@ class MainWindow(QMainWindow):
         item.setForeground(QBrush(accent))
         item.setToolTip(self.texts["group_summary"].format(count=len(containers), running=running, networks=networks))
         self.table.setItem(row, 0, item)
+
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(8, 0, 8, 0)
+        header_layout.setSpacing(6)
+        group_checkbox = QCheckBox()
+        group_checkbox.setToolTip(self.texts["group_select_all"])
+        group_checkbox.stateChanged.connect(
+            lambda state, group=storage_key: self.on_group_checkbox_changed(group, state)
+        )
+        group_button = QPushButton(f"{arrow}  {self.group_display_name(key)}     {summary}")
+        group_button.setFlat(True)
+        group_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        group_button.setToolTip(
+            self.texts["group_display_expand"] if collapsed else self.texts["group_display_collapse"]
+        )
+        group_button.setStyleSheet(
+            f"QPushButton {{ border: 0; background: transparent; text-align: left; "
+            f"font-weight: 600; color: {accent.name()}; padding: 0; }}"
+        )
+        group_button.clicked.connect(lambda _checked=False, group=storage_key: self.toggle_container_group(group))
+        header_layout.addWidget(group_checkbox, 0)
+        header_layout.addWidget(group_button, 1)
+        self.table.setCellWidget(row, 0, header_widget)
+        self.group_checkboxes[storage_key] = group_checkbox
         self.table.setRowHeight(row, max(28, round(34 * self.container_table_zoom / 100.0)))
 
-    def on_table_cell_clicked(self, row: int, _column: int):
-        item = self.table.item(row, 0)
-        metadata = item.data(Qt.ItemDataRole.UserRole) if item else None
-        if not isinstance(metadata, dict) or metadata.get("row_type") != "group":
-            return
-        storage_key = str(metadata.get("storage_key") or "")
+    def toggle_container_group(self, storage_key: str):
         if not storage_key:
             return
         if storage_key in self.collapsed_groups:
@@ -9097,14 +9119,93 @@ class MainWindow(QMainWindow):
             self.collapsed_groups.add(storage_key)
         self.render_container_table(self.last_containers)
 
-    def on_select_all(self, state):
+    def on_group_checkbox_changed(self, storage_key: str, state):
+        if not storage_key or getattr(self, "_updating_group_selection", False):
+            return
         checked = int(state) == int(Qt.CheckState.Checked.value)
+        self._updating_group_selection = True
+        try:
+            for row in range(self.table.rowCount()):
+                name_item = self.table.item(row, 2)
+                metadata = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+                if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
+                    continue
+                if str(metadata.get("group") or "") != storage_key:
+                    continue
+                checkbox = self.table.cellWidget(row, 0)
+                if isinstance(checkbox, QCheckBox):
+                    checkbox.setChecked(checked)
+        finally:
+            self._updating_group_selection = False
+        self.sync_group_checkbox(storage_key)
+        self.sync_select_all_checkbox()
+
+    def sync_group_checkbox(self, storage_key: str):
+        if not storage_key or getattr(self, "_updating_group_selection", False):
+            return
+        group_checkbox = getattr(self, "group_checkboxes", {}).get(storage_key)
+        if not isinstance(group_checkbox, QCheckBox):
+            return
+        child_states = []
+        for row in range(self.table.rowCount()):
+            name_item = self.table.item(row, 2)
+            metadata = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+            if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
+                continue
+            if str(metadata.get("group") or "") != storage_key:
+                continue
+            checkbox = self.table.cellWidget(row, 0)
+            if isinstance(checkbox, QCheckBox):
+                child_states.append(checkbox.isChecked())
+        group_checkbox.blockSignals(True)
+        group_checkbox.setChecked(bool(child_states) and all(child_states))
+        group_checkbox.blockSignals(False)
+        self.sync_select_all_checkbox()
+
+    def sync_select_all_checkbox(self):
+        if not hasattr(self, "select_all_checkbox"):
+            return
+        child_states = []
         for row in range(self.table.rowCount()):
             if self.table.isRowHidden(row):
                 continue
-            widget = self.table.cellWidget(row, 0)
-            if isinstance(widget, QCheckBox):
-                widget.setChecked(checked)
+            name_item = self.table.item(row, 2)
+            metadata = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+            if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
+                continue
+            checkbox = self.table.cellWidget(row, 0)
+            if isinstance(checkbox, QCheckBox):
+                child_states.append(checkbox.isChecked())
+        self.select_all_checkbox.blockSignals(True)
+        self.select_all_checkbox.setChecked(bool(child_states) and all(child_states))
+        self.select_all_checkbox.blockSignals(False)
+
+    def on_table_cell_clicked(self, row: int, _column: int):
+        item = self.table.item(row, 0)
+        metadata = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if not isinstance(metadata, dict) or metadata.get("row_type") != "group":
+            return
+        storage_key = str(metadata.get("storage_key") or "")
+        self.toggle_container_group(storage_key)
+
+    def on_select_all(self, state):
+        checked = int(state) == int(Qt.CheckState.Checked.value)
+        self._updating_group_selection = True
+        try:
+            for row in range(self.table.rowCount()):
+                if self.table.isRowHidden(row):
+                    continue
+                name_item = self.table.item(row, 2)
+                metadata = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+                if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
+                    continue
+                widget = self.table.cellWidget(row, 0)
+                if isinstance(widget, QCheckBox):
+                    widget.setChecked(checked)
+        finally:
+            self._updating_group_selection = False
+        for storage_key in getattr(self, "group_checkboxes", {}):
+            self.sync_group_checkbox(storage_key)
 
     def filter_container_rows(self, text: str = ""):
         needle = (text or "").strip().casefold()
@@ -9153,6 +9254,7 @@ class MainWindow(QMainWindow):
     def render_container_table(self, containers: List[object]):
         if not hasattr(self, "table"):
             return
+        self.group_checkboxes = {}
         self.container_by_name = {
             str(getattr(container, "name", "") or ""): container
             for container in (containers or [])
@@ -9170,7 +9272,12 @@ class MainWindow(QMainWindow):
                 for container in ordered:
                     row = self.table.rowCount()
                     self.table.insertRow(row)
-                    self.table.setCellWidget(row, 0, QCheckBox())
+                    row_checkbox = QCheckBox()
+                    if storage_key:
+                        row_checkbox.stateChanged.connect(
+                            lambda _state, group=storage_key: self.sync_group_checkbox(group)
+                        )
+                    self.table.setCellWidget(row, 0, row_checkbox)
 
                     status = str(getattr(container, "status", "") or "")
                     icon_item = QTableWidgetItem()
