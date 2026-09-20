@@ -268,6 +268,10 @@ TEXTS = {
         "dependencies_auto_unavailable": "Automatic installation is unavailable on this system.",
         "dependencies_install_docker_desktop": "Install Docker Desktop",
         "dependencies_install_docker": "Install Docker",
+        "dependencies_add_docker_group": "Add user to Docker group",
+        "dependencies_docker_group_member": "User is already assigned to the docker group.",
+        "dependencies_docker_group_missing": "Docker is installed, but this user is not assigned to the docker group yet.",
+        "dependencies_docker_group_session": "The user belongs to the docker group, but this session still cannot access Docker. If the group was just added, sign out and back in once; otherwise check that the Docker service is running.",
         "dependencies_install_ssh": "Install SSH tools",
         "dependencies_open": "Dependencies...",
         "dependencies_install_success": "Installation completed. Dependency status will be checked again.",
@@ -287,10 +291,18 @@ TEXTS = {
         "first_run_docker_missing": "Docker is not available on this Linux system. DCC can install the distribution package and start the service.",
         "first_run_docker_unsupported": "Automatic Docker installation is available on Debian/Ubuntu/MX and other apt-based systems. Install Docker manually on this system.",
         "first_run_install_docker": "Install Docker",
+        "first_run_add_docker_group": "Add me to the Docker group",
         "first_run_recheck_docker": "Check again",
         "first_run_install_title": "Installing Docker",
         "first_run_install_status": "Installing Docker and configuring the local service...",
         "first_run_install_success": "Docker installation completed. If DCC still has no access, log out and back in once so the new docker-group membership becomes active.",
+        "docker_group_auth_title": "Docker user permissions",
+        "docker_group_auth_info": "The system authorization window will open. Enter your Linux account/administrator password there. DCC does not see or store this password.\n\nAfter the change completes, sign out and back in once so the new docker-group membership becomes active.",
+        "docker_group_install_title": "Configuring Docker permissions",
+        "docker_group_install_status": "Adding the current user to the docker group...",
+        "docker_group_install_success": "The user was added to the docker group successfully. Sign out and back in once, then reopen DCC to activate Docker access.",
+        "docker_group_already_member": "This user already belongs to the docker group. If Docker is still unavailable, sign out and back in once or check whether the Docker service is running.",
+        "docker_group_unsupported": "Automatic docker-group configuration requires Linux with PolicyKit (pkexec).",
         "first_run_profiles_intro": "You can import connection profiles now. Passwords and key passphrases are intentionally not transferred. Key paths from another computer are cleared when they do not exist here.",
         "first_run_import_profiles": "Import profiles",
         "first_run_edit_profiles": "Edit profiles / key paths",
@@ -756,6 +768,10 @@ TEXTS = {
         "dependencies_auto_unavailable": "Automatyczna instalacja nie jest dostępna w tym systemie.",
         "dependencies_install_docker_desktop": "Zainstaluj Docker Desktop",
         "dependencies_install_docker": "Zainstaluj Docker",
+        "dependencies_add_docker_group": "Dodaj użytkownika do grupy Docker",
+        "dependencies_docker_group_member": "Użytkownik jest już przypisany do grupy docker.",
+        "dependencies_docker_group_missing": "Docker jest zainstalowany, ale ten użytkownik nie jest jeszcze przypisany do grupy docker.",
+        "dependencies_docker_group_session": "Użytkownik należy do grupy docker, ale ta sesja nadal nie ma dostępu do Dockera. Jeżeli grupa została dodana przed chwilą, wyloguj się i zaloguj ponownie; w innym przypadku sprawdź, czy usługa Docker działa.",
         "dependencies_install_ssh": "Zainstaluj narzędzia SSH",
         "dependencies_open": "Zależności...",
         "dependencies_install_success": "Instalacja zakończona. Stan zależności zostanie sprawdzony ponownie.",
@@ -775,10 +791,18 @@ TEXTS = {
         "first_run_docker_missing": "Docker nie jest dostępny w tym systemie Linux. DCC może zainstalować pakiet dystrybucji i uruchomić usługę.",
         "first_run_docker_unsupported": "Automatyczna instalacja Dockera jest dostępna dla Debian/Ubuntu/MX i innych systemów opartych na apt. W tym systemie zainstaluj Docker ręcznie.",
         "first_run_install_docker": "Zainstaluj Docker",
+        "first_run_add_docker_group": "Dodaj mnie do grupy Docker",
         "first_run_recheck_docker": "Sprawdź ponownie",
         "first_run_install_title": "Instalacja Dockera",
         "first_run_install_status": "Instalowanie Dockera i konfigurowanie lokalnej usługi...",
         "first_run_install_success": "Instalacja Dockera zakończona. Jeżeli DCC nadal nie ma dostępu, wyloguj się i zaloguj ponownie jeden raz, aby aktywować członkostwo w grupie docker.",
+        "docker_group_auth_title": "Uprawnienia użytkownika Docker",
+        "docker_group_auth_info": "Za chwilę otworzy się systemowe okno autoryzacji. Wpisz w nim hasło swojego konta Linux / administratora. DCC nie widzi ani nie zapisuje tego hasła.\n\nPo zakończeniu wyloguj się i zaloguj ponownie jeden raz, aby aktywować członkostwo w grupie docker.",
+        "docker_group_install_title": "Konfiguracja uprawnień Docker",
+        "docker_group_install_status": "Dodawanie bieżącego użytkownika do grupy docker...",
+        "docker_group_install_success": "Użytkownik został poprawnie dodany do grupy docker. Wyloguj się i zaloguj ponownie, a następnie uruchom ponownie DCC, aby aktywować dostęp do Dockera.",
+        "docker_group_already_member": "Ten użytkownik już należy do grupy docker. Jeżeli Docker nadal jest niedostępny, wyloguj się i zaloguj ponownie albo sprawdź, czy usługa Docker działa.",
+        "docker_group_unsupported": "Automatyczna konfiguracja grupy docker wymaga Linuxa z PolicyKit (pkexec).",
         "first_run_profiles_intro": "Możesz teraz zaimportować profile połączeń. Hasła i hasła do kluczy celowo nie są przenoszone. Ścieżki kluczy z innego komputera są czyszczone, jeżeli tutaj nie istnieją.",
         "first_run_import_profiles": "Importuj profile",
         "first_run_edit_profiles": "Edytuj profile / ścieżki kluczy",
@@ -5608,8 +5632,10 @@ class FirstRunWizardDialog(QDialog):
         docker_layout.addWidget(self.docker_status)
         docker_actions = QHBoxLayout()
         self.install_docker_button = QPushButton(self.texts["first_run_install_docker"])
+        self.add_docker_group_button = QPushButton(self.texts["first_run_add_docker_group"])
         self.recheck_docker_button = QPushButton(self.texts["first_run_recheck_docker"])
         docker_actions.addWidget(self.install_docker_button)
+        docker_actions.addWidget(self.add_docker_group_button)
         docker_actions.addWidget(self.recheck_docker_button)
         docker_actions.addStretch()
         docker_layout.addLayout(docker_actions)
@@ -5645,6 +5671,7 @@ class FirstRunWizardDialog(QDialog):
         layout.addLayout(footer)
 
         self.install_docker_button.clicked.connect(self.install_docker)
+        self.add_docker_group_button.clicked.connect(self.add_to_docker_group)
         self.recheck_docker_button.clicked.connect(self.refresh_state)
         self.import_profiles_button.clicked.connect(self.import_profiles)
         self.edit_profiles_button.clicked.connect(self.edit_profiles)
@@ -5659,11 +5686,16 @@ class FirstRunWizardDialog(QDialog):
         docker_ready = self.main_window.is_local_docker_available()
         docker_binary = bool(shutil.which("docker"))
         supported = self.main_window.linux_docker_auto_install_supported()
+        group_configured = self.main_window.linux_docker_group_configured()
+        group_supported = self.main_window.linux_docker_group_setup_supported()
         if docker_ready:
             self.docker_status.setText(self.texts["first_run_docker_ready"])
             self.docker_status.setStyleSheet("color: #58d68d;")
         elif docker_binary:
-            self.docker_status.setText(self.texts["first_run_docker_installed_no_access"])
+            if group_configured:
+                self.docker_status.setText(self.texts["dependencies_docker_group_session"])
+            else:
+                self.docker_status.setText(self.texts["dependencies_docker_group_missing"])
             self.docker_status.setStyleSheet("color: #ffcc66;")
         elif supported:
             self.docker_status.setText(self.texts["first_run_docker_missing"])
@@ -5672,6 +5704,9 @@ class FirstRunWizardDialog(QDialog):
             self.docker_status.setText(self.texts["first_run_docker_unsupported"])
             self.docker_status.setStyleSheet("color: #ff8c8c;")
         self.install_docker_button.setEnabled((not docker_ready) and (not docker_binary) and supported)
+        self.add_docker_group_button.setEnabled(
+            (not docker_ready) and docker_binary and (not group_configured) and group_supported
+        )
 
         profiles = self.main_window.remote_profiles
         missing = sum(1 for profile in profiles if profile_needs_ssh_key_path(profile))
@@ -5682,6 +5717,11 @@ class FirstRunWizardDialog(QDialog):
     def install_docker(self):
         if self.main_window.install_linux_docker_with_progress():
             QMessageBox.information(self, self.texts["msg_info"], self.texts["first_run_install_success"])
+        self.refresh_state()
+
+    def add_to_docker_group(self):
+        if self.main_window.add_current_user_to_docker_group_with_progress():
+            QMessageBox.information(self, self.texts["msg_info"], self.texts["docker_group_install_success"])
         self.refresh_state()
 
     def import_profiles(self):
@@ -5718,8 +5758,11 @@ class DependencyManagerDialog(QDialog):
         self.docker_status.setWordWrap(True)
         docker_actions = QHBoxLayout()
         self.docker_action = QPushButton()
+        self.docker_group_action = QPushButton(self.texts["dependencies_add_docker_group"])
         self.docker_action.clicked.connect(self.handle_docker_action)
+        self.docker_group_action.clicked.connect(self.handle_docker_group_action)
         docker_actions.addWidget(self.docker_action)
+        docker_actions.addWidget(self.docker_group_action)
         docker_actions.addStretch()
         docker_layout.addWidget(self.docker_title)
         docker_layout.addWidget(self.docker_status)
@@ -5762,6 +5805,7 @@ class DependencyManagerDialog(QDialog):
     def refresh_state(self):
         docker_ready = self.main_window.is_local_docker_available()
         if os.name == "nt":
+            self.docker_group_action.setVisible(False)
             self.docker_title.setText(self.texts["dependencies_docker_windows"])
             installed = self.main_window.windows_docker_desktop_installed()
             if docker_ready:
@@ -5780,16 +5824,22 @@ class DependencyManagerDialog(QDialog):
                 self.docker_action.setText(self.texts["dependencies_install_docker_desktop"])
                 self.docker_action.setEnabled(True)
         else:
+            self.docker_group_action.setVisible(True)
             self.docker_title.setText(self.texts["dependencies_docker_linux"])
             docker_binary = bool(shutil.which("docker"))
             supported = self.main_window.linux_docker_auto_install_supported()
+            group_configured = self.main_window.linux_docker_group_configured()
+            group_supported = self.main_window.linux_docker_group_setup_supported()
             if docker_ready:
                 self.docker_status.setText(self.texts["dependencies_ready"])
                 self.docker_status.setStyleSheet("color: #58d68d;")
                 self.docker_action.setText(self.texts["dependencies_install_docker"])
                 self.docker_action.setEnabled(False)
             elif docker_binary:
-                self.docker_status.setText(self.texts["dependencies_installed_not_running"])
+                if group_configured:
+                    self.docker_status.setText(self.texts["dependencies_docker_group_session"])
+                else:
+                    self.docker_status.setText(self.texts["dependencies_docker_group_missing"])
                 self.docker_status.setStyleSheet("color: #ffcc66;")
                 self.docker_action.setText(self.texts["dependencies_install_docker"])
                 self.docker_action.setEnabled(False)
@@ -5800,6 +5850,14 @@ class DependencyManagerDialog(QDialog):
                 self.docker_status.setStyleSheet("color: #ffcc66;")
                 self.docker_action.setText(self.texts["dependencies_install_docker"])
                 self.docker_action.setEnabled(supported)
+            self.docker_group_action.setText(self.texts["dependencies_add_docker_group"])
+            self.docker_group_action.setEnabled(
+                (not docker_ready) and docker_binary and (not group_configured) and group_supported
+            )
+            if group_configured:
+                self.docker_group_action.setToolTip(self.texts["dependencies_docker_group_member"])
+            else:
+                self.docker_group_action.setToolTip(self.texts["docker_group_auth_info"])
 
         ssh_ready = self.main_window.is_ssh_client_available() and self.main_window.is_ssh_agent_available()
         if ssh_ready:
@@ -5829,6 +5887,11 @@ class DependencyManagerDialog(QDialog):
             success = self.main_window.install_linux_docker_with_progress()
         if success:
             QMessageBox.information(self, self.texts["msg_info"], self.texts["dependencies_install_success"])
+        self.refresh_state()
+
+    def handle_docker_group_action(self):
+        if self.main_window.add_current_user_to_docker_group_with_progress():
+            QMessageBox.information(self, self.texts["msg_info"], self.texts["docker_group_install_success"])
         self.refresh_state()
 
     def install_ssh_tools(self):
@@ -6854,6 +6917,10 @@ class MainWindow(QMainWindow):
         self.texts = TEXTS[self.lang]
         self.settings.setValue("language", self.lang)
         self.apply_language()
+        # Rebuilding/clearing the menu bar from inside the QAction that opened
+        # the language submenu can crash Qt on Linux (the triggering menu is
+        # still dispatching its signal). Rebuild it on the next event-loop turn.
+        QTimer.singleShot(0, self._build_menus)
 
     def apply_compact_action_labels(self):
         actions = [
@@ -6883,7 +6950,6 @@ class MainWindow(QMainWindow):
 
     def apply_language(self):
         self.setWindowTitle(self.texts["app_title"])
-        self._build_menus()
         self.hero_title.setText(self.texts["hero_title"])
         self.hero_subtitle.setText(self.texts["hero_subtitle"])
         self.profile_label_widget.setText(self.texts["profile_label"])
@@ -8266,6 +8332,84 @@ class MainWindow(QMainWindow):
 
     def linux_docker_auto_install_supported(self) -> bool:
         return os.name != "nt" and bool(shutil.which("apt-get")) and bool(shutil.which("pkexec"))
+
+    def linux_docker_group_setup_supported(self) -> bool:
+        if os.name == "nt" or not shutil.which("pkexec"):
+            return False
+        return bool(shutil.which("usermod") or Path("/usr/sbin/usermod").is_file())
+
+    def _linux_user_groups(self, configured: bool = True) -> set[str]:
+        if os.name == "nt":
+            return set()
+        id_program = shutil.which("id") or "/usr/bin/id"
+        if not Path(id_program).is_file() and not shutil.which("id"):
+            return set()
+        command = [id_program, "-nG"]
+        if configured:
+            username = getpass.getuser().strip()
+            if not username:
+                return set()
+            command.append(username)
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+                creationflags=CREATE_NO_WINDOW,
+            )
+        except Exception:
+            return set()
+        if result.returncode != 0:
+            return set()
+        return {group.strip() for group in result.stdout.split() if group.strip()}
+
+    def linux_docker_group_configured(self) -> bool:
+        return "docker" in self._linux_user_groups(configured=True)
+
+    def linux_docker_group_active(self) -> bool:
+        return "docker" in self._linux_user_groups(configured=False)
+
+    def _run_linux_docker_group_setup_stream(self, _args: List[str], emit_line):
+        if not self.linux_docker_group_setup_supported():
+            raise RuntimeError(self.texts["docker_group_unsupported"])
+        username = getpass.getuser().strip()
+        if not username:
+            raise RuntimeError("Could not determine the current user.")
+        if self.linux_docker_group_configured():
+            emit_line(self.texts["docker_group_already_member"])
+            return subprocess.CompletedProcess([], 0, self.texts["docker_group_already_member"], "")
+        pkexec = shutil.which("pkexec")
+        usermod = shutil.which("usermod") or "/usr/sbin/usermod"
+        if not pkexec or not Path(usermod).is_file():
+            raise RuntimeError(self.texts["docker_group_unsupported"])
+        emit_line(self.texts["docker_group_install_status"])
+        return self._run_subprocess_stream(
+            [pkexec, usermod, "-aG", "docker", username],
+            emit_line,
+        )
+
+    def add_current_user_to_docker_group_with_progress(self) -> bool:
+        if os.name == "nt":
+            return False
+        if self.linux_docker_group_configured():
+            QMessageBox.information(self, self.texts["docker_group_auth_title"], self.texts["docker_group_already_member"])
+            return False
+        if not self.linux_docker_group_setup_supported():
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_group_unsupported"])
+            return False
+        QMessageBox.information(self, self.texts["docker_group_auth_title"], self.texts["docker_group_auth_info"])
+        dialog = CommandProgressDialog(
+            self.texts["docker_group_install_title"],
+            self.texts["docker_group_install_status"],
+            self._run_linux_docker_group_setup_stream,
+            [],
+            self.texts,
+            self,
+        )
+        dialog.exec()
+        return dialog.success is True
 
     def _run_windows_docker_desktop_install_stream(self, _args: List[str], emit_line):
         if os.name != "nt":

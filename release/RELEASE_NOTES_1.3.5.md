@@ -35,8 +35,10 @@ Docker Control Center 1.3.5 is the first public release after v1.1.1 that consol
 ### First-run setup and dependencies
 
 - Added a first-run wizard on Linux.
+- If Docker is already installed but the current Linux user has no daemon access, the first-run wizard can now add that user to the `docker` group through the system PolicyKit password prompt; DCC never reads or stores the password.
 - DCC can detect a missing Docker Engine and offer installation on supported Debian-family distributions.
 - Added `Configure -> Dependencies` for Docker/Docker Desktop and OpenSSH/SSH Agent checks and later installation.
+- `Configure -> Dependencies` also exposes Docker-group repair on Linux and distinguishes missing group membership from a session that still needs sign-out/sign-in or a stopped Docker service.
 - Local-mode errors now provide a direct path to install/start Docker when it is unavailable.
 - Windows installer performs packaged-runtime checks and verifies required integration components.
 - Linux package declares the Qt/XCB/OpenSSH/PolicyKit runtime dependencies needed by the desktop app.
@@ -46,6 +48,7 @@ Docker Control Center 1.3.5 is the first public release after v1.1.1 that consol
 - Automatic update checks are enabled by default and can be disabled.
 - Update notifications can be disabled independently.
 - Added manual **Check for updates**.
+- Fixed a Linux Qt crash that could occur when switching the application language from the open language menu; menu reconstruction is now deferred until the triggering menu signal has finished.
 - The README **Download Latest Version** buttons now link directly to the current Windows installer and Linux `.deb` assets instead of opening the release/repository page first.
 - **Fixed Linux self-update authorization** — after downloading the `.deb`, DCC now stays open while `pkexec/apt` waits for the system password, clearly tells the user that a password prompt is required, and closes only after the installation finishes successfully.
 - Update prompt supports update now / remind later / cancel behavior.
@@ -184,8 +187,10 @@ Model lists can be detected/refreshed where supported, and provider credentials 
 ### Pierwsze uruchomienie i zależności
 
 - Dodano kreator pierwszego uruchomienia na Linux.
+- Jeżeli Docker jest już zainstalowany, ale bieżący użytkownik Linux nie ma dostępu do demona, kreator może teraz dodać go do grupy `docker` przez systemowe okno PolicyKit. DCC nie odczytuje ani nie zapisuje hasła.
 - DCC wykrywa brak Dockera i może zaproponować instalację Docker Engine na wspieranych systemach Debian-family.
 - Dodano `Konfiguruj -> Zależności` do sprawdzania/instalacji Docker/Docker Desktop i OpenSSH/Agenta SSH.
+- W `Konfiguruj -> Zależności` dodano również naprawę członkostwa w grupie Docker oraz rozróżnienie braku grupy od sesji wymagającej ponownego logowania albo niedziałającej usługi Docker.
 - Przy braku lokalnego Dockera komunikat prowadzi bezpośrednio do instalacji/uruchomienia.
 - Instalator Windows wykonuje test spakowanego runtime.
 - Pakiet Linux deklaruje wymagane zależności Qt/XCB/OpenSSH/PolicyKit.
@@ -195,6 +200,7 @@ Model lists can be detected/refreshed where supported, and provider credentials 
 - Automatyczne sprawdzanie aktualizacji jest domyślnie włączone i można je wyłączyć.
 - Powiadomienia o aktualizacjach można wyłączyć osobno.
 - Dodano ręczne **Sprawdź aktualizacje**.
+- Poprawiono błąd Qt na Linuxie, który mógł zamknąć aplikację podczas zmiany języka z otwartego menu; przebudowa menu odbywa się teraz dopiero po zakończeniu obsługi kliknięcia.
 - Przyciski **Download Latest Version** w README prowadzą teraz bezpośrednio do aktualnego instalatora Windows i pakietu Linux `.deb`, zamiast najpierw otwierać stronę release/repozytorium.
 - **Poprawiono autoupdate na Linuxie** — po pobraniu `.deb` DCC pozostaje uruchomiony, gdy `pkexec/apt` czeka na systemowe hasło, jasno informuje o konieczności jego wpisania i zamyka się dopiero po poprawnym zakończeniu instalacji.
 - Okno aktualizacji obsługuje aktualizację teraz / przypomnij później / anuluj.
@@ -302,5 +308,5 @@ Lista modeli może być wykrywana/odświeżana tam, gdzie dostawca to wspiera, a
 
 - Windows packaged runtime `--self-check`: **OK**
 - Linux packaged runtime `--self-check`: **OK**
-- Automated Python regression tests: **17/17 passed**
+- Automated Python regression tests: **20/20 passed**
 - Installed local Windows version after update: **1.3.5**
