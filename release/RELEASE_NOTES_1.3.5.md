@@ -49,8 +49,10 @@ Docker Control Center 1.3.5 is the first public release after v1.1.1 that consol
 - Update notifications can be disabled independently.
 - Added manual **Check for updates**.
 - Fixed a Linux Qt crash that could occur when switching the application language from the open language menu; menu reconstruction is now deferred until the triggering menu signal has finished.
-- Hardened language switching further on Linux MX/Xfce: the whole UI translation is now deferred until the popup-menu event has fully closed, preventing the remaining Qt crash seen on MX Linux.
+- Fixed the remaining language-switch crash on Linux MX/Xfce. DCC no longer clears and rebuilds the Qt menu bar after a language action; existing menus and actions are translated in place after the popup closes, so the language changes without terminating the application.
 - Docker-group setup now shows a clear confirmed state after a successful membership change. DCC distinguishes between "group configured, re-login required" and "group active, Docker daemon unavailable" instead of leaving only disabled action buttons.
+- If the account is already configured in the `docker` group but the running DCC process has not inherited that group yet, **Connect local** now offers **Restart DCC with Docker access**. On Linux this relaunches DCC through `sg docker`, avoiding the raw `/var/run/docker.sock: Permission denied` error and normally avoiding a full desktop sign-out.
+- Linux now uses Linux-specific application/help descriptions: local **Docker Engine**, remote SSH/Balena hosts and `docker ps` are described directly, without Windows Docker Desktop / WSL instructions in the Linux UI.
 - Fixed overlapping group-header captions in the container table. Group titles are now rendered only once by the interactive header control, with corrected spacing after the group checkbox.
 - The README **Download Latest Version** buttons now link directly to the current Windows installer and Linux `.deb` assets instead of opening the release/repository page first.
 - **Fixed Linux self-update authorization** — after downloading the `.deb`, DCC now stays open while `pkexec/apt` waits for the system password, clearly tells the user that a password prompt is required, and closes only after the installation finishes successfully.
@@ -204,8 +206,10 @@ Model lists can be detected/refreshed where supported, and provider credentials 
 - Powiadomienia o aktualizacjach można wyłączyć osobno.
 - Dodano ręczne **Sprawdź aktualizacje**.
 - Poprawiono błąd Qt na Linuxie, który mógł zamknąć aplikację podczas zmiany języka z otwartego menu; przebudowa menu odbywa się teraz dopiero po zakończeniu obsługi kliknięcia.
-- Dodatkowo poprawiono zmianę języka na Linux MX/Xfce: całe tłumaczenie interfejsu jest wykonywane dopiero po pełnym zamknięciu zdarzenia menu, co usuwa pozostały crash obserwowany na MX Linux.
+- Usunięto pozostały crash przy zmianie języka na Linux MX/Xfce. DCC nie kasuje już i nie buduje od nowa paska menu Qt po wyborze języka; istniejące menu i akcje są tłumaczone w miejscu po zamknięciu popupu, dzięki czemu język zmienia się bez zamykania aplikacji.
 - Konfiguracja grupy docker pokazuje teraz jednoznaczny stan potwierdzony po poprawnym dodaniu użytkownika. DCC rozróżnia stan „grupa skonfigurowana, wymagane ponowne logowanie” od „grupa aktywna, demon Docker niedostępny”, zamiast pozostawiać tylko nieaktywne przyciski.
+- Jeżeli konto jest już dodane do grupy `docker`, ale uruchomiony proces DCC nie odziedziczył jeszcze tej grupy, **Połącz lokalnie** proponuje teraz **Uruchom DCC ponownie z dostępem do Docker**. Na Linux DCC uruchamia się ponownie przez `sg docker`, zamiast pokazywać surowy błąd `/var/run/docker.sock: Permission denied`; zwykle nie wymaga to pełnego wylogowania z pulpitu.
+- Linux używa teraz własnych opisów aplikacji i pomocy: lokalny **Docker Engine**, zdalne hosty SSH/Balena i test `docker ps` są opisane bez instrukcji dotyczących Windows Docker Desktop / WSL.
 - Poprawiono nachodzące na siebie nagłówki grup w tabeli kontenerów. Tytuł grupy jest teraz renderowany tylko raz przez interaktywny nagłówek, z poprawionym odstępem za checkboxem grupy.
 - Przyciski **Download Latest Version** w README prowadzą teraz bezpośrednio do aktualnego instalatora Windows i pakietu Linux `.deb`, zamiast najpierw otwierać stronę release/repozytorium.
 - **Poprawiono autoupdate na Linuxie** — po pobraniu `.deb` DCC pozostaje uruchomiony, gdy `pkexec/apt` czeka na systemowe hasło, jasno informuje o konieczności jego wpisania i zamyka się dopiero po poprawnym zakończeniu instalacji.
@@ -314,5 +318,5 @@ Lista modeli może być wykrywana/odświeżana tam, gdzie dostawca to wspiera, a
 
 - Windows packaged runtime `--self-check`: **OK**
 - Linux packaged runtime `--self-check`: **OK**
-- Automated Python regression tests: **23/23 passed**
+- Automated Python regression tests: **26/26 passed**
 - Installed local Windows version after update: **1.3.5**

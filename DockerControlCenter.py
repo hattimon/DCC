@@ -272,7 +272,11 @@ TEXTS = {
         "dependencies_docker_group_added": "\u2713 Added to Docker group",
         "dependencies_docker_group_member": "User is already assigned to the docker group.",
         "dependencies_docker_group_missing": "Docker is installed, but this user is not assigned to the docker group yet.",
-        "dependencies_docker_group_session": "\u2713 Docker group configured successfully. This DCC session was started before the permission was added, so sign out and back in once to activate Docker access.",
+        "dependencies_docker_group_session": "? Docker group is configured. This running DCC process has not inherited the permission yet. Click Connect local and choose Restart DCC with Docker access, or sign out and back in once.",
+        "docker_group_relaunch_title": "Docker permission needs activation",
+        "docker_group_relaunch_hint": "Your account is already in the docker group, but this running DCC process was started before that permission became active. DCC can restart itself inside the docker group now. If that does not work in this desktop session, sign out and back in once.",
+        "docker_group_restart_app": "Restart DCC with Docker access",
+        "docker_group_restart_failed": "DCC could not restart itself inside the docker group. Sign out and back in once, then start DCC again.",
         "dependencies_docker_group_active_no_daemon": "\u2713 Docker group permission is active, but the Docker daemon is not reachable. Check that the Docker service is running.",
         "dependencies_install_ssh": "Install SSH tools",
         "dependencies_open": "Dependencies...",
@@ -380,6 +384,7 @@ TEXTS = {
         "music_unavailable": "PyQt6 audio module is not available. Install PyQt6 multimedia support.",
         "hero_title": "DCC | DOCKER CONTROL CENTER",
         "hero_subtitle": "Professional control center for local Docker, WSL and remote SSH hosts with ready deployment presets.",
+        "hero_subtitle_linux": "Professional control center for the local Docker Engine and remote SSH / Balena hosts with ready deployment presets.",
         "profile_label": "Remote profile",
         "profile_name": "Profile name",
         "profile_mode": "Connection mode",
@@ -623,6 +628,7 @@ TEXTS = {
         "docker_not_available": "Docker connection unavailable. Is Docker Desktop or the remote host running?",
         "docker_local_unavailable_title": "Local Docker is unavailable",
         "docker_local_unavailable_hint": "No local Docker engine is reachable. You can install or start the required Docker runtime here, then retry the local connection.",
+        "docker_local_unavailable_hint_linux": "The local Docker Engine is not reachable from DCC. Check that Docker is running and that this DCC process has access to /var/run/docker.sock.",
         "docker_local_open_desktop": "Start Docker Desktop",
         "docker_local_install_desktop": "Install Docker Desktop",
         "docker_local_install_docker": "Install Docker",
@@ -638,7 +644,9 @@ TEXTS = {
         "wsl_help_title": "WSL / WSL2 Docker",
         "wsl_help_text": "Detected distribution: {distro}\n\nGUI connection options:\n1. Easiest: Docker Desktop with WSL integration and the Connect local button.\n2. Click Local WSL to manage Docker running directly in this distribution.\n3. SSH profile: run OpenSSH in WSL and connect using an SSH profile.\n4. Tunnel profile: expose the Docker socket from WSL over TCP and connect using a tunnel profile.\n\nQuick terminal test:\nwsl -d {distro} sh -lc \"docker ps\"",
         "local_profiles_text": "Local profiles for beginners:\n\n1. Local containers\nUse this when Docker Desktop or a local daemon is running on Windows.\nCheck: PowerShell -> docker ps\n\n2. Local WSL\nUse this when Docker runs directly in Ubuntu, Debian, Kali or another WSL2 distribution.\nCheck: PowerShell -> wsl -d Ubuntu sh -lc \"docker ps\"\n\nHow to add a container:\n- click New container\n- choose a preset image or paste a docker run command\n- review the summary and run it\n\nWhich mode to use:\n- Windows / Docker Desktop: Connect local\n- WSL2 with its own dockerd: Local WSL\n- Raspberry Pi / server / NAS: Start profile through SSH or tunnel",
+        "local_profiles_text_linux": "Linux connection modes for beginners:\n\n1. Local Docker Engine\nUse Connect local to manage Docker running directly on this Linux computer.\nCheck in a terminal: docker ps\n\nIf DCC has just added your account to the docker group, use the offered DCC restart with Docker access or sign out and back in once.\n\n2. Remote Linux / Balena / Raspberry Pi / server / NAS\nCreate an SSH profile and start that profile to manage Docker remotely.\n\nHow to add a container:\n- click New container\n- choose a preset image or paste a docker run command\n- review the summary and run it",
         "remote_hint": "Local, WSL and remote Docker engines in one operator panel.",
+        "remote_hint_linux": "Local Linux Docker Engine and remote SSH / Balena Docker hosts in one operator panel.",
         "remote_sysinfo_label": "Remote host: {os} | {arch}",
         "remote_sysinfo_unknown": "Remote host: unknown",
         "remote_sysinfo_fetch_failed": "Remote host: unavailable",
@@ -775,7 +783,11 @@ TEXTS = {
         "dependencies_docker_group_added": "\u2713 Dodano do grupy Docker",
         "dependencies_docker_group_member": "Użytkownik jest już przypisany do grupy docker.",
         "dependencies_docker_group_missing": "Docker jest zainstalowany, ale ten użytkownik nie jest jeszcze przypisany do grupy docker.",
-        "dependencies_docker_group_session": "\u2713 Grupa docker zosta\u0142a skonfigurowana poprawnie. Ta sesja DCC zosta\u0142a uruchomiona przed nadaniem uprawnienia, dlatego wyloguj si\u0119 i zaloguj ponownie jeden raz, aby aktywowa\u0107 dost\u0119p do Dockera.",
+        "dependencies_docker_group_session": "\u2713 Grupa docker jest skonfigurowana. Uruchomiony proces DCC nie odziedziczy\u0142 jeszcze tego uprawnienia. Kliknij Po\u0142\u0105cz lokalnie i wybierz Uruchom DCC ponownie z dost\u0119pem do Docker albo wyloguj si\u0119 i zaloguj ponownie jeden raz.",
+        "docker_group_relaunch_title": "Trzeba aktywowa\u0107 uprawnienie Docker",
+        "docker_group_relaunch_hint": "Twoje konto jest ju\u017c w grupie docker, ale uruchomiony proces DCC wystartowa\u0142 zanim to uprawnienie sta\u0142o si\u0119 aktywne. DCC mo\u017ce teraz uruchomi\u0107 si\u0119 ponownie wewn\u0105trz grupy docker. Je\u017celi ta metoda nie zadzia\u0142a w tej sesji pulpitu, wyloguj si\u0119 i zaloguj ponownie jeden raz.",
+        "docker_group_restart_app": "Uruchom DCC ponownie z dost\u0119pem do Docker",
+        "docker_group_restart_failed": "Nie uda\u0142o si\u0119 uruchomi\u0107 DCC ponownie wewn\u0105trz grupy docker. Wyloguj si\u0119 i zaloguj ponownie jeden raz, a nast\u0119pnie uruchom DCC.",
         "dependencies_docker_group_active_no_daemon": "\u2713 Uprawnienie grupy docker jest aktywne, ale demon Docker jest niedost\u0119pny. Sprawd\u017a, czy us\u0142uga Docker jest uruchomiona.",
         "dependencies_install_ssh": "Zainstaluj narzędzia SSH",
         "dependencies_open": "Zależności...",
@@ -884,6 +896,7 @@ TEXTS = {
         "music_unavailable": "Moduł audio PyQt6 nie jest dostępny. Doinstaluj PyQt6-Qt6 / multimedia.",
         "hero_title": "DCC | DOCKER CONTROL CENTER",
         "hero_subtitle": "Profesjonalny panel do zarządzania Dockerem lokalnym, WSL i zdalnymi hostami SSH z gotowymi presetami wdrożeń.",
+        "hero_subtitle_linux": "Profesjonalny panel do lokalnego Docker Engine oraz zdalnych host\u00f3w SSH / Balena z gotowymi presetami wdro\u017ce\u0144.",
         "profile_label": "Profil zdalny",
         "profile_name": "Nazwa profilu",
         "profile_mode": "Tryb połączenia",
@@ -1127,6 +1140,7 @@ TEXTS = {
         "docker_not_available": "Brak połączenia z Docker. Czy Docker Desktop lub host zdalny działa?",
         "docker_local_unavailable_title": "Lokalny Docker jest niedostępny",
         "docker_local_unavailable_hint": "Lokalny silnik Docker jest niedostępny. Możesz tutaj zainstalować lub uruchomić wymagany Docker, a następnie ponowić połączenie lokalne.",
+        "docker_local_unavailable_hint_linux": "Lokalny Docker Engine jest niedost\u0119pny z poziomu DCC. Sprawd\u017a, czy Docker dzia\u0142a i czy ten proces DCC ma dost\u0119p do /var/run/docker.sock.",
         "docker_local_open_desktop": "Uruchom Docker Desktop",
         "docker_local_install_desktop": "Zainstaluj Docker Desktop",
         "docker_local_install_docker": "Zainstaluj Docker",
@@ -1142,7 +1156,9 @@ TEXTS = {
         "wsl_help_title": "WSL / WSL2 Docker",
         "wsl_help_text": "Wykryta dystrybucja: {distro}\n\nOpcje połączenia z GUI:\n1. Najłatwiej: Docker Desktop z integracją WSL i przycisk Połącz lokalnie.\n2. Kliknij WSL lokalne, aby zarządzać Dockerem uruchomionym bezpośrednio w tej dystrybucji.\n3. Profil SSH: uruchom OpenSSH w WSL i połącz profilem SSH.\n4. Profil tunelowy: wystaw socket Dockera z WSL do TCP i połącz profilem tunelowym.\n\nSzybki test w terminalu:\nwsl -d {distro} sh -lc \"docker ps\"",
         "local_profiles_text": "Profile lokalne dla początkujących:\n\n1. Kontenery lokalne\nUżywaj, gdy Docker Desktop albo lokalny daemon jest uruchomiony w Windows.\nSprawdź: PowerShell -> docker ps\n\n2. WSL lokalne\nUżywaj, gdy Docker działa bezpośrednio w Ubuntu, Debianie, Kali albo innej dystrybucji WSL2.\nSprawdź: PowerShell -> wsl -d Ubuntu sh -lc \"docker ps\"\n\nJak dodać kontener:\n- kliknij Nowy kontener\n- wybierz gotowy obraz albo wklej komendę docker run\n- sprawdź podsumowanie i uruchom\n\nKiedy który tryb:\n- Windows / Docker Desktop: Połącz lokalnie\n- WSL2 z własnym dockerd: WSL lokalne\n- Raspberry Pi / serwer / NAS: Start profilu przez SSH lub tunel",
+        "local_profiles_text_linux": "Tryby po\u0142\u0105czenia na Linux dla pocz\u0105tkuj\u0105cych:\n\n1. Lokalny Docker Engine\nU\u017cyj Po\u0142\u0105cz lokalnie, aby zarz\u0105dza\u0107 Dockerem uruchomionym bezpo\u015brednio na tym komputerze Linux.\nSprawdzenie w terminalu: docker ps\n\nJe\u017celi DCC dopiero doda\u0142o Twoje konto do grupy docker, skorzystaj z proponowanego ponownego uruchomienia DCC z dost\u0119pem do Docker albo wyloguj si\u0119 i zaloguj ponownie jeden raz.\n\n2. Zdalny Linux / Balena / Raspberry Pi / serwer / NAS\nUtw\u00f3rz profil SSH i uruchom ten profil, aby zarz\u0105dza\u0107 Dockerem zdalnie.\n\nJak doda\u0107 kontener:\n- kliknij Nowy kontener\n- wybierz gotowy obraz albo wklej komend\u0119 docker run\n- sprawd\u017a podsumowanie i uruchom",
         "remote_hint": "Lokalne, WSL i zdalne silniki Dockera w jednym panelu operatorskim.",
+        "remote_hint_linux": "Lokalny Docker Engine na Linux oraz zdalne hosty Docker przez SSH / Balena w jednym panelu operatorskim.",
         "remote_sysinfo_label": "Host zdalny: {os} | {arch}",
         "remote_sysinfo_unknown": "Host zdalny: nieznany",
         "remote_sysinfo_fetch_failed": "Host zdalny: brak danych",
@@ -6352,7 +6368,7 @@ class MainWindow(QMainWindow):
         hero_layout.setSpacing(12)
         self.hero_title = QLabel(self.texts["hero_title"])
         self.hero_title.setObjectName("heroTitle")
-        self.hero_subtitle = QLabel(self.texts["hero_subtitle"])
+        self.hero_subtitle = QLabel(self.platform_text("hero_subtitle"))
         self.hero_subtitle.setObjectName("heroSubtitle")
         self.hero_subtitle.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         hero_layout.addWidget(self.hero_title)
@@ -6388,11 +6404,11 @@ class MainWindow(QMainWindow):
         self.transparency_slider.setRange(35, 100)
         self.transparency_slider.setValue(self.transparency_level)
         self.transparency_slider.valueChanged.connect(self.set_transparency_level)
-        self.remote_hint = QLabel(self.texts["remote_hint"])
+        self.remote_hint = QLabel(self.platform_text("remote_hint"))
         self.remote_hint.setWordWrap(False)
         self.remote_hint.setMaximumWidth(1)
         self.remote_hint.setVisible(False)
-        self.remote_hint.setToolTip(self.texts["remote_hint"])
+        self.remote_hint.setToolTip(self.platform_text("remote_hint"))
         self.remote_sysinfo_label = QLabel(self.texts["remote_sysinfo_unknown"])
         self.remote_sysinfo_label.setWordWrap(False)
         self.remote_sysinfo_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
@@ -6695,49 +6711,99 @@ class MainWindow(QMainWindow):
     def _build_menus(self):
         menubar = self.menuBar()
         menubar.clear()
-        file_menu = QMenu(self.texts["menu_file"], self)
-        menubar.addMenu(file_menu)
-        file_menu.addAction(self.texts["menu_profiles_import"]).triggered.connect(self.import_profiles_from_file)
-        file_menu.addAction(self.texts["menu_profiles_export"]).triggered.connect(self.export_profiles_to_file)
-        file_menu.addSeparator()
-        file_menu.addAction(self.texts["menu_quit"]).triggered.connect(self.close)
+        self.file_menu = QMenu(self.texts["menu_file"], self)
+        menubar.addMenu(self.file_menu)
+        self.action_profiles_import = self.file_menu.addAction(self.texts["menu_profiles_import"])
+        self.action_profiles_import.triggered.connect(self.import_profiles_from_file)
+        self.action_profiles_export = self.file_menu.addAction(self.texts["menu_profiles_export"])
+        self.action_profiles_export.triggered.connect(self.export_profiles_to_file)
+        self.file_menu.addSeparator()
+        self.action_quit = self.file_menu.addAction(self.texts["menu_quit"])
+        self.action_quit.triggered.connect(self.close)
 
-        view_menu = QMenu(self.texts["menu_view"], self)
-        menubar.addMenu(view_menu)
-        fullscreen_action = view_menu.addAction(self.texts["menu_fullscreen"])
-        fullscreen_action.setShortcut("F11")
-        fullscreen_action.triggered.connect(self.toggle_fullscreen)
-        view_menu.addSeparator()
+        self.view_menu = QMenu(self.texts["menu_view"], self)
+        menubar.addMenu(self.view_menu)
+        self.action_fullscreen = self.view_menu.addAction(self.texts["menu_fullscreen"])
+        self.action_fullscreen.setShortcut("F11")
+        self.action_fullscreen.triggered.connect(self.toggle_fullscreen)
+        self.view_menu.addSeparator()
 
-        theme_menu = QMenu(self.texts["menu_theme"], self)
-        view_menu.addMenu(theme_menu)
-        theme_menu.addAction(self.texts["theme_light"]).triggered.connect(lambda: self.set_theme("light"))
-        theme_menu.addAction(self.texts["theme_dark"]).triggered.connect(lambda: self.set_theme("dark"))
-        theme_menu.addAction(self.texts["theme_black"]).triggered.connect(lambda: self.set_theme("black"))
+        self.theme_menu = QMenu(self.texts["menu_theme"], self)
+        self.view_menu.addMenu(self.theme_menu)
+        self.action_theme_light = self.theme_menu.addAction(self.texts["theme_light"])
+        self.action_theme_light.triggered.connect(lambda: self.set_theme("light"))
+        self.action_theme_dark = self.theme_menu.addAction(self.texts["theme_dark"])
+        self.action_theme_dark.triggered.connect(lambda: self.set_theme("dark"))
+        self.action_theme_black = self.theme_menu.addAction(self.texts["theme_black"])
+        self.action_theme_black.triggered.connect(lambda: self.set_theme("black"))
 
-        lang_menu = QMenu(self.texts["menu_lang"], self)
-        view_menu.addMenu(lang_menu)
-        lang_menu.addAction(self.texts["lang_en"]).triggered.connect(lambda: self.set_language("EN"))
-        lang_menu.addAction(self.texts["lang_pl"]).triggered.connect(lambda: self.set_language("PL"))
+        self.lang_menu = QMenu(self.texts["menu_lang"], self)
+        self.view_menu.addMenu(self.lang_menu)
+        self.action_lang_en = self.lang_menu.addAction(self.texts["lang_en"])
+        self.action_lang_en.triggered.connect(lambda: self.set_language("EN"))
+        self.action_lang_pl = self.lang_menu.addAction(self.texts["lang_pl"])
+        self.action_lang_pl.triggered.connect(lambda: self.set_language("PL"))
 
-        config_menu = QMenu(self.texts["menu_config"], self)
-        menubar.addMenu(config_menu)
-        config_menu.addAction(self.texts["menu_llm"]).triggered.connect(self.open_llm_settings_dialog)
-        config_menu.addAction(self.texts["menu_app"]).triggered.connect(self.open_app_settings_dialog)
-        config_menu.addAction(self.texts["menu_dependencies"]).triggered.connect(self.open_dependencies_dialog)
+        self.config_menu = QMenu(self.texts["menu_config"], self)
+        menubar.addMenu(self.config_menu)
+        self.action_llm = self.config_menu.addAction(self.texts["menu_llm"])
+        self.action_llm.triggered.connect(self.open_llm_settings_dialog)
+        self.action_app_settings = self.config_menu.addAction(self.texts["menu_app"])
+        self.action_app_settings.triggered.connect(self.open_app_settings_dialog)
+        self.action_dependencies = self.config_menu.addAction(self.texts["menu_dependencies"])
+        self.action_dependencies.triggered.connect(self.open_dependencies_dialog)
+        self.action_first_run_wizard = None
         if os.name != "nt":
-            config_menu.addAction(self.texts["menu_first_run_wizard"]).triggered.connect(lambda: self.run_first_run_wizard(force=True))
-        config_menu.addSeparator()
-        config_menu.addAction(self.texts["menu_reset_settings"]).triggered.connect(self.reset_settings_to_defaults)
-        config_menu.addAction(self.texts["menu_factory_reset"]).triggered.connect(self.factory_reset)
+            self.action_first_run_wizard = self.config_menu.addAction(self.texts["menu_first_run_wizard"])
+            self.action_first_run_wizard.triggered.connect(lambda: self.run_first_run_wizard(force=True))
+        self.config_menu.addSeparator()
+        self.action_reset_settings = self.config_menu.addAction(self.texts["menu_reset_settings"])
+        self.action_reset_settings.triggered.connect(self.reset_settings_to_defaults)
+        self.action_factory_reset = self.config_menu.addAction(self.texts["menu_factory_reset"])
+        self.action_factory_reset.triggered.connect(self.factory_reset)
 
-        info_menu = QMenu(self.texts["menu_info"], self)
-        menubar.addMenu(info_menu)
-        info_menu.addAction(self.texts["info_app"]).triggered.connect(self.show_app_info_dialog)
-        info_menu.addAction(self.texts["info_check_updates"]).triggered.connect(lambda: self.check_for_updates(True))
-        info_menu.addAction(self.texts["info_shortcuts"]).triggered.connect(self.show_shortcuts_dialog)
-        info_menu.addSeparator()
-        info_menu.addAction(self.texts["info_safe_danger"]).triggered.connect(self.show_info_dialog)
+        self.info_menu = QMenu(self.texts["menu_info"], self)
+        menubar.addMenu(self.info_menu)
+        self.action_info_app = self.info_menu.addAction(self.texts["info_app"])
+        self.action_info_app.triggered.connect(self.show_app_info_dialog)
+        self.action_check_updates = self.info_menu.addAction(self.texts["info_check_updates"])
+        self.action_check_updates.triggered.connect(lambda: self.check_for_updates(True))
+        self.action_shortcuts = self.info_menu.addAction(self.texts["info_shortcuts"])
+        self.action_shortcuts.triggered.connect(self.show_shortcuts_dialog)
+        self.info_menu.addSeparator()
+        self.action_safe_danger = self.info_menu.addAction(self.texts["info_safe_danger"])
+        self.action_safe_danger.triggered.connect(self.show_info_dialog)
+
+    def _translate_menus(self):
+        """Translate existing menu objects without deleting an active Linux QMenu."""
+        if not hasattr(self, "file_menu"):
+            return
+        self.file_menu.setTitle(self.texts["menu_file"])
+        self.action_profiles_import.setText(self.texts["menu_profiles_import"])
+        self.action_profiles_export.setText(self.texts["menu_profiles_export"])
+        self.action_quit.setText(self.texts["menu_quit"])
+        self.view_menu.setTitle(self.texts["menu_view"])
+        self.action_fullscreen.setText(self.texts["menu_fullscreen"])
+        self.theme_menu.setTitle(self.texts["menu_theme"])
+        self.action_theme_light.setText(self.texts["theme_light"])
+        self.action_theme_dark.setText(self.texts["theme_dark"])
+        self.action_theme_black.setText(self.texts["theme_black"])
+        self.lang_menu.setTitle(self.texts["menu_lang"])
+        self.action_lang_en.setText(self.texts["lang_en"])
+        self.action_lang_pl.setText(self.texts["lang_pl"])
+        self.config_menu.setTitle(self.texts["menu_config"])
+        self.action_llm.setText(self.texts["menu_llm"])
+        self.action_app_settings.setText(self.texts["menu_app"])
+        self.action_dependencies.setText(self.texts["menu_dependencies"])
+        if self.action_first_run_wizard is not None:
+            self.action_first_run_wizard.setText(self.texts["menu_first_run_wizard"])
+        self.action_reset_settings.setText(self.texts["menu_reset_settings"])
+        self.action_factory_reset.setText(self.texts["menu_factory_reset"])
+        self.info_menu.setTitle(self.texts["menu_info"])
+        self.action_info_app.setText(self.texts["info_app"])
+        self.action_check_updates.setText(self.texts["info_check_updates"])
+        self.action_shortcuts.setText(self.texts["info_shortcuts"])
+        self.action_safe_danger.setText(self.texts["info_safe_danger"])
 
     def _set_table_headers(self):
         def sortable_label(label: str, column: int) -> str:
@@ -6936,6 +7002,13 @@ class MainWindow(QMainWindow):
         self.settings.setValue("theme", theme)
         self._load_theme()
 
+    def platform_text(self, key: str) -> str:
+        if os.name != "nt":
+            linux_key = f"{key}_linux"
+            if linux_key in self.texts:
+                return self.texts[linux_key]
+        return self.texts[key]
+
     def set_language(self, lang: str):
         lang = lang.upper()
         if lang not in TEXTS:
@@ -6955,7 +7028,10 @@ class MainWindow(QMainWindow):
 
     def _apply_language_after_menu_close(self):
         self.apply_language()
-        self._build_menus()
+        # Do not clear/recreate the menu bar here. On MX Linux/Xfce this can
+        # destroy the QMenu that emitted the language QAction and crash Qt.
+        # Updating the existing menu/action captions in place is safe.
+        self._translate_menus()
 
     def apply_compact_action_labels(self):
         actions = [
@@ -6986,7 +7062,7 @@ class MainWindow(QMainWindow):
     def apply_language(self):
         self.setWindowTitle(self.texts["app_title"])
         self.hero_title.setText(self.texts["hero_title"])
-        self.hero_subtitle.setText(self.texts["hero_subtitle"])
+        self.hero_subtitle.setText(self.platform_text("hero_subtitle"))
         self.profile_label_widget.setText(self.texts["profile_label"])
         self.apply_compact_action_labels()
         if self.remote_arch:
@@ -6994,7 +7070,8 @@ class MainWindow(QMainWindow):
         else:
             self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_unknown"])
         self.transparency_label.setText(self.texts["transparency_level"])
-        self.remote_hint.setText(self.texts["remote_hint"])
+        self.remote_hint.setText(self.platform_text("remote_hint"))
+        self.remote_hint.setToolTip(self.platform_text("remote_hint"))
         self.wsl_label.setText(self.texts["wsl_label"])
         self.connection_section_title.setText(self.texts["controls_connection"])
         self.container_section_title.setText(self.texts["controls_containers"])
@@ -7564,7 +7641,10 @@ class MainWindow(QMainWindow):
             self.wsl_combo.addItem(self.texts["wsl_none"])
 
     def show_local_profiles_info(self):
-        info = self.texts["local_profiles_text"]
+        info = self.platform_text("local_profiles_text")
+        if os.name != "nt":
+            QMessageBox.information(self, self.texts["msg_info"], info)
+            return
         distro = self.wsl_combo.currentText().strip() if hasattr(self, "wsl_combo") else ""
         if distro and distro != self.texts["wsl_none"]:
             info = info + "\n\n" + self.texts["local_profiles_wsl_command"].format(distro=distro)
@@ -8406,6 +8486,43 @@ class MainWindow(QMainWindow):
     def linux_docker_group_active(self) -> bool:
         return "docker" in self._linux_user_groups(configured=False)
 
+    def linux_docker_group_requires_relaunch(self) -> bool:
+        return (
+            os.name != "nt"
+            and self.linux_docker_group_configured()
+            and not self.linux_docker_group_active()
+        )
+
+    def linux_docker_group_relaunch_supported(self) -> bool:
+        return self.linux_docker_group_requires_relaunch() and bool(shutil.which("sg"))
+
+    def _linux_docker_group_relaunch_command(self) -> tuple[str, List[str], str]:
+        sg_program = shutil.which("sg")
+        if not sg_program:
+            raise RuntimeError(self.texts["docker_group_restart_failed"])
+        if getattr(sys, "frozen", False):
+            app_command = [sys.executable, *sys.argv[1:]]
+            working_directory = str(Path(sys.executable).resolve().parent)
+        else:
+            app_command = [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]]
+            working_directory = str(Path(__file__).resolve().parent)
+        return sg_program, ["docker", "-c", shlex.join(app_command)], working_directory
+
+    def restart_with_linux_docker_group(self) -> bool:
+        if not self.linux_docker_group_relaunch_supported():
+            return False
+        try:
+            program, arguments, working_directory = self._linux_docker_group_relaunch_command()
+            started, _pid = QProcess.startDetached(program, arguments, working_directory)
+        except Exception:
+            return False
+        if not started:
+            return False
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+        return True
+
     def _run_linux_docker_group_setup_stream(self, _args: List[str], emit_line):
         if not self.linux_docker_group_setup_supported():
             raise RuntimeError(self.texts["docker_group_unsupported"])
@@ -8597,12 +8714,23 @@ class MainWindow(QMainWindow):
 
     def show_local_docker_unavailable(self, details: str = ""):
         self.update_infrastructure_ui(False)
+        linux_group_pending = False
+        if os.name != "nt" and shutil.which("docker"):
+            linux_group_pending = self.linux_docker_group_requires_relaunch()
         message = QMessageBox(self)
         message.setWindowTitle(self.texts["msg_error"])
         message.setIcon(QMessageBox.Icon.Critical)
-        message.setText(self.texts["docker_local_unavailable_title"])
-        info = self.texts["docker_local_unavailable_hint"]
-        if details:
+        message.setText(
+            self.texts["docker_group_relaunch_title"]
+            if linux_group_pending
+            else self.texts["docker_local_unavailable_title"]
+        )
+        info = (
+            self.texts["docker_group_relaunch_hint"]
+            if linux_group_pending
+            else self.platform_text("docker_local_unavailable_hint")
+        )
+        if details and not linux_group_pending:
             info += f"\n\n{details}"
         message.setInformativeText(info)
         if self.current_backend == "local":
@@ -8619,11 +8747,17 @@ class MainWindow(QMainWindow):
                         self.texts["docker_local_install_desktop"], QMessageBox.ButtonRole.AcceptRole
                     )
                     primary_action = "install_windows"
-            elif not shutil.which("docker") and self.linux_docker_auto_install_supported():
-                primary_button = message.addButton(
-                    self.texts["docker_local_install_docker"], QMessageBox.ButtonRole.AcceptRole
-                )
-                primary_action = "install_linux"
+            else:
+                if linux_group_pending and self.linux_docker_group_relaunch_supported():
+                    primary_button = message.addButton(
+                        self.texts["docker_group_restart_app"], QMessageBox.ButtonRole.AcceptRole
+                    )
+                    primary_action = "restart_linux_group"
+                elif not shutil.which("docker") and self.linux_docker_auto_install_supported():
+                    primary_button = message.addButton(
+                        self.texts["docker_local_install_docker"], QMessageBox.ButtonRole.AcceptRole
+                    )
+                    primary_action = "install_linux"
 
             dependencies_button = message.addButton(
                 self.texts["dependencies_open"], QMessageBox.ButtonRole.ActionRole
@@ -8646,6 +8780,13 @@ class MainWindow(QMainWindow):
                 elif primary_action == "install_linux":
                     if self.install_linux_docker_with_progress():
                         QTimer.singleShot(1200, self.connect_local_docker)
+                elif primary_action == "restart_linux_group":
+                    if not self.restart_with_linux_docker_group():
+                        QMessageBox.warning(
+                            self,
+                            self.texts["msg_error"],
+                            self.texts["docker_group_restart_failed"],
+                        )
             return
         message.addButton(QMessageBox.StandardButton.Ok)
         message.exec()
@@ -8654,6 +8795,11 @@ class MainWindow(QMainWindow):
         self.current_backend = "local"
         self.current_wsl_distro = ""
         self.active_remote_profile = None
+        if os.name != "nt" and shutil.which("docker") and self.linux_docker_group_requires_relaunch():
+            self.client = None
+            self.update_infrastructure_ui(False)
+            self.show_local_docker_unavailable()
+            return
         try:
             self.client = self.build_local_docker_client()
             self.client.ping()

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Docker Control Center
-Comment=Manage local and remote Docker/Balena containers
+Comment=Manage the local Docker Engine and remote Docker/Balena hosts
 Exec=/usr/bin/docker-control-center
 Icon=docker-control-center
 Terminal=false

@@ -16,8 +16,9 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
             settings=settings,
             apply_language=lambda: calls.append("apply"),
             _build_menus=lambda: calls.append("menus"),
-            _apply_language_after_menu_close=lambda: calls.extend(["apply", "menus"]),
+            _translate_menus=lambda: calls.append("translate"),
         )
+        stub._apply_language_after_menu_close = lambda: dcc.MainWindow._apply_language_after_menu_close(stub)
         scheduled = []
 
         with (
@@ -34,7 +35,8 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
         self.assertGreaterEqual(scheduled[0][0], 100)
 
         scheduled[0][1]()
-        self.assertEqual(calls, ["apply", "menus"])
+        self.assertEqual(calls, ["apply", "translate"])
+        self.assertNotIn("menus", calls)
 
     def test_windows_language_change_keeps_existing_immediate_behavior(self):
         calls = []
@@ -134,6 +136,56 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
         stub.docker_status.setStyleSheet.assert_called_with("color: #58d68d;")
         stub.add_docker_group_button.setText.assert_called_with(dcc.TEXTS["EN"]["first_run_docker_group_added"])
         stub.add_docker_group_button.setEnabled.assert_called_with(False)
+
+    def test_linux_platform_text_uses_linux_specific_description(self):
+        stub = SimpleNamespace(texts=dcc.TEXTS["EN"])
+        with patch.object(dcc.os, "name", "posix"):
+            subtitle = dcc.MainWindow.platform_text(stub, "hero_subtitle")
+            local_info = dcc.MainWindow.platform_text(stub, "local_profiles_text")
+
+        self.assertIn("local Docker Engine", subtitle)
+        self.assertNotIn("WSL", subtitle)
+        self.assertIn("docker ps", local_info)
+        self.assertNotIn("PowerShell", local_info)
+
+    def test_local_connect_does_not_hit_socket_before_new_docker_group_is_active(self):
+        stub = SimpleNamespace(
+            current_backend="remote",
+            current_wsl_distro="Ubuntu",
+            active_remote_profile=object(),
+            client=object(),
+            linux_docker_group_requires_relaunch=lambda: True,
+            update_infrastructure_ui=Mock(),
+            show_local_docker_unavailable=Mock(),
+            build_local_docker_client=Mock(),
+        )
+
+        with (
+            patch.object(dcc.os, "name", "posix"),
+            patch.object(dcc.shutil, "which", side_effect=lambda name: "/usr/bin/docker" if name == "docker" else None),
+        ):
+            dcc.MainWindow.connect_local_docker(stub)
+
+        self.assertEqual(stub.current_backend, "local")
+        self.assertIsNone(stub.client)
+        stub.build_local_docker_client.assert_not_called()
+        stub.show_local_docker_unavailable.assert_called_once_with()
+
+    def test_linux_docker_group_relaunch_uses_sg_docker(self):
+        stub = SimpleNamespace(texts=dcc.TEXTS["EN"])
+        with (
+            patch.object(dcc.shutil, "which", side_effect=lambda name: "/usr/bin/sg" if name == "sg" else None),
+            patch.object(dcc.sys, "frozen", True, create=True),
+            patch.object(dcc.sys, "executable", "/opt/dcc/DockerControlCenter"),
+            patch.object(dcc.sys, "argv", ["DockerControlCenter", "--example"]),
+        ):
+            program, arguments, working_directory = dcc.MainWindow._linux_docker_group_relaunch_command(stub)
+
+        self.assertEqual(program, "/usr/bin/sg")
+        self.assertEqual(arguments[:2], ["docker", "-c"])
+        self.assertIn("/opt/dcc/DockerControlCenter", arguments[2])
+        self.assertIn("--example", arguments[2])
+        self.assertTrue(working_directory.replace("\\", "/").endswith("/opt/dcc"))
 
 
 if __name__ == "__main__":

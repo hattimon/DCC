@@ -83,7 +83,7 @@ Maintainer: Docker Control Center <noreply@localhost>
 Depends: libc6, libstdc++6, libgl1, libegl1, libdbus-1-3, libfontconfig1, libx11-6, libx11-xcb1, libxcb1, libxcb-cursor0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render-util0, libxcb-shape0, libxcb-xfixes0, libxcb-xkb1, libxkbcommon-x11-0, openssh-client, xdg-utils, policykit-1
 Suggests: docker.io
 Description: Docker Control Center
- Desktop GUI for managing local and remote Docker and Balena containers over local sockets, WSL (Windows build) and SSH profiles.
+ Desktop GUI for managing the local Docker Engine and remote Docker/Balena hosts over SSH profiles and tunnels on Debian-family Linux.
 EOF
 
 OUTPUT_DIR="$ROOT_DIR/release"
