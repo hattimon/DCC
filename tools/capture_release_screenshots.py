@@ -3,7 +3,24 @@ import sys
 import tempfile
 from pathlib import Path
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+def configure_qt_platform():
+    """Use the native desktop backend when one is available.
+
+    Qt's offscreen backend is useful for headless Linux jobs, but on Windows it
+    can render application fonts as missing-glyph squares.  Leave normal
+    desktop sessions on their native platform and only fall back to offscreen
+    when Linux has no display server.
+    """
+    if os.environ.get("QT_QPA_PLATFORM"):
+        return
+    if sys.platform.startswith("linux") and not (
+        os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    ):
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
+
+configure_qt_platform()
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -105,14 +122,25 @@ def main():
         settings.sync()
 
         original_single_shot = dcc.QTimer.singleShot
+        original_media_player = dcc.QMediaPlayer
+        original_audio_output = dcc.QAudioOutput
         dcc.QTimer.singleShot = staticmethod(lambda *args, **kwargs: None)
+        # Release screenshots never need audio.  Avoid creating Qt Multimedia
+        # objects here because their Windows teardown can abort an otherwise
+        # successful screenshot run after all PNG files have been written.
+        dcc.QMediaPlayer = None
+        dcc.QAudioOutput = None
         try:
             main_window = dcc.MainWindow(settings)
             main_window.statusBar().showMessage("Ready · Docker Control Center v1.3.5")
             save_widget(app, main_window, "01-main-window.png", (1360, 760))
             main_window.close()
+            main_window.deleteLater()
+            app.processEvents()
         finally:
             dcc.QTimer.singleShot = original_single_shot
+            dcc.QMediaPlayer = original_media_player
+            dcc.QAudioOutput = original_audio_output
 
         manual = dcc.NewContainerDialog(
             FakeClient(), dcc.TEXTS["EN"], lang="EN", target_host_label="LOCAL · Windows 11 / Docker Desktop"
@@ -183,6 +211,15 @@ def main():
         llm_dialog = dcc.LlmSettingsDialog(llm_settings, secret_store, dcc.TEXTS["EN"])
         llm_dialog.provider_combo.setCurrentIndex(llm_dialog.provider_combo.findData("anthropic"))
         save_widget(app, llm_dialog, "07-llm-providers.png", (820, 430))
+        if sys.platform.startswith("win"):
+            # All release images are complete at this point.  Some Windows
+            # PyQt6 builds abort while destroying the remaining Qt objects,
+            # even though generation succeeded.  Exit before that native
+            # teardown; failures raised before this point still fail normally.
+            print("\n".join(str(path) for path in sorted(OUT.glob("*.png"))))
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(0)
         llm_dialog.close()
 
     print("\n".join(str(path) for path in sorted(OUT.glob("*.png"))))
