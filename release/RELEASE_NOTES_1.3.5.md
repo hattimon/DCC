@@ -49,6 +49,7 @@ Docker Control Center 1.3.5 is the first public release after v1.1.1 that consol
 - Update notifications can be disabled independently.
 - Added manual **Check for updates**.
 - Fixed a Linux Qt crash that could occur when switching the application language from the open language menu; menu reconstruction is now deferred until the triggering menu signal has finished.
+- Fixed overlapping group-header captions in the container table. Group titles are now rendered only once by the interactive header control, with corrected spacing after the group checkbox.
 - The README **Download Latest Version** buttons now link directly to the current Windows installer and Linux `.deb` assets instead of opening the release/repository page first.
 - **Fixed Linux self-update authorization** — after downloading the `.deb`, DCC now stays open while `pkexec/apt` waits for the system password, clearly tells the user that a password prompt is required, and closes only after the installation finishes successfully.
 - Update prompt supports update now / remind later / cancel behavior.
@@ -201,6 +202,7 @@ Model lists can be detected/refreshed where supported, and provider credentials 
 - Powiadomienia o aktualizacjach można wyłączyć osobno.
 - Dodano ręczne **Sprawdź aktualizacje**.
 - Poprawiono błąd Qt na Linuxie, który mógł zamknąć aplikację podczas zmiany języka z otwartego menu; przebudowa menu odbywa się teraz dopiero po zakończeniu obsługi kliknięcia.
+- Poprawiono nachodzące na siebie nagłówki grup w tabeli kontenerów. Tytuł grupy jest teraz renderowany tylko raz przez interaktywny nagłówek, z poprawionym odstępem za checkboxem grupy.
 - Przyciski **Download Latest Version** w README prowadzą teraz bezpośrednio do aktualnego instalatora Windows i pakietu Linux `.deb`, zamiast najpierw otwierać stronę release/repozytorium.
 - **Poprawiono autoupdate na Linuxie** — po pobraniu `.deb` DCC pozostaje uruchomiony, gdy `pkexec/apt` czeka na systemowe hasło, jasno informuje o konieczności jego wpisania i zamyka się dopiero po poprawnym zakończeniu instalacji.
 - Okno aktualizacji obsługuje aktualizację teraz / przypomnij później / anuluj.
@@ -308,5 +310,5 @@ Lista modeli może być wykrywana/odświeżana tam, gdzie dostawca to wspiera, a
 
 - Windows packaged runtime `--self-check`: **OK**
 - Linux packaged runtime `--self-check`: **OK**
-- Automated Python regression tests: **20/20 passed**
+- Automated Python regression tests: **21/21 passed**
 - Installed local Windows version after update: **1.3.5**

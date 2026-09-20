@@ -9214,7 +9214,12 @@ class MainWindow(QMainWindow):
         collapsed = storage_key in self.collapsed_groups
         arrow = "▶" if collapsed else "▼"
         summary = self.texts["group_summary"].format(count=len(containers), running=running, networks=networks)
-        item = QTableWidgetItem(f"{arrow}  {self.group_display_name(key)}     {summary}")
+        # Keep the spanning item only for metadata/background.  The visible
+        # caption is rendered by the interactive button below.  Rendering the
+        # same text in both places makes the two captions show through each
+        # other because the cell widget is transparent (especially noticeable
+        # on Linux and with non-100% table zoom).
+        item = QTableWidgetItem("")
         item.setData(Qt.ItemDataRole.UserRole, {"row_type": "group", "key": key, "storage_key": storage_key})
         item.setFlags(Qt.ItemFlag.ItemIsEnabled)
         font = QFont(item.font())
@@ -9230,8 +9235,8 @@ class MainWindow(QMainWindow):
 
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
-        header_layout.setContentsMargins(8, 0, 8, 0)
-        header_layout.setSpacing(6)
+        header_layout.setContentsMargins(10, 0, 8, 0)
+        header_layout.setSpacing(8)
         group_checkbox = QCheckBox()
         group_checkbox.setToolTip(self.texts["group_select_all"])
         group_checkbox.stateChanged.connect(

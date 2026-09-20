@@ -4,7 +4,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication, QCheckBox, QTableWidget, QTableWidgetItem
+from PyQt6.QtWidgets import QApplication, QCheckBox, QPushButton, QTableWidget, QTableWidgetItem
 
 import DockerControlCenter as dcc
 
@@ -60,6 +60,38 @@ class GroupSelectionTests(unittest.TestCase):
 
         self.assertFalse(harness.group_checkboxes["project:alpha"].isChecked())
         self.assertFalse(harness.select_all_checkbox.isChecked())
+
+    def test_group_header_caption_is_rendered_once_by_button(self):
+        harness = _GroupSelectionHarness()
+        harness.table = QTableWidget(0, 12)
+        harness.texts = {
+            "group_summary": "{count} containers · {running} running · networks: {networks}",
+            "group_select_all": "Select group",
+            "group_display_expand": "Expand group",
+            "group_display_collapse": "Collapse group",
+        }
+        harness.collapsed_groups = set()
+        harness.group_checkboxes = {}
+        harness.accent_color = "#33f0ff"
+        harness.current_theme = "black"
+        harness.container_table_zoom = 100
+        harness.group_network_summary = lambda _containers: "alpha-net"
+        harness.group_storage_key = lambda key: f"project:{key}"
+        harness.group_display_name = lambda key: f"Project: {key}"
+        harness.on_group_checkbox_changed = lambda *_args: None
+        harness.toggle_container_group = lambda *_args: None
+
+        container = type("Container", (), {"status": "running"})()
+        dcc.MainWindow.insert_group_header(harness, "alpha", [container])
+
+        metadata_item = harness.table.item(0, 0)
+        self.assertIsNotNone(metadata_item)
+        self.assertEqual(metadata_item.text(), "")
+        header_widget = harness.table.cellWidget(0, 0)
+        self.assertIsNotNone(header_widget)
+        button = header_widget.findChild(QPushButton)
+        self.assertIsNotNone(button)
+        self.assertIn("Project: alpha", button.text())
 
 
 if __name__ == "__main__":
