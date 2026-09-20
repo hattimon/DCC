@@ -47,6 +47,7 @@ Docker Control Center 1.3.5 is the first public release after v1.1.1 that consol
 - Update notifications can be disabled independently.
 - Added manual **Check for updates**.
 - The README **Download Latest Version** buttons now link directly to the current Windows installer and Linux `.deb` assets instead of opening the release/repository page first.
+- **Fixed Linux self-update authorization** — after downloading the `.deb`, DCC now stays open while `pkexec/apt` waits for the system password, clearly tells the user that a password prompt is required, and closes only after the installation finishes successfully.
 - Update prompt supports update now / remind later / cancel behavior.
 - Added **Reset application settings** while preserving connection profiles.
 - Added a separate **Factory reset** with an explicit warning explaining that profiles, saved credentials, LLM settings and local DCC data will be removed while Docker-host data remains untouched.
@@ -195,6 +196,7 @@ Model lists can be detected/refreshed where supported, and provider credentials 
 - Powiadomienia o aktualizacjach można wyłączyć osobno.
 - Dodano ręczne **Sprawdź aktualizacje**.
 - Przyciski **Download Latest Version** w README prowadzą teraz bezpośrednio do aktualnego instalatora Windows i pakietu Linux `.deb`, zamiast najpierw otwierać stronę release/repozytorium.
+- **Poprawiono autoupdate na Linuxie** — po pobraniu `.deb` DCC pozostaje uruchomiony, gdy `pkexec/apt` czeka na systemowe hasło, jasno informuje o konieczności jego wpisania i zamyka się dopiero po poprawnym zakończeniu instalacji.
 - Okno aktualizacji obsługuje aktualizację teraz / przypomnij później / anuluj.
 - Dodano **Reset ustawień aplikacji** bez usuwania profili połączeń.
 - Dodano osobny **Reset do ustawień fabrycznych** z ostrzeżeniem, które dokładnie opisuje usuwane profile, dane logowania, konfigurację LLM i dane DCC. Dane Dockera na hostach nie są usuwane.
@@ -300,5 +302,5 @@ Lista modeli może być wykrywana/odświeżana tam, gdzie dostawca to wspiera, a
 
 - Windows packaged runtime `--self-check`: **OK**
 - Linux packaged runtime `--self-check`: **OK**
-- Automated Python regression tests: **13/13 passed**
+- Automated Python regression tests: **15/15 passed**
 - Installed local Windows version after update: **1.3.5**

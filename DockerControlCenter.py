@@ -214,6 +214,11 @@ TEXTS = {
         "info_update_cancel": "Cancel",
         "info_update_downloading": "Downloading update {release}...",
         "info_update_download_failed": "Could not download or start the update.",
+        "info_update_linux_auth_title": "Linux update - password required",
+        "info_update_linux_auth": "The update package has been downloaded. Linux will now open a system authorization window. Enter your user/administrator password there to allow the package installation. Docker Control Center will remain open until the installation finishes.",
+        "info_update_linux_installing": "Installing the Linux update... Complete the system password prompt if it is still visible.",
+        "info_update_linux_installed": "The update was installed successfully. Docker Control Center will now close. Start it again to use the new version.",
+        "info_update_linux_install_failed": "The Linux update was not installed. The password prompt may have been cancelled or the package manager returned an error.",
         "info_update_no_installer": "This release does not contain an installer compatible with this operating system and architecture.",
         "info_update_none_title": "No updates",
         "info_update_none": "You are already on the latest version.",
@@ -696,6 +701,11 @@ TEXTS = {
         "info_update_cancel": "Anuluj",
         "info_update_downloading": "Pobieranie aktualizacji {release}...",
         "info_update_download_failed": "Nie udało się pobrać lub uruchomić aktualizacji.",
+        "info_update_linux_auth_title": "Aktualizacja Linux - wymagane hasło",
+        "info_update_linux_auth": "Pakiet aktualizacji został pobrany. Linux otworzy teraz systemowe okno uwierzytelnienia. Wpisz w nim hasło swojego konta/użytkownika administratora, aby zezwolić na instalację pakietu. Docker Control Center pozostanie uruchomiony aż do zakończenia instalacji.",
+        "info_update_linux_installing": "Instalowanie aktualizacji Linux... Jeśli okno hasła jest nadal widoczne, wpisz hasło i zatwierdź.",
+        "info_update_linux_installed": "Aktualizacja została zainstalowana poprawnie. Docker Control Center zostanie teraz zamknięty. Uruchom aplikację ponownie, aby korzystać z nowej wersji.",
+        "info_update_linux_install_failed": "Aktualizacja Linux nie została zainstalowana. Okno hasła mogło zostać anulowane albo menedżer pakietów zwrócił błąd.",
         "info_update_no_installer": "Ta wersja nie zawiera instalatora zgodnego z tym systemem operacyjnym i architekturą.",
         "info_update_none_title": "Brak aktualizacji",
         "info_update_none": "Masz najnowszą wersję.",
@@ -5889,6 +5899,7 @@ class MainWindow(QMainWindow):
         self.latest_release_info: Dict = {}
         self.update_download_thread: Optional[QThread] = None
         self.update_download_worker: Optional[UpdateDownloadWorker] = None
+        self.update_install_process: Optional[QProcess] = None
         self.startup_catalog_refresh_thread: Optional[QThread] = None
         self.startup_catalog_refresh_worker: Optional[CatalogRefreshWorker] = None
         self.group_mode = str(self.settings.value("containers/group_mode", "project") or "project")
@@ -7247,11 +7258,38 @@ class MainWindow(QMainWindow):
                 pkexec = shutil.which("pkexec")
                 apt_get = shutil.which("apt-get")
                 if pkexec and apt_get:
-                    subprocess.Popen([pkexec, apt_get, "install", "-y", package_path], cwd=str(Path(path).parent))
+                    QMessageBox.information(
+                        self,
+                        self.texts["info_update_linux_auth_title"],
+                        self.texts["info_update_linux_auth"],
+                    )
+                    process = QProcess(self)
+                    process.setWorkingDirectory(str(Path(path).parent))
+                    process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+                    process.finished.connect(self.on_linux_update_install_finished)
+                    process.errorOccurred.connect(self.on_linux_update_install_error)
+                    self.update_install_process = process
+                    self.statusBar().showMessage(self.texts["info_update_linux_installing"])
+                    process.start(pkexec, [apt_get, "install", "-y", package_path])
+                    return
                 elif shutil.which("xdg-open"):
+                    QMessageBox.information(
+                        self,
+                        self.texts["info_update_linux_auth_title"],
+                        self.texts["info_update_linux_auth"],
+                    )
                     subprocess.Popen(["xdg-open", package_path], cwd=str(Path(path).parent))
+                    self.statusBar().showMessage(self.texts["info_update_linux_installing"])
+                    return
                 else:
+                    QMessageBox.information(
+                        self,
+                        self.texts["info_update_linux_auth_title"],
+                        self.texts["info_update_linux_auth"],
+                    )
                     launch_interactive_terminal(shell_command=f"sudo apt install {shlex.quote(package_path)}")
+                    self.statusBar().showMessage(self.texts["info_update_linux_installing"])
+                    return
             else:
                 subprocess.Popen([path], cwd=str(Path(path).parent))
         except Exception as exc:
@@ -7262,6 +7300,43 @@ class MainWindow(QMainWindow):
             )
             return
         QTimer.singleShot(500, self.close)
+
+    def on_linux_update_install_error(self, error):
+        process = self.update_install_process
+        if process is None:
+            return
+        if error != QProcess.ProcessError.FailedToStart:
+            return
+        details = self.texts["info_update_linux_install_failed"]
+        output = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace").strip()
+        if output:
+            details += f"\n\n{output}"
+        QMessageBox.warning(self, self.texts["msg_error"], details)
+        self.statusBar().showMessage(self.texts["status_ready"])
+        process.deleteLater()
+        self.update_install_process = None
+
+    def on_linux_update_install_finished(self, exit_code: int, _exit_status):
+        process = self.update_install_process
+        if process is None:
+            return
+        output = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace").strip()
+        process.deleteLater()
+        self.update_install_process = None
+        if exit_code == 0:
+            self.statusBar().showMessage(self.texts["status_ready"])
+            QMessageBox.information(
+                self,
+                self.texts["info_update_linux_auth_title"],
+                self.texts["info_update_linux_installed"],
+            )
+            QTimer.singleShot(250, self.close)
+            return
+        details = self.texts["info_update_linux_install_failed"]
+        if output:
+            details += f"\n\n{output}"
+        QMessageBox.warning(self, self.texts["msg_error"], details)
+        self.statusBar().showMessage(self.texts["status_ready"])
 
     def check_for_updates(self, notify_always: bool = False):
         info = self.fetch_latest_release_info()
