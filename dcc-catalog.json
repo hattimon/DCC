@@ -7,7 +7,7 @@
     {
       "name": "Agent Zero",
       "image": "agent0ai/agent-zero:latest",
-      "category": "AI / Agenci",
+      "category": "AI 🤖 › Agenci",
       "description": "Samodzielny framework agenta AI z webowym interfejsem, narzędziami i trwałą przestrzenią użytkownika.",
       "default_name": "agent-zero",
       "container_port": "80",
@@ -16,7 +16,7 @@
       "command": "",
       "notes": "Po wdrożeniu otwórz panel i skonfiguruj dostawcę/model LLM. Dane użytkownika są przechowywane w volume a0_usr.",
       "lightweight": false,
-      "category_en": "AI / Agents",
+      "category_en": "AI 🤖 › Agents",
       "description_en": "Autonomous AI agent framework with a web UI, tools and persistent user workspace.",
       "notes_en": "Open the UI after deployment and configure an LLM provider/model. User data is persisted in the a0_usr volume.",
       "engines": [
@@ -26,12 +26,12 @@
       "source_url": "https://github.com/agent0ai/agent-zero",
       "docs_url": "https://github.com/agent0ai/agent-zero/blob/main/docs/setup/installation.md",
       "homepage_url": "https://www.agent-zero.ai/",
-      "icon_text": "A0"
+      "icon_text": "🤖"
     },
     {
       "name": "Ollama",
       "image": "ollama/ollama:latest",
-      "category": "AI / Runtime",
+      "category": "AI 🧠 › Runtime",
       "description": "Lokalny serwer modeli LLM z API, dobry jako backend dla Open WebUI i innych aplikacji AI.",
       "default_name": "ollama",
       "container_port": "11434",
@@ -40,7 +40,7 @@
       "command": "",
       "notes": "Preset CPU. Akcelerację NVIDIA/AMD możesz później dodać w parametrach uruchomienia zgodnie z dokumentacją Ollama.",
       "lightweight": false,
-      "category_en": "AI / Runtime",
+      "category_en": "AI 🧠 › Runtime",
       "description_en": "Local LLM model server with an API, useful as a backend for Open WebUI and other AI applications.",
       "notes_en": "CPU preset. NVIDIA/AMD acceleration can be added later in the run parameters according to Ollama documentation.",
       "engines": [
@@ -50,12 +50,12 @@
       "source_url": "https://github.com/ollama/ollama",
       "docs_url": "https://github.com/ollama/ollama/blob/main/docs/docker.mdx",
       "homepage_url": "https://ollama.com/",
-      "icon_text": "OL"
+      "icon_text": "🧠"
     },
     {
       "name": "NocoDB",
       "image": "nocodb/nocodb:latest",
-      "category": "Automatyzacja / Low-code",
+      "category": "Automatyzacja ⚙ › Low-code",
       "description": "Self-hosted alternatywa dla Airtable do budowy baz, widoków i prostych workflow bez kodowania.",
       "default_name": "nocodb",
       "container_port": "8080",
@@ -64,7 +64,7 @@
       "command": "",
       "notes": "Preset używa lokalnej bazy SQLite i trwałego volume. DCC automatycznie zmieni port hosta, jeśli 8084 jest zajęty.",
       "lightweight": false,
-      "category_en": "Automation / Low-code",
+      "category_en": "Automation ⚙ › Low-code",
       "description_en": "Self-hosted Airtable alternative for databases, views and lightweight no-code workflows.",
       "notes_en": "This preset uses local SQLite with a persistent volume. DCC will automatically change host port 8084 if it is occupied.",
       "engines": [
@@ -74,12 +74,12 @@
       "source_url": "https://github.com/nocodb/nocodb",
       "docs_url": "https://docs.nocodb.com/",
       "homepage_url": "https://nocodb.com/",
-      "icon_text": "NC"
+      "icon_text": "⚙"
     },
     {
       "name": "Stirling PDF",
       "image": "docker.stirlingpdf.com/stirlingtools/stirling-pdf",
-      "category": "Narzędzia / Dokumenty",
+      "category": "Narzędzia 🧰 › Dokumenty",
       "description": "Rozbudowany, lokalny zestaw narzędzi PDF: edycja, łączenie, OCR, konwersja, podpisywanie i automatyzacje.",
       "default_name": "stirling-pdf",
       "container_port": "8080",
@@ -88,7 +88,7 @@
       "command": "",
       "notes": "Szybki preset zgodny z oficjalnym Quick Start. Zaawansowaną konfigurację i dodatkowe volume możesz dodać później.",
       "lightweight": false,
-      "category_en": "Tools / Documents",
+      "category_en": "Tools 🧰 › Documents",
       "description_en": "Self-hosted PDF toolkit for editing, merging, OCR, conversion, signing and automation.",
       "notes_en": "Quick preset matching the official Quick Start. Add advanced configuration and extra volumes later if needed.",
       "engines": [
@@ -98,12 +98,12 @@
       "source_url": "https://github.com/Stirling-Tools/Stirling-PDF",
       "docs_url": "https://docs.stirlingpdf.com/",
       "homepage_url": "https://www.stirlingpdf.com/",
-      "icon_text": "SP"
+      "icon_text": "🧰"
     },
     {
       "name": "IT-Tools",
       "image": "ghcr.io/corentinth/it-tools:latest",
-      "category": "Narzędzia / Developer",
+      "category": "Narzędzia 🧰 › Developer",
       "description": "Lekki portal z dziesiątkami narzędzi dla programistów i administratorów, działający lokalnie w przeglądarce.",
       "default_name": "it-tools",
       "container_port": "80",
@@ -112,7 +112,7 @@
       "command": "",
       "notes": "Obraz GHCR obsługuje amd64 i arm64; nadaje się także do kompatybilnych hostów Balena OS.",
       "lightweight": true,
-      "category_en": "Tools / Developer",
+      "category_en": "Tools 🧰 › Developer",
       "description_en": "Lightweight portal with dozens of developer and administrator utilities running locally in the browser.",
       "notes_en": "The GHCR image supports amd64 and arm64 and is also suitable for compatible Balena OS hosts.",
       "engines": [
@@ -128,12 +128,12 @@
       "source_url": "https://github.com/CorentinTh/it-tools",
       "docs_url": "https://github.com/CorentinTh/it-tools#self-host",
       "homepage_url": "https://it-tools.tech/",
-      "icon_text": "IT"
+      "icon_text": "🧰"
     },
     {
       "name": "Dozzle",
       "image": "amir20/dozzle:latest",
-      "category": "Administracja / Logi",
+      "category": "Administracja 🛠 › Logi",
       "description": "Lekki panel do podglądu logów kontenerów w czasie rzeczywistym z informacjami o zasobach.",
       "default_name": "dozzle",
       "container_port": "8080",
@@ -142,7 +142,7 @@
       "command": "",
       "notes": "Wymaga dostępu do socketu Docker. Nie wystawiaj panelu publicznie bez skonfigurowania uwierzytelniania.",
       "lightweight": true,
-      "category_en": "Administration / Logs",
+      "category_en": "Administration 🛠 › Logs",
       "description_en": "Lightweight real-time container log viewer with resource information.",
       "notes_en": "Requires access to the Docker socket. Do not expose the UI publicly without configuring authentication.",
       "engines": [
@@ -152,12 +152,12 @@
       "source_url": "https://github.com/amir20/dozzle",
       "docs_url": "https://dozzle.dev/guide/getting-started",
       "homepage_url": "https://dozzle.dev/",
-      "icon_text": "DZ"
+      "icon_text": "🛠"
     },
     {
       "name": "Beszel Hub",
       "image": "henrygd/beszel:latest",
-      "category": "Monitoring",
+      "category": "Monitoring 📊",
       "description": "Lekki hub monitoringu serwerów i kontenerów z nowoczesnym panelem WWW.",
       "default_name": "beszel",
       "container_port": "8090",
@@ -166,7 +166,7 @@
       "command": "",
       "notes": "To jest hub Beszel. Kolejne hosty dodasz z panelu Beszel za pomocą jego agenta.",
       "lightweight": true,
-      "category_en": "Monitoring",
+      "category_en": "Monitoring 📊",
       "description_en": "Lightweight server and container monitoring hub with a modern web dashboard.",
       "notes_en": "This installs the Beszel hub. Add additional hosts from the Beszel UI using its agent.",
       "engines": [
@@ -176,12 +176,12 @@
       "source_url": "https://github.com/henrygd/beszel",
       "docs_url": "https://beszel.dev/guide/getting-started",
       "homepage_url": "https://beszel.dev/",
-      "icon_text": "BZ"
+      "icon_text": "📊"
     },
     {
       "name": "ChangeDetection.io",
       "image": "dgtlmoon/changedetection.io:latest",
-      "category": "Monitoring",
+      "category": "Monitoring 📊",
       "description": "Monitor zmian stron WWW, cen, dostępności produktów i treści z historią oraz alertami.",
       "default_name": "changedetection",
       "container_port": "5000",
@@ -190,7 +190,7 @@
       "command": "",
       "notes": "Podstawowy tryb HTTP działa w jednym kontenerze. Pełne renderowanie JavaScript może wymagać dodatkowej usługi przeglądarki.",
       "lightweight": false,
-      "category_en": "Monitoring",
+      "category_en": "Monitoring 📊",
       "description_en": "Monitor website changes, prices, restocks and content with history and alerts.",
       "notes_en": "The basic HTTP mode runs in one container. Full JavaScript rendering can require an additional browser service.",
       "engines": [
@@ -200,12 +200,12 @@
       "source_url": "https://github.com/dgtlmoon/changedetection.io",
       "docs_url": "https://github.com/dgtlmoon/changedetection.io/wiki",
       "homepage_url": "https://changedetection.io/",
-      "icon_text": "CD"
+      "icon_text": "📊"
     },
     {
       "name": "Alpine Linux",
       "image": "alpine:latest",
-      "category": "Baza / System",
+      "category": "Baza 🐧 › System",
       "description": "Minimalny obraz systemowy (Alpine Linux).",
       "default_name": "alpine",
       "container_port": "",
@@ -214,7 +214,7 @@
       "command": "",
       "notes": "Bardzo lekki, dobry na Raspberry Pi.",
       "lightweight": true,
-      "category_en": "Base / System",
+      "category_en": "Base 🐧 › System",
       "description_en": "Minimal base image (Alpine Linux).",
       "notes_en": "Very lightweight, great for low-end devices.",
       "engines": null,
@@ -222,12 +222,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🐧"
     },
     {
       "name": "Debian",
       "image": "debian:bookworm",
-      "category": "Baza / System",
+      "category": "Baza 🐧 › System",
       "description": "Stabilny system bazowy (Debian Bookworm).",
       "default_name": "debian",
       "container_port": "",
@@ -236,7 +236,7 @@
       "command": "",
       "notes": "Dobry kompromis miedzy rozmiarem a kompatybilnoscia.",
       "lightweight": false,
-      "category_en": "Base / System",
+      "category_en": "Base 🐧 › System",
       "description_en": "Stable base system (Debian Bookworm).",
       "notes_en": "Good balance of size and compatibility.",
       "engines": null,
@@ -244,12 +244,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🐧"
     },
     {
       "name": "Ubuntu",
       "image": "ubuntu:24.04",
-      "category": "Baza / System",
+      "category": "Baza 🐧 › System",
       "description": "Popularny system bazowy (Ubuntu 24.04).",
       "default_name": "ubuntu",
       "container_port": "",
@@ -258,7 +258,7 @@
       "command": "",
       "notes": "Latwy start do aplikacji Linux.",
       "lightweight": false,
-      "category_en": "Base / System",
+      "category_en": "Base 🐧 › System",
       "description_en": "Popular base system (Ubuntu 24.04).",
       "notes_en": "Easy starting point for Linux apps.",
       "engines": null,
@@ -266,12 +266,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🐧"
     },
     {
       "name": "BusyBox",
       "image": "busybox:latest",
-      "category": "Baza / System",
+      "category": "Baza 🐧 › System",
       "description": "Najmniejszy obraz narzedziowy.",
       "default_name": "busybox",
       "container_port": "",
@@ -280,7 +280,7 @@
       "command": "",
       "notes": "Idealny do testow i narzedzi.",
       "lightweight": true,
-      "category_en": "Base / System",
+      "category_en": "Base 🐧 › System",
       "description_en": "Tiny utility image.",
       "notes_en": "Great for tests and tooling.",
       "engines": null,
@@ -288,12 +288,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🐧"
     },
     {
       "name": "Node.js",
       "image": "node:24-alpine",
-      "category": "Runtime / Dev",
+      "category": "Runtime 💻 › Dev",
       "description": "Runtime Node.js 24 LTS dla aplikacji JavaScript i TypeScript.",
       "default_name": "node-app",
       "container_port": "",
@@ -302,7 +302,7 @@
       "command": "",
       "notes": "Node.js 24 jest linią LTS; wariant Alpine jest lekki.",
       "lightweight": true,
-      "category_en": "Runtime / Dev",
+      "category_en": "Runtime 💻 › Dev",
       "description_en": "Node.js 24 LTS runtime for JavaScript and TypeScript applications.",
       "notes_en": "Node.js 24 is an LTS line; the Alpine variant is lightweight.",
       "engines": null,
@@ -310,12 +310,12 @@
       "source_url": "https://github.com/nodejs/node",
       "docs_url": "https://nodejs.org/en/docs",
       "homepage_url": "https://nodejs.org/",
-      "icon_text": "JS"
+      "icon_text": "💻"
     },
     {
       "name": "Python",
       "image": "python:3.12-slim",
-      "category": "Runtime / Dev",
+      "category": "Runtime 💻 › Dev",
       "description": "Runtime Python do aplikacji i skryptow.",
       "default_name": "python-app",
       "container_port": "",
@@ -324,7 +324,7 @@
       "command": "",
       "notes": "Slim to mniejszy obraz.",
       "lightweight": false,
-      "category_en": "Runtime / Dev",
+      "category_en": "Runtime 💻 › Dev",
       "description_en": "Python runtime for apps and scripts.",
       "notes_en": "Slim variant is smaller.",
       "engines": null,
@@ -332,12 +332,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "💻"
     },
     {
       "name": "Golang",
       "image": "golang:1.27-alpine",
-      "category": "Runtime / Dev",
+      "category": "Runtime 💻 › Dev",
       "description": "Aktualny toolchain Go 1.27 do budowania i uruchamiania aplikacji.",
       "default_name": "go-app",
       "container_port": "",
@@ -346,7 +346,7 @@
       "command": "",
       "notes": "Go 1.27 to aktualna stabilna linia; wariant Alpine jest lekki.",
       "lightweight": true,
-      "category_en": "Runtime / Dev",
+      "category_en": "Runtime 💻 › Dev",
       "description_en": "Current Go 1.27 toolchain for building and running applications.",
       "notes_en": "Go 1.27 is the current stable line; the Alpine variant is lightweight.",
       "engines": null,
@@ -354,12 +354,12 @@
       "source_url": "https://github.com/golang/go",
       "docs_url": "https://go.dev/doc/",
       "homepage_url": "https://go.dev/",
-      "icon_text": "GO"
+      "icon_text": "💻"
     },
     {
       "name": "Apache HTTPD",
       "image": "httpd:2.4",
-      "category": "WWW / Proxy",
+      "category": "WWW 🌐 › Proxy",
       "description": "Serwer HTTP Apache.",
       "default_name": "apache",
       "container_port": "80",
@@ -368,7 +368,7 @@
       "command": "",
       "notes": "",
       "lightweight": false,
-      "category_en": "Web / Proxy",
+      "category_en": "Web 🌐 › Proxy",
       "description_en": "Apache HTTP server.",
       "notes_en": "",
       "engines": null,
@@ -376,12 +376,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🌐"
     },
     {
       "name": "PostgreSQL",
       "image": "postgres:16",
-      "category": "Bazy danych",
+      "category": "Bazy danych 🗄",
       "description": "Popularna relacyjna baza danych.",
       "default_name": "postgres",
       "container_port": "5432",
@@ -390,7 +390,7 @@
       "command": "",
       "notes": "Ustaw haslo i dane dostepu.",
       "lightweight": false,
-      "category_en": "Databases",
+      "category_en": "Databases 🗄",
       "description_en": "Popular relational database.",
       "notes_en": "Set password and access details.",
       "engines": null,
@@ -398,12 +398,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🗄"
     },
     {
       "name": "MySQL",
       "image": "mysql:8.0",
-      "category": "Bazy danych",
+      "category": "Bazy danych 🗄",
       "description": "Relacyjna baza danych MySQL.",
       "default_name": "mysql",
       "container_port": "3306",
@@ -412,7 +412,7 @@
       "command": "",
       "notes": "Zmien domyslne haslo.",
       "lightweight": false,
-      "category_en": "Databases",
+      "category_en": "Databases 🗄",
       "description_en": "MySQL relational database.",
       "notes_en": "Change the default password.",
       "engines": null,
@@ -420,12 +420,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🗄"
     },
     {
       "name": "MongoDB",
       "image": "mongo:7",
-      "category": "Bazy danych",
+      "category": "Bazy danych 🗄",
       "description": "Baza danych dokumentowa MongoDB.",
       "default_name": "mongo",
       "container_port": "27017",
@@ -434,7 +434,7 @@
       "command": "",
       "notes": "",
       "lightweight": false,
-      "category_en": "Databases",
+      "category_en": "Databases 🗄",
       "description_en": "MongoDB document database.",
       "notes_en": "",
       "engines": null,
@@ -442,12 +442,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🗄"
     },
     {
       "name": "RabbitMQ",
       "image": "rabbitmq:3-management",
-      "category": "Messaging",
+      "category": "Messaging 💬",
       "description": "Broker kolejek z panelem WWW.",
       "default_name": "rabbitmq",
       "container_port": "5672",
@@ -456,7 +456,7 @@
       "command": "",
       "notes": "Panel WWW na porcie 15672.",
       "lightweight": false,
-      "category_en": "Messaging",
+      "category_en": "Messaging 💬",
       "description_en": "Message broker with web UI.",
       "notes_en": "Web UI on port 15672.",
       "engines": null,
@@ -464,12 +464,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "💬"
     },
     {
       "name": "NATS",
       "image": "nats:latest",
-      "category": "Messaging",
+      "category": "Messaging 💬",
       "description": "Lekki broker wiadomosci.",
       "default_name": "nats",
       "container_port": "4222",
@@ -478,7 +478,7 @@
       "command": "",
       "notes": "Monitoring na porcie 8222.",
       "lightweight": false,
-      "category_en": "Messaging",
+      "category_en": "Messaging 💬",
       "description_en": "Lightweight messaging broker.",
       "notes_en": "Monitoring on port 8222.",
       "engines": null,
@@ -486,12 +486,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "💬"
     },
     {
       "name": "Memcached",
       "image": "memcached:latest",
-      "category": "Cache",
+      "category": "Cache ⚡",
       "description": "Lekki cache w pamieci.",
       "default_name": "memcached",
       "container_port": "11211",
@@ -500,7 +500,7 @@
       "command": "",
       "notes": "",
       "lightweight": true,
-      "category_en": "Cache",
+      "category_en": "Cache ⚡",
       "description_en": "Lightweight in-memory cache.",
       "notes_en": "",
       "engines": null,
@@ -508,12 +508,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "⚡"
     },
     {
       "name": "WordPress",
       "image": "wordpress:latest",
-      "category": "Aplikacje WWW",
+      "category": "Aplikacje WWW 🌍",
       "description": "Popularny CMS do stron i blogow.",
       "default_name": "wordpress",
       "container_port": "80",
@@ -522,7 +522,7 @@
       "command": "",
       "notes": "Wymaga bazy MySQL/MariaDB.",
       "lightweight": false,
-      "category_en": "Web Apps",
+      "category_en": "Web Apps 🌍",
       "description_en": "Popular CMS for websites and blogs.",
       "notes_en": "Requires MySQL/MariaDB.",
       "engines": null,
@@ -530,12 +530,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🌍"
     },
     {
       "name": "Nextcloud",
       "image": "nextcloud:latest",
-      "category": "Aplikacje WWW",
+      "category": "Aplikacje WWW 🌍",
       "description": "Self-hosted chmura plikow.",
       "default_name": "nextcloud",
       "container_port": "80",
@@ -544,7 +544,7 @@
       "command": "",
       "notes": "Wymaga bazy danych.",
       "lightweight": false,
-      "category_en": "Web Apps",
+      "category_en": "Web Apps 🌍",
       "description_en": "Self-hosted file cloud.",
       "notes_en": "Requires a database.",
       "engines": null,
@@ -552,12 +552,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🌍"
     },
     {
       "name": "Open WebUI",
       "image": "ghcr.io/open-webui/open-webui:main",
-      "category": "AI / UI",
+      "category": "AI 💬 › UI",
       "description": "Interfejs webowy do modeli i lokalnych pipeline'ow AI.",
       "default_name": "open-webui",
       "container_port": "8080",
@@ -566,7 +566,7 @@
       "command": "",
       "notes": "Dobra para z Ollama albo OpenAI API.",
       "lightweight": false,
-      "category_en": "AI / UI",
+      "category_en": "AI 💬 › UI",
       "description_en": "Web interface for AI models and local AI pipelines.",
       "notes_en": "Great pair with Ollama or OpenAI API.",
       "engines": null,
@@ -574,12 +574,12 @@
       "source_url": "https://github.com/open-webui/open-webui",
       "docs_url": "https://docs.openwebui.com/",
       "homepage_url": "https://openwebui.com/",
-      "icon_text": "OW"
+      "icon_text": "💬"
     },
     {
       "name": "Vane (dawniej Perplexica)",
       "image": "itzcrazykns1337/vane:latest",
-      "category": "AI / Search",
+      "category": "AI 🔎 › Search",
       "description": "Prywatna wyszukiwarka i silnik odpowiedzi AI, projekt znany wcześniej jako Perplexica.",
       "default_name": "vane",
       "container_port": "3000",
@@ -588,7 +588,7 @@
       "command": "",
       "notes": "Aktualny oficjalny sposób instalacji używa obrazu itzcrazykns1337/vane:latest z trwałym volume vane-data. Obraz zawiera wbudowany SearXNG; modele i klucze konfigurujesz po uruchomieniu.",
       "lightweight": false,
-      "category_en": "AI / Search",
+      "category_en": "AI 🔎 › Search",
       "description_en": "Privacy-focused AI answering engine formerly known as Perplexica.",
       "notes_en": "The current official Docker install uses itzcrazykns1337/vane:latest with persistent vane-data. The image bundles SearXNG; configure models and API keys after deployment.",
       "engines": null,
@@ -596,12 +596,12 @@
       "source_url": "https://github.com/ItzCrazyKns/Vane",
       "docs_url": "https://github.com/ItzCrazyKns/Vane/tree/master/docs/installation",
       "homepage_url": "https://github.com/ItzCrazyKns/Vane",
-      "icon_text": "VA"
+      "icon_text": "🔎"
     },
     {
       "name": "SearXNG",
       "image": "searxng/searxng:latest",
-      "category": "AI / Search",
+      "category": "AI 🔎 › Search",
       "description": "Meta-wyszukiwarka prywatnosciowa dla self-hostingu.",
       "default_name": "searxng",
       "container_port": "8080",
@@ -610,7 +610,7 @@
       "command": "",
       "notes": "Przydatna jako backend wyszukiwania dla narzedzi AI.",
       "lightweight": false,
-      "category_en": "AI / Search",
+      "category_en": "AI 🔎 › Search",
       "description_en": "Privacy-focused metasearch engine for self-hosting.",
       "notes_en": "Useful as a search backend for AI tools.",
       "engines": null,
@@ -618,12 +618,12 @@
       "source_url": "https://github.com/searxng/searxng",
       "docs_url": "https://docs.searxng.org/",
       "homepage_url": "https://searxng.org/",
-      "icon_text": "SX"
+      "icon_text": "🔎"
     },
     {
       "name": "Portainer CE",
       "image": "portainer/portainer-ce:latest",
-      "category": "Administracja",
+      "category": "Administracja 🛠",
       "description": "Panel administracyjny do Docker i kontenerow.",
       "default_name": "portainer",
       "container_port": "9000",
@@ -632,7 +632,7 @@
       "command": "",
       "notes": "Dziala na x86 i ARM, dobre rowniez na Raspberry Pi.",
       "lightweight": false,
-      "category_en": "Administration",
+      "category_en": "Administration 🛠",
       "description_en": "Administration panel for Docker and containers.",
       "notes_en": "Runs on x86 and ARM, including Raspberry Pi.",
       "engines": null,
@@ -640,12 +640,12 @@
       "source_url": "https://github.com/portainer/portainer",
       "docs_url": "https://docs.portainer.io/",
       "homepage_url": "https://www.portainer.io/",
-      "icon_text": "PT"
+      "icon_text": "🛠"
     },
     {
       "name": "Nginx",
       "image": "nginx:alpine",
-      "category": "WWW / Proxy",
+      "category": "WWW 🌐 › Proxy",
       "description": "Lekki serwer WWW i reverse proxy.",
       "default_name": "nginx",
       "container_port": "80",
@@ -654,7 +654,7 @@
       "command": "",
       "notes": "Wersja alpine jest lekka i dobra na slabsze maszyny.",
       "lightweight": true,
-      "category_en": "Web / Proxy",
+      "category_en": "Web 🌐 › Proxy",
       "description_en": "Lightweight web server and reverse proxy.",
       "notes_en": "Alpine image is lightweight and great for low-end hardware.",
       "engines": null,
@@ -662,12 +662,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🌐"
     },
     {
       "name": "Caddy",
       "image": "caddy:alpine",
-      "category": "WWW / Proxy",
+      "category": "WWW 🌐 › Proxy",
       "description": "Nowoczesny reverse proxy z prostym HTTPS.",
       "default_name": "caddy",
       "container_port": "80",
@@ -676,7 +676,7 @@
       "command": "",
       "notes": "Bardzo wygodny do szybkich wdrozen stron i API.",
       "lightweight": true,
-      "category_en": "Web / Proxy",
+      "category_en": "Web 🌐 › Proxy",
       "description_en": "Modern reverse proxy with simple HTTPS setup.",
       "notes_en": "Very convenient for quick website and API deployments.",
       "engines": null,
@@ -684,12 +684,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🌐"
     },
     {
       "name": "Redis",
       "image": "redis:7-alpine",
-      "category": "Bazy danych",
+      "category": "Bazy danych 🗄",
       "description": "Lekka baza key-value i cache.",
       "default_name": "redis",
       "container_port": "6379",
@@ -698,7 +698,7 @@
       "command": "",
       "notes": "",
       "lightweight": true,
-      "category_en": "Databases",
+      "category_en": "Databases 🗄",
       "description_en": "Lightweight key-value database and cache.",
       "notes_en": "",
       "engines": null,
@@ -706,12 +706,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🗄"
     },
     {
       "name": "MariaDB",
       "image": "mariadb:11",
-      "category": "Bazy danych",
+      "category": "Bazy danych 🗄",
       "description": "MySQL-compatible baza danych dla aplikacji self-hosted.",
       "default_name": "mariadb",
       "container_port": "3306",
@@ -720,7 +720,7 @@
       "command": "",
       "notes": "",
       "lightweight": false,
-      "category_en": "Databases",
+      "category_en": "Databases 🗄",
       "description_en": "MySQL-compatible database for self-hosted applications.",
       "notes_en": "",
       "engines": null,
@@ -728,12 +728,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🗄"
     },
     {
       "name": "Adminer",
       "image": "adminer:latest",
-      "category": "Bazy danych",
+      "category": "Bazy danych 🗄",
       "description": "Lekki panel WWW do baz danych.",
       "default_name": "adminer",
       "container_port": "8080",
@@ -742,7 +742,7 @@
       "command": "",
       "notes": "",
       "lightweight": true,
-      "category_en": "Databases",
+      "category_en": "Databases 🗄",
       "description_en": "Lightweight web panel for database management.",
       "notes_en": "",
       "engines": null,
@@ -750,12 +750,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🗄"
     },
     {
       "name": "Eclipse Mosquitto",
       "image": "eclipse-mosquitto:2",
-      "category": "Smart Home / IoT",
+      "category": "Smart Home 🏠 › IoT",
       "description": "Broker MQTT dla IoT i Home Assistant.",
       "default_name": "mosquitto",
       "container_port": "1883",
@@ -764,7 +764,7 @@
       "command": "",
       "notes": "Dobry wybor dla slabszych maszyn i Raspberry Pi 3; dostepny rowniez w katalogu hostow Balena.",
       "lightweight": true,
-      "category_en": "Smart Home / IoT",
+      "category_en": "Smart Home 🏠 › IoT",
       "description_en": "MQTT broker for IoT and Home Assistant.",
       "notes_en": "Good choice for low-end devices and Raspberry Pi 3; also available for Balena hosts.",
       "engines": [
@@ -784,12 +784,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🏠"
     },
     {
       "name": "Node-RED",
       "image": "nodered/node-red:latest",
-      "category": "Smart Home / IoT",
+      "category": "Smart Home 🏠 › IoT",
       "description": "Wizualna automatyzacja workflow i integracji.",
       "default_name": "node-red",
       "container_port": "1880",
@@ -798,7 +798,7 @@
       "command": "",
       "notes": "Oficjalny obraz jest wieloarchitekturowy i nadaje sie do Raspberry Pi; dostepny rowniez dla hostow Balena.",
       "lightweight": false,
-      "category_en": "Smart Home / IoT",
+      "category_en": "Smart Home 🏠 › IoT",
       "description_en": "Visual workflow automation and integrations.",
       "notes_en": "The official image is multi-architecture and Raspberry Pi friendly; also available for Balena hosts.",
       "engines": [
@@ -818,12 +818,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🏠"
     },
     {
       "name": "Gitea",
       "image": "gitea/gitea:latest",
-      "category": "DevOps",
+      "category": "DevOps 🛠",
       "description": "Lekki self-hosted Git server.",
       "default_name": "gitea",
       "container_port": "3000",
@@ -832,7 +832,7 @@
       "command": "",
       "notes": "Przyjazny dla Raspberry Pi i slabego sprzetu.",
       "lightweight": false,
-      "category_en": "DevOps",
+      "category_en": "DevOps 🛠",
       "description_en": "Lightweight self-hosted Git server.",
       "notes_en": "Friendly for Raspberry Pi and low-end hardware.",
       "engines": null,
@@ -840,12 +840,12 @@
       "source_url": "https://github.com/go-gitea/gitea",
       "docs_url": "https://docs.gitea.com/",
       "homepage_url": "https://about.gitea.com/",
-      "icon_text": "GT"
+      "icon_text": "🛠"
     },
     {
       "name": "Jellyfin",
       "image": "linuxserver/jellyfin:latest",
-      "category": "Media",
+      "category": "Media 🎬",
       "description": "Self-hosted media server z obsluga ARM i x86.",
       "default_name": "jellyfin",
       "container_port": "8096",
@@ -854,7 +854,7 @@
       "command": "",
       "notes": "Aby dodac muzyke z Windows, dopisz w Dodatkowe parametry mount typu -v C:/TwojaMuzyka:/data/music:ro i potem w Jellyfin wskaz folder /data/music. Na slabszych maszynach ogranicz transkodowanie.",
       "lightweight": false,
-      "category_en": "Media",
+      "category_en": "Media 🎬",
       "description_en": "Self-hosted media server with ARM and x86 support.",
       "notes_en": "To expose Windows music, add -v C:/YourMusic:/data/music:ro in Extra parameters and then add /data/music in Jellyfin. On low-end hardware, limit transcoding.",
       "engines": null,
@@ -862,12 +862,12 @@
       "source_url": "https://github.com/jellyfin/jellyfin",
       "docs_url": "https://jellyfin.org/docs/",
       "homepage_url": "https://jellyfin.org/",
-      "icon_text": "JF"
+      "icon_text": "🎬"
     },
     {
       "name": "Uptime Kuma",
       "image": "louislam/uptime-kuma:2",
-      "category": "Monitoring",
+      "category": "Monitoring 📊",
       "description": "Monitoring stron i uslug z prostym dashboardem.",
       "default_name": "uptime-kuma",
       "container_port": "3001",
@@ -876,7 +876,7 @@
       "command": "",
       "notes": "Aktualny preset dla Uptime Kuma 2. Dane są w lokalnym volume /app/data; nie używaj NFS dla bazy SQLite.",
       "lightweight": false,
-      "category_en": "Monitoring",
+      "category_en": "Monitoring 📊",
       "description_en": "Website and service monitoring with a simple dashboard.",
       "notes_en": "Current Uptime Kuma 2 preset. Data is stored in the local /app/data volume; do not use NFS for its SQLite database.",
       "engines": null,
@@ -884,12 +884,12 @@
       "source_url": "https://github.com/louislam/uptime-kuma",
       "docs_url": "https://github.com/louislam/uptime-kuma/wiki/%F0%9F%94%A7-How-to-Install",
       "homepage_url": "https://uptime.kuma.pet/",
-      "icon_text": "UK"
+      "icon_text": "📊"
     },
     {
       "name": "Pi-hole",
       "image": "pihole/pihole:latest",
-      "category": "Sieć / DNS",
+      "category": "Sieć 🌐 › DNS",
       "description": "Blokowanie reklam i DNS sinkhole.",
       "default_name": "pihole",
       "container_port": "80",
@@ -898,7 +898,7 @@
       "command": "",
       "notes": "Lekki i bardzo popularny. Idealny na Raspberry Pi.",
       "lightweight": true,
-      "category_en": "Network / DNS",
+      "category_en": "Network 🌐 › DNS",
       "description_en": "Ad blocking DNS sinkhole and web UI.",
       "notes_en": "Lightweight and very popular. Great for Raspberry Pi.",
       "engines": null,
@@ -906,12 +906,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🌐"
     },
     {
       "name": "Home Assistant",
       "image": "homeassistant/home-assistant:stable",
-      "category": "Smart Home / IoT",
+      "category": "Smart Home 🏠 › IoT",
       "description": "Centrum automatyzacji smart home.",
       "default_name": "home-assistant",
       "container_port": "8123",
@@ -920,7 +920,7 @@
       "command": "",
       "notes": "Wymaga trybu host. Zalecany mocniejszy sprzet lub Raspberry Pi 4+.",
       "lightweight": false,
-      "category_en": "Smart Home / IoT",
+      "category_en": "Smart Home 🏠 › IoT",
       "description_en": "Smart home automation hub.",
       "notes_en": "Requires host network mode. Recommended on stronger hardware or Raspberry Pi 4+.",
       "engines": null,
@@ -928,12 +928,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🏠"
     },
     {
       "name": "Grafana",
       "image": "grafana/grafana:latest",
-      "category": "Monitoring",
+      "category": "Monitoring 📊",
       "description": "Dashboardy i wizualizacja metryk.",
       "default_name": "grafana",
       "container_port": "3000",
@@ -942,7 +942,7 @@
       "command": "",
       "notes": "Dobre do monitoringu na NAS/serwerze. Wymaga wiecej RAM.",
       "lightweight": false,
-      "category_en": "Monitoring",
+      "category_en": "Monitoring 📊",
       "description_en": "Metrics dashboards and visualization.",
       "notes_en": "Great for NAS/server monitoring. Needs more RAM.",
       "engines": null,
@@ -950,12 +950,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "📊"
     },
     {
       "name": "Prometheus",
       "image": "prom/prometheus:latest",
-      "category": "Monitoring",
+      "category": "Monitoring 📊",
       "description": "Zbieranie metryk i alerty.",
       "default_name": "prometheus",
       "container_port": "9090",
@@ -964,7 +964,7 @@
       "command": "",
       "notes": "Popularny backend metryk. Na slabszym sprzecie ogranicz retention.",
       "lightweight": false,
-      "category_en": "Monitoring",
+      "category_en": "Monitoring 📊",
       "description_en": "Metrics collection and alerting.",
       "notes_en": "Popular metrics backend. On low-end hardware, reduce retention.",
       "engines": null,
@@ -972,12 +972,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "📊"
     },
     {
       "name": "InfluxDB",
       "image": "influxdb:2",
-      "category": "Bazy danych",
+      "category": "Bazy danych 🗄",
       "description": "Baza danych time-series dla IoT i monitoringu.",
       "default_name": "influxdb",
       "container_port": "8086",
@@ -986,7 +986,7 @@
       "command": "",
       "notes": "Wersja 2.x jest ciezsza - lepiej na mocniejszy sprzet.",
       "lightweight": false,
-      "category_en": "Databases",
+      "category_en": "Databases 🗄",
       "description_en": "Time-series database for IoT and monitoring.",
       "notes_en": "2.x is heavier - best on stronger hardware.",
       "engines": null,
@@ -994,12 +994,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🗄"
     },
     {
       "name": "Plex Media Server",
       "image": "plexinc/pms-docker:latest",
-      "category": "Media",
+      "category": "Media 🎬",
       "description": "Serwer multimedialny Plex (x86_64).",
       "default_name": "plex",
       "container_port": "32400",
@@ -1008,7 +1008,7 @@
       "command": "",
       "notes": "Wymaga mocniejszego CPU, szczegolnie przy transkodowaniu. Dobre na Windows/x86_64.",
       "lightweight": false,
-      "category_en": "Media",
+      "category_en": "Media 🎬",
       "description_en": "Plex media server (x86_64).",
       "notes_en": "Needs stronger CPU, especially for transcoding. Good on Windows/x86_64.",
       "engines": null,
@@ -1016,12 +1016,12 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": ""
+      "icon_text": "🎬"
     },
     {
       "name": "SFTPGo Community",
       "image": "ghcr.io/drakkan/sftpgo:2.7.x",
-      "category": "Narzędzia / Pliki",
+      "category": "Narzędzia 🧰 › Pliki",
       "description": "Nowoczesny webowy menedżer i bezpieczny serwer transferu plików z obsługą SFTP, HTTP/S, FTP/S i WebDAV.",
       "default_name": "sftpgo",
       "container_port": "8080",
@@ -1030,7 +1030,7 @@
       "command": "",
       "notes": "Zastępuje porzucony File Browser jako aktywnie rozwijana opcja do zarządzania i udostępniania plików. Po starcie utwórz administratora w Web Admin; SFTP działa na porcie hosta 2022.",
       "lightweight": false,
-      "category_en": "Tools / Files",
+      "category_en": "Tools 🧰 › Files",
       "description_en": "Modern web file manager and secure file transfer server supporting SFTP, HTTP/S, FTP/S and WebDAV.",
       "notes_en": "Replaces the abandoned File Browser entry with an actively maintained file-management and transfer option. Create the first administrator in Web Admin; SFTP is exposed on host port 2022.",
       "engines": [
@@ -1050,12 +1050,12 @@
       "source_url": "https://github.com/drakkan/sftpgo",
       "docs_url": "https://docs.sftpgo.com/latest/",
       "homepage_url": "https://sftpgo.com/",
-      "icon_text": "SF"
+      "icon_text": "🧰"
     },
     {
       "name": "ntfy",
       "image": "binwiederhier/ntfy:latest",
-      "category": "Powiadomienia / Push",
+      "category": "Powiadomienia 🔔 › Push",
       "description": "Lekki self-hosted serwer powiadomień push z prostym API HTTP, Web UI i klientami mobilnymi.",
       "default_name": "ntfy",
       "container_port": "80",
@@ -1064,7 +1064,7 @@
       "command": "serve --cache-file /var/cache/ntfy/cache.db",
       "notes": "Preset zapisuje cache wiadomości w trwałym volume. Dodatkową konfigurację możesz później podłączyć do /etc/ntfy.",
       "lightweight": true,
-      "category_en": "Notifications / Push",
+      "category_en": "Notifications 🔔 › Push",
       "description_en": "Lightweight self-hosted push notification server with a simple HTTP API, web UI and mobile clients.",
       "notes_en": "This preset persists the message cache in a volume. Additional configuration can later be mounted at /etc/ntfy.",
       "engines": [
@@ -1085,12 +1085,12 @@
       "source_url": "https://github.com/binwiederhier/ntfy",
       "docs_url": "https://docs.ntfy.sh/install/",
       "homepage_url": "https://ntfy.sh/",
-      "icon_text": "NT"
+      "icon_text": "🔔"
     },
     {
       "name": "Gotify",
       "image": "gotify/server:latest",
-      "category": "Powiadomienia / Push",
+      "category": "Powiadomienia 🔔 › Push",
       "description": "Serwer powiadomień czasu rzeczywistego z Web UI, REST API i klientami mobilnymi.",
       "default_name": "gotify",
       "container_port": "80",
@@ -1099,7 +1099,7 @@
       "command": "",
       "notes": "Dane SQLite, obrazy aplikacji i certyfikaty są przechowywane w trwałym volume /app/data.",
       "lightweight": true,
-      "category_en": "Notifications / Push",
+      "category_en": "Notifications 🔔 › Push",
       "description_en": "Real-time notification server with a web UI, REST API and mobile clients.",
       "notes_en": "SQLite data, application images and certificates are persisted in the /app/data volume.",
       "engines": [
@@ -1119,12 +1119,12 @@
       "source_url": "https://github.com/gotify/server",
       "docs_url": "https://gotify.net/docs/install",
       "homepage_url": "https://gotify.net/",
-      "icon_text": "GF"
+      "icon_text": "🔔"
     },
     {
       "name": "Vaultwarden",
       "image": "vaultwarden/server:latest",
-      "category": "Bezpieczeństwo / Hasła",
+      "category": "Bezpieczeństwo 🔐 › Hasła",
       "description": "Lekki self-hosted serwer menedżera haseł kompatybilny z klientami Bitwarden.",
       "default_name": "vaultwarden",
       "container_port": "80",
@@ -1133,7 +1133,7 @@
       "command": "",
       "notes": "Dane są przechowywane w /data. Przy dostępie spoza zaufanej sieci wystawiaj usługę przez HTTPS/reverse proxy i regularnie twórz kopie volume.",
       "lightweight": true,
-      "category_en": "Security / Passwords",
+      "category_en": "Security 🔐 › Passwords",
       "description_en": "Lightweight self-hosted password manager server compatible with Bitwarden clients.",
       "notes_en": "Data is persisted in /data. For access outside a trusted network, publish it through HTTPS/reverse proxy and back up the volume regularly.",
       "engines": [
@@ -1154,12 +1154,12 @@
       "source_url": "https://github.com/dani-garcia/vaultwarden",
       "docs_url": "https://github.com/dani-garcia/vaultwarden/wiki",
       "homepage_url": "https://github.com/dani-garcia/vaultwarden",
-      "icon_text": "VW"
+      "icon_text": "🔐"
     },
     {
       "name": "Memos",
       "image": "neosmemo/memos:stable",
-      "category": "Produktywność / Notatki",
+      "category": "Produktywność ✍ › Notatki",
       "description": "Lekka, prywatna aplikacja do notatek i mikro-dziennika z lokalną bazą SQLite.",
       "default_name": "memos",
       "container_port": "5230",
@@ -1168,7 +1168,7 @@
       "command": "",
       "notes": "Używa rekomendowanego tagu stable i trwałego volume. Dobry wybór także dla małych serwerów ARM64.",
       "lightweight": true,
-      "category_en": "Productivity / Notes",
+      "category_en": "Productivity ✍ › Notes",
       "description_en": "Lightweight private notes and micro-journal application with a local SQLite database.",
       "notes_en": "Uses the recommended stable tag and a persistent volume. Also a good fit for small ARM64 servers.",
       "engines": [
@@ -1184,12 +1184,12 @@
       "source_url": "https://github.com/usememos/memos",
       "docs_url": "https://usememos.com/docs/deploy/docker",
       "homepage_url": "https://usememos.com/",
-      "icon_text": "MM"
+      "icon_text": "✍"
     },
     {
       "name": "Vikunja",
       "image": "vikunja/vikunja:latest",
-      "category": "Produktywność / Zadania",
+      "category": "Produktywność ✅ › Zadania",
       "description": "Self-hosted menedżer zadań i projektów z listami, Kanbanem, kalendarzem i API.",
       "default_name": "vikunja",
       "container_port": "3456",
@@ -1198,7 +1198,7 @@
       "command": "",
       "notes": "Preset startuje od razu na SQLite i wyłącza CORS dla prostego użycia lokalnego/LAN. Przy publikacji ustaw VIKUNJA_SERVICE_PUBLICURL i skonfiguruj reverse proxy.",
       "lightweight": false,
-      "category_en": "Productivity / Tasks",
+      "category_en": "Productivity ✅ › Tasks",
       "description_en": "Self-hosted task and project manager with lists, Kanban, calendar and an API.",
       "notes_en": "This preset starts immediately with SQLite and disables CORS for simple local/LAN use. For public access set VIKUNJA_SERVICE_PUBLICURL and configure a reverse proxy.",
       "engines": [
@@ -1208,12 +1208,12 @@
       "source_url": "https://github.com/go-vikunja/vikunja",
       "docs_url": "https://vikunja.io/docs/installing/",
       "homepage_url": "https://vikunja.io/",
-      "icon_text": "VK"
+      "icon_text": "✅"
     },
     {
       "name": "Linkding",
       "image": "sissbruecker/linkding:latest",
-      "category": "Produktywność / Zakładki",
+      "category": "Produktywność 🔖 › Zakładki",
       "description": "Minimalistyczny, szybki self-hosted menedżer zakładek z tagami, wyszukiwaniem i API.",
       "default_name": "linkding",
       "container_port": "9090",
@@ -1222,7 +1222,7 @@
       "command": "",
       "notes": "Baza i konfiguracja są przechowywane w trwałym volume /etc/linkding/data.",
       "lightweight": true,
-      "category_en": "Productivity / Bookmarks",
+      "category_en": "Productivity 🔖 › Bookmarks",
       "description_en": "Minimal, fast self-hosted bookmark manager with tags, search and an API.",
       "notes_en": "Database and configuration are persisted in the /etc/linkding/data volume.",
       "engines": [
@@ -1232,12 +1232,12 @@
       "source_url": "https://github.com/sissbruecker/linkding",
       "docs_url": "https://linkding.link/installation/",
       "homepage_url": "https://linkding.link/",
-      "icon_text": "LD"
+      "icon_text": "🔖"
     },
     {
       "name": "Actual Budget",
       "image": "actualbudget/actual-server:latest",
-      "category": "Finanse / Budżet",
+      "category": "Finanse 💰 › Budżet",
       "description": "Local-first, darmowa i open-source aplikacja do budżetu osobistego z synchronizacją między urządzeniami.",
       "default_name": "actual-budget",
       "container_port": "5006",
@@ -1246,7 +1246,7 @@
       "command": "",
       "notes": "Używa oficjalnego obrazu latest i zapisuje dane w /data. Dla dostępu zdalnego skonfiguruj HTTPS/reverse proxy.",
       "lightweight": true,
-      "category_en": "Finance / Budgeting",
+      "category_en": "Finance 💰 › Budgeting",
       "description_en": "Local-first, free and open-source personal budgeting application with cross-device sync.",
       "notes_en": "Uses the official latest image and persists data in /data. Configure HTTPS/reverse proxy for remote access.",
       "engines": [
@@ -1256,12 +1256,12 @@
       "source_url": "https://github.com/actualbudget/actual",
       "docs_url": "https://actualbudget.org/docs/install/docker/",
       "homepage_url": "https://actualbudget.org/",
-      "icon_text": "AB"
+      "icon_text": "💰"
     },
     {
       "name": "CyberChef",
       "image": "ghcr.io/gchq/cyberchef:latest",
-      "category": "Bezpieczeństwo / Narzędzia",
+      "category": "Bezpieczeństwo 🔐 › Narzędzia",
       "description": "Przeglądarkowy zestaw operacji do kodowania, dekodowania, szyfrowania, kompresji i analizy danych.",
       "default_name": "cyberchef",
       "container_port": "8080",
@@ -1270,7 +1270,7 @@
       "command": "",
       "notes": "Gotowy oficjalny obraz GHCR; działa lokalnie bez potrzeby instalowania toolchainu Node.js.",
       "lightweight": false,
-      "category_en": "Security / Tools",
+      "category_en": "Security 🔐 › Tools",
       "description_en": "Browser-based toolkit for encoding, decoding, encryption, compression and data analysis.",
       "notes_en": "Official pre-built GHCR image; runs locally without installing the Node.js toolchain.",
       "engines": [
@@ -1280,12 +1280,12 @@
       "source_url": "https://github.com/gchq/CyberChef",
       "docs_url": "https://github.com/gchq/CyberChef",
       "homepage_url": "https://gchq.github.io/CyberChef/",
-      "icon_text": "CC"
+      "icon_text": "🔐"
     },
     {
       "name": "OpenSpeedTest",
       "image": "openspeedtest/latest",
-      "category": "Sieć / Diagnostyka",
+      "category": "Sieć 🌐 › Diagnostyka",
       "description": "Self-hosted test prędkości sieci działający w przeglądarce, przydatny do LAN, VPN, Wi-Fi i zdalnych serwerów.",
       "default_name": "openspeedtest",
       "container_port": "3000",
@@ -1294,7 +1294,7 @@
       "command": "",
       "notes": "HTTP jest dostępne na porcie hosta 3004, a drugi port kontenera 3001 jest mapowany na 3005.",
       "lightweight": true,
-      "category_en": "Network / Diagnostics",
+      "category_en": "Network 🌐 › Diagnostics",
       "description_en": "Self-hosted browser-based network speed test useful for LAN, VPN, Wi-Fi and remote servers.",
       "notes_en": "HTTP is available on host port 3004, while the container's second port 3001 is mapped to host port 3005.",
       "engines": [
@@ -1304,12 +1304,12 @@
       "source_url": "https://github.com/openspeedtest/Speed-Test",
       "docs_url": "https://github.com/openspeedtest/Speed-Test",
       "homepage_url": "https://openspeedtest.com/",
-      "icon_text": "OS"
+      "icon_text": "🌐"
     },
     {
       "name": "AdGuard Home",
       "image": "adguard/adguardhome:latest",
-      "category": "Sieć / DNS",
+      "category": "Sieć 🌐 › DNS",
       "description": "Self-hosted serwer DNS do blokowania reklam i trackerów w całej sieci z nowoczesnym panelem WWW.",
       "default_name": "adguard-home",
       "container_port": "3000",
@@ -1318,7 +1318,7 @@
       "command": "",
       "notes": "Pierwsza konfiguracja jest na porcie 3006. Port DNS 53 musi być wolny; po konfiguracji panel HTTP może być dostępny także na porcie hosta 8104.",
       "lightweight": true,
-      "category_en": "Network / DNS",
+      "category_en": "Network 🌐 › DNS",
       "description_en": "Self-hosted DNS server for network-wide ad and tracker blocking with a modern web dashboard.",
       "notes_en": "Initial setup is on host port 3006. DNS port 53 must be free; after setup the HTTP admin UI can also be available on host port 8104.",
       "engines": [
@@ -1341,12 +1341,12 @@
       "source_url": "https://github.com/AdguardTeam/AdGuardHome",
       "docs_url": "https://github.com/AdguardTeam/AdGuardHome/wiki/Docker",
       "homepage_url": "https://adguard.com/adguard-home/overview.html",
-      "icon_text": "AG"
+      "icon_text": "🌐"
     },
     {
       "name": "Qdrant",
       "image": "qdrant/qdrant:latest",
-      "category": "AI / Bazy wektorowe",
+      "category": "AI 🧠 › Bazy wektorowe",
       "description": "Wydajna baza wektorowa do RAG, wyszukiwania semantycznego i pamięci agentów AI.",
       "default_name": "qdrant",
       "container_port": "6333",
@@ -1355,7 +1355,7 @@
       "command": "",
       "notes": "REST API i dashboard działają na porcie 6333, gRPC na 6334. Domyślna instalacja nie ma uwierzytelnienia, więc nie wystawiaj jej bezpośrednio do Internetu.",
       "lightweight": false,
-      "category_en": "AI / Vector Databases",
+      "category_en": "AI 🧠 › Vector Databases",
       "description_en": "High-performance vector database for RAG, semantic search and AI agent memory.",
       "notes_en": "REST API and dashboard use port 6333, gRPC uses 6334. The default deployment has no authentication, so do not expose it directly to the Internet.",
       "engines": ["docker"],
@@ -1363,7 +1363,7 @@
       "source_url": "https://github.com/qdrant/qdrant",
       "docs_url": "https://qdrant.tech/documentation/quick-start/",
       "homepage_url": "https://qdrant.tech/",
-      "icon_text": "QD",
+      "icon_text": "🧠",
       "upstream_repo": "qdrant/qdrant",
       "verified": true,
       "requires": [],
@@ -1377,7 +1377,7 @@
     {
       "name": "AnythingLLM",
       "image": "mintplexlabs/anythingllm:latest",
-      "category": "AI / UI",
+      "category": "AI 💬 › UI",
       "description": "Gotowe środowisko do rozmów z dokumentami, agentami i lokalnymi lub zdalnymi modelami LLM.",
       "default_name": "anythingllm",
       "container_port": "3001",
@@ -1386,7 +1386,7 @@
       "command": "",
       "notes": "Wymaga co najmniej około 2 GB RAM oraz dostępu do dostawcy LLM, np. Ollama lub API. DCC pokaże dodatkowe potwierdzenie dla --cap-add SYS_ADMIN.",
       "lightweight": false,
-      "category_en": "AI / UI",
+      "category_en": "AI 💬 › UI",
       "description_en": "Ready-to-use environment for chatting with documents, agents and local or remote LLMs.",
       "notes_en": "Requires about 2 GB RAM minimum and access to an LLM provider such as Ollama or an API. DCC will show an additional confirmation for --cap-add SYS_ADMIN.",
       "engines": ["docker"],
@@ -1394,7 +1394,7 @@
       "source_url": "https://github.com/Mintplex-Labs/anything-llm",
       "docs_url": "https://github.com/Mintplex-Labs/anything-llm/blob/master/docker/HOW_TO_USE_DOCKER.md",
       "homepage_url": "https://anythingllm.com/",
-      "icon_text": "AL",
+      "icon_text": "💬",
       "upstream_repo": "Mintplex-Labs/anything-llm",
       "verified": true,
       "requires": ["llm_provider"],
@@ -1409,7 +1409,7 @@
     {
       "name": "Duplicati",
       "image": "duplicati/duplicati:latest",
-      "category": "Backup",
+      "category": "Backup 💾",
       "description": "Szyfrowane kopie zapasowe do lokalnych i zdalnych backendów, m.in. S3, WebDAV i SFTP, zarządzane przez panel WWW.",
       "default_name": "duplicati",
       "container_port": "8200",
@@ -1418,7 +1418,7 @@
       "command": "",
       "notes": "Konfiguracja Duplicati jest przechowywana w /data. Katalogi źródłowe do backupu dodaj jako dodatkowe bind-mounty w edycji startu kontenera. Przy pierwszym uruchomieniu sprawdź logi, aby uzyskać link logowania lub ustaw hasło panelu.",
       "lightweight": false,
-      "category_en": "Backup",
+      "category_en": "Backup 💾",
       "description_en": "Encrypted backups to local and remote backends such as S3, WebDAV and SFTP with a web UI.",
       "notes_en": "Duplicati configuration is persisted in /data. Add source folders as extra bind mounts in the container start editor. On first launch check the logs for the sign-in link or configure a web UI password.",
       "engines": ["docker"],
@@ -1426,7 +1426,7 @@
       "source_url": "https://github.com/duplicati/duplicati",
       "docs_url": "https://docs.duplicati.com/",
       "homepage_url": "https://duplicati.com/",
-      "icon_text": "DU",
+      "icon_text": "💾",
       "upstream_repo": "duplicati/duplicati",
       "verified": true,
       "requires": [],
@@ -1440,7 +1440,7 @@
     {
       "name": "Forgejo",
       "image": "codeberg.org/forgejo/forgejo:16",
-      "category": "DevOps",
+      "category": "DevOps 🛠",
       "description": "Lekki, społecznościowy hosting Git z repozytoriami, issue trackerem, pull requestami i panelem WWW.",
       "default_name": "forgejo",
       "container_port": "3000",
@@ -1449,7 +1449,7 @@
       "command": "",
       "notes": "Panel inicjalizacyjny działa na porcie WWW, a SSH Git na porcie hosta 2223. Dane są przechowywane w /data.",
       "lightweight": false,
-      "category_en": "DevOps",
+      "category_en": "DevOps 🛠",
       "description_en": "Lightweight community-driven Git hosting with repositories, issue tracking, pull requests and a web UI.",
       "notes_en": "The setup UI is available on the web port and Git over SSH on host port 2223. Data is persisted in /data.",
       "engines": ["docker"],
@@ -1457,7 +1457,7 @@
       "source_url": "https://codeberg.org/forgejo/forgejo",
       "docs_url": "https://forgejo.org/docs/latest/admin/installation/docker/",
       "homepage_url": "https://forgejo.org/",
-      "icon_text": "FJ",
+      "icon_text": "🛠",
       "verified": true,
       "requires": [],
       "gpu": false,
@@ -1470,7 +1470,7 @@
     {
       "name": "Glances",
       "image": "nicolargo/glances:latest-full",
-      "category": "Monitoring / Metryki",
+      "category": "Monitoring 📊 › Metryki",
       "description": "Lekki monitoring hosta i kontenerów z Web UI, REST API i podglądem CPU, RAM, dysków, sieci oraz procesów.",
       "default_name": "glances",
       "container_port": "61208",
@@ -1479,7 +1479,7 @@
       "command": "",
       "notes": "Preset daje Glances dostęp tylko do odczytu do docker.sock i przestrzeni PID hosta, aby widzieć kontenery i procesy. DCC powinno pokazać ostrzeżenie przed montowaniem socketu Dockera.",
       "lightweight": true,
-      "category_en": "Monitoring / Metrics",
+      "category_en": "Monitoring 📊 › Metrics",
       "description_en": "Lightweight host and container monitoring with a web UI, REST API and CPU, RAM, disk, network and process metrics.",
       "notes_en": "This preset gives Glances read-only access to docker.sock and the host PID namespace so it can inspect containers and processes. DCC should warn before mounting the Docker socket.",
       "engines": ["docker"],
@@ -1487,7 +1487,7 @@
       "source_url": "https://github.com/nicolargo/glances",
       "docs_url": "https://github.com/nicolargo/glances#docker-the-cloudy-way",
       "homepage_url": "https://nicolargo.github.io/glances/",
-      "icon_text": "GL",
+      "icon_text": "📊",
       "upstream_repo": "nicolargo/glances",
       "verified": true,
       "requires": [],
@@ -1501,7 +1501,7 @@
     {
       "name": "VictoriaMetrics",
       "image": "victoriametrics/victoria-metrics:latest",
-      "category": "Monitoring / Metryki",
+      "category": "Monitoring 📊 › Metryki",
       "description": "Wydajny i oszczędny magazyn szeregów czasowych zgodny z ekosystemem Prometheus, z wbudowanym interfejsem VMUI.",
       "default_name": "victoriametrics",
       "container_port": "8428",
@@ -1510,7 +1510,7 @@
       "command": "-storageDataPath=/victoria-metrics-data",
       "notes": "VMUI jest dostępne pod /vmui. Dane metryk są przechowywane w trwałym volume.",
       "lightweight": true,
-      "category_en": "Monitoring / Metrics",
+      "category_en": "Monitoring 📊 › Metrics",
       "description_en": "Efficient time-series database compatible with the Prometheus ecosystem and including the VMUI interface.",
       "notes_en": "VMUI is available under /vmui. Metrics data is stored in a persistent volume.",
       "engines": ["docker"],
@@ -1518,7 +1518,7 @@
       "source_url": "https://github.com/VictoriaMetrics/VictoriaMetrics",
       "docs_url": "https://docs.victoriametrics.com/victoriametrics/quick-start/",
       "homepage_url": "https://victoriametrics.com/",
-      "icon_text": "VM",
+      "icon_text": "📊",
       "upstream_repo": "VictoriaMetrics/VictoriaMetrics",
       "verified": true,
       "requires": [],
@@ -1532,7 +1532,7 @@
     {
       "name": "Audiobookshelf",
       "image": "ghcr.io/advplyr/audiobookshelf:latest",
-      "category": "Media",
+      "category": "Media 🎬",
       "description": "Self-hosted serwer audiobooków i podcastów z bibliotekami, streamingiem, metadanymi oraz aplikacjami mobilnymi.",
       "default_name": "audiobookshelf",
       "container_port": "80",
@@ -1541,7 +1541,7 @@
       "command": "",
       "notes": "Konfiguracja i baza są w /config, metadane w /metadata. Dla własnych bibliotek możesz później zamienić wolumeny /audiobooks i /podcasts na bind-mounty do katalogów hosta.",
       "lightweight": false,
-      "category_en": "Media",
+      "category_en": "Media 🎬",
       "description_en": "Self-hosted audiobook and podcast server with libraries, streaming, metadata and mobile apps.",
       "notes_en": "Configuration and the database are stored in /config and metadata in /metadata. You can later replace the /audiobooks and /podcasts volumes with bind mounts to host media folders.",
       "engines": ["docker"],
@@ -1549,7 +1549,7 @@
       "source_url": "https://github.com/advplyr/audiobookshelf",
       "docs_url": "https://audiobookshelf.org/docs/documentation/install/docker/",
       "homepage_url": "https://audiobookshelf.org/",
-      "icon_text": "AS",
+      "icon_text": "🎬",
       "upstream_repo": "advplyr/audiobookshelf",
       "verified": true,
       "requires": [],
