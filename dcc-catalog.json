@@ -1053,6 +1053,30 @@
       "icon_text": "🧰"
     },
     {
+      "name": "File Browser",
+      "image": "filebrowser/filebrowser:latest",
+      "category": "Narzędzia 🧰 › Pliki",
+      "description": "Wyłączony wpis zgodności dla starszych wersji DCC. Projekt został usunięty z aktywnego katalogu.",
+      "default_name": "filebrowser",
+      "container_port": "80",
+      "host_port": "8080",
+      "extra": "",
+      "command": "",
+      "notes": "Ten wpis celowo ma silnik disabled. Nadpisuje wbudowany preset File Browser w starszych wersjach DCC i ukrywa go po odświeżeniu katalogu.",
+      "lightweight": true,
+      "category_en": "Tools 🧰 › Files",
+      "description_en": "Disabled compatibility entry for older DCC versions. The project has been removed from the active catalog.",
+      "notes_en": "This entry intentionally uses the disabled engine. It overrides the built-in File Browser preset in older DCC versions and hides it after a catalog refresh.",
+      "engines": [
+        "disabled"
+      ],
+      "archs": null,
+      "source_url": "https://github.com/filebrowser/filebrowser",
+      "docs_url": "",
+      "homepage_url": "",
+      "icon_text": "🗑"
+    },
+    {
       "name": "ntfy",
       "image": "binwiederhier/ntfy:latest",
       "category": "Powiadomienia 🔔 › Push",
