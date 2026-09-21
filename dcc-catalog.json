@@ -26,7 +26,10 @@
       "source_url": "https://github.com/agent0ai/agent-zero",
       "docs_url": "https://github.com/agent0ai/agent-zero/blob/main/docs/setup/installation.md",
       "homepage_url": "https://www.agent-zero.ai/",
-      "icon_text": "🤖"
+      "icon_text": "🤖",
+      "upstream_repo": "agent0ai/agent-zero",
+      "latest_release": "v2.12",
+      "latest_release_url": "https://github.com/agent0ai/agent-zero/releases/tag/v2.12"
     },
     {
       "name": "Ollama",
@@ -50,7 +53,10 @@
       "source_url": "https://github.com/ollama/ollama",
       "docs_url": "https://github.com/ollama/ollama/blob/main/docs/docker.mdx",
       "homepage_url": "https://ollama.com/",
-      "icon_text": "🧠"
+      "icon_text": "🧠",
+      "upstream_repo": "ollama/ollama",
+      "latest_release": "v0.34.2",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.34.2"
     },
     {
       "name": "NocoDB",
@@ -74,7 +80,10 @@
       "source_url": "https://github.com/nocodb/nocodb",
       "docs_url": "https://docs.nocodb.com/",
       "homepage_url": "https://nocodb.com/",
-      "icon_text": "⚙"
+      "icon_text": "⚙",
+      "upstream_repo": "nocodb/nocodb",
+      "latest_release": "2026.09.0",
+      "latest_release_url": "https://github.com/nocodb/nocodb/releases/tag/2026.09.0"
     },
     {
       "name": "Stirling PDF",
@@ -98,7 +107,10 @@
       "source_url": "https://github.com/Stirling-Tools/Stirling-PDF",
       "docs_url": "https://docs.stirlingpdf.com/",
       "homepage_url": "https://www.stirlingpdf.com/",
-      "icon_text": "🧰"
+      "icon_text": "🧰",
+      "upstream_repo": "Stirling-Tools/Stirling-PDF",
+      "latest_release": "v2.14.3",
+      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v2.14.3"
     },
     {
       "name": "IT-Tools",
@@ -128,7 +140,10 @@
       "source_url": "https://github.com/CorentinTh/it-tools",
       "docs_url": "https://github.com/CorentinTh/it-tools#self-host",
       "homepage_url": "https://it-tools.tech/",
-      "icon_text": "🧰"
+      "icon_text": "🧰",
+      "upstream_repo": "CorentinTh/it-tools",
+      "latest_release": "v2024.10.22-7ca5933",
+      "latest_release_url": "https://github.com/CorentinTh/it-tools/releases/tag/v2024.10.22-7ca5933"
     },
     {
       "name": "Dozzle",
@@ -152,7 +167,10 @@
       "source_url": "https://github.com/amir20/dozzle",
       "docs_url": "https://dozzle.dev/guide/getting-started",
       "homepage_url": "https://dozzle.dev/",
-      "icon_text": "🛠"
+      "icon_text": "🛠",
+      "upstream_repo": "amir20/dozzle",
+      "latest_release": "v11.1.1",
+      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.1.1"
     },
     {
       "name": "Beszel Hub",
@@ -176,7 +194,10 @@
       "source_url": "https://github.com/henrygd/beszel",
       "docs_url": "https://beszel.dev/guide/getting-started",
       "homepage_url": "https://beszel.dev/",
-      "icon_text": "📊"
+      "icon_text": "📊",
+      "upstream_repo": "henrygd/beszel",
+      "latest_release": "v0.20.0",
+      "latest_release_url": "https://github.com/henrygd/beszel/releases/tag/v0.20.0"
     },
     {
       "name": "ChangeDetection.io",
@@ -200,7 +221,10 @@
       "source_url": "https://github.com/dgtlmoon/changedetection.io",
       "docs_url": "https://github.com/dgtlmoon/changedetection.io/wiki",
       "homepage_url": "https://changedetection.io/",
-      "icon_text": "📊"
+      "icon_text": "📊",
+      "upstream_repo": "dgtlmoon/changedetection.io",
+      "latest_release": "0.60.7",
+      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.7"
     },
     {
       "name": "Alpine Linux",
@@ -310,7 +334,10 @@
       "source_url": "https://github.com/nodejs/node",
       "docs_url": "https://nodejs.org/en/docs",
       "homepage_url": "https://nodejs.org/",
-      "icon_text": "💻"
+      "icon_text": "💻",
+      "upstream_repo": "nodejs/node",
+      "latest_release": "v26.9.0",
+      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.9.0"
     },
     {
       "name": "Python",
@@ -354,7 +381,10 @@
       "source_url": "https://github.com/golang/go",
       "docs_url": "https://go.dev/doc/",
       "homepage_url": "https://go.dev/",
-      "icon_text": "💻"
+      "icon_text": "💻",
+      "upstream_repo": "golang/go",
+      "latest_release": "weekly.2012-03-27",
+      "latest_release_url": "https://github.com/golang/go/releases/tag/weekly.2012-03-27"
     },
     {
       "name": "Apache HTTPD",
@@ -574,7 +604,10 @@
       "source_url": "https://github.com/open-webui/open-webui",
       "docs_url": "https://docs.openwebui.com/",
       "homepage_url": "https://openwebui.com/",
-      "icon_text": "💬"
+      "icon_text": "💬",
+      "upstream_repo": "open-webui/open-webui",
+      "latest_release": "v0.11.3",
+      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.11.3"
     },
     {
       "name": "Vane (dawniej Perplexica)",
@@ -596,7 +629,10 @@
       "source_url": "https://github.com/ItzCrazyKns/Vane",
       "docs_url": "https://github.com/ItzCrazyKns/Vane/tree/master/docs/installation",
       "homepage_url": "https://github.com/ItzCrazyKns/Vane",
-      "icon_text": "🔎"
+      "icon_text": "🔎",
+      "upstream_repo": "ItzCrazyKns/Vane",
+      "latest_release": "v1.12.2",
+      "latest_release_url": "https://github.com/ItzCrazyKns/Vane/releases/tag/v1.12.2"
     },
     {
       "name": "SearXNG",
@@ -618,7 +654,8 @@
       "source_url": "https://github.com/searxng/searxng",
       "docs_url": "https://docs.searxng.org/",
       "homepage_url": "https://searxng.org/",
-      "icon_text": "🔎"
+      "icon_text": "🔎",
+      "upstream_repo": "searxng/searxng"
     },
     {
       "name": "Portainer CE",
@@ -640,7 +677,10 @@
       "source_url": "https://github.com/portainer/portainer",
       "docs_url": "https://docs.portainer.io/",
       "homepage_url": "https://www.portainer.io/",
-      "icon_text": "🛠"
+      "icon_text": "🛠",
+      "upstream_repo": "portainer/portainer",
+      "latest_release": "2.45.1",
+      "latest_release_url": "https://github.com/portainer/portainer/releases/tag/2.45.1"
     },
     {
       "name": "Nginx",
@@ -840,7 +880,10 @@
       "source_url": "https://github.com/go-gitea/gitea",
       "docs_url": "https://docs.gitea.com/",
       "homepage_url": "https://about.gitea.com/",
-      "icon_text": "🛠"
+      "icon_text": "🛠",
+      "upstream_repo": "go-gitea/gitea",
+      "latest_release": "v1.27.3",
+      "latest_release_url": "https://github.com/go-gitea/gitea/releases/tag/v1.27.3"
     },
     {
       "name": "Jellyfin",
@@ -862,7 +905,10 @@
       "source_url": "https://github.com/jellyfin/jellyfin",
       "docs_url": "https://jellyfin.org/docs/",
       "homepage_url": "https://jellyfin.org/",
-      "icon_text": "🎬"
+      "icon_text": "🎬",
+      "upstream_repo": "jellyfin/jellyfin",
+      "latest_release": "v12.1",
+      "latest_release_url": "https://github.com/jellyfin/jellyfin/releases/tag/v12.1"
     },
     {
       "name": "Uptime Kuma",
@@ -884,7 +930,10 @@
       "source_url": "https://github.com/louislam/uptime-kuma",
       "docs_url": "https://github.com/louislam/uptime-kuma/wiki/%F0%9F%94%A7-How-to-Install",
       "homepage_url": "https://uptime.kuma.pet/",
-      "icon_text": "📊"
+      "icon_text": "📊",
+      "upstream_repo": "louislam/uptime-kuma",
+      "latest_release": "2.5.5",
+      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.5"
     },
     {
       "name": "Pi-hole",
@@ -1050,7 +1099,10 @@
       "source_url": "https://github.com/drakkan/sftpgo",
       "docs_url": "https://docs.sftpgo.com/latest/",
       "homepage_url": "https://sftpgo.com/",
-      "icon_text": "🧰"
+      "icon_text": "🧰",
+      "upstream_repo": "drakkan/sftpgo",
+      "latest_release": "v2.7.6",
+      "latest_release_url": "https://github.com/drakkan/sftpgo/releases/tag/v2.7.6"
     },
     {
       "name": "File Browser",
@@ -1109,7 +1161,10 @@
       "source_url": "https://github.com/binwiederhier/ntfy",
       "docs_url": "https://docs.ntfy.sh/install/",
       "homepage_url": "https://ntfy.sh/",
-      "icon_text": "🔔"
+      "icon_text": "🔔",
+      "upstream_repo": "binwiederhier/ntfy",
+      "latest_release": "v2.28.0",
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.28.0"
     },
     {
       "name": "Gotify",
@@ -1143,7 +1198,10 @@
       "source_url": "https://github.com/gotify/server",
       "docs_url": "https://gotify.net/docs/install",
       "homepage_url": "https://gotify.net/",
-      "icon_text": "🔔"
+      "icon_text": "🔔",
+      "upstream_repo": "gotify/server",
+      "latest_release": "v3.1.1",
+      "latest_release_url": "https://github.com/gotify/server/releases/tag/v3.1.1"
     },
     {
       "name": "Vaultwarden",
@@ -1178,7 +1236,10 @@
       "source_url": "https://github.com/dani-garcia/vaultwarden",
       "docs_url": "https://github.com/dani-garcia/vaultwarden/wiki",
       "homepage_url": "https://github.com/dani-garcia/vaultwarden",
-      "icon_text": "🔐"
+      "icon_text": "🔐",
+      "upstream_repo": "dani-garcia/vaultwarden",
+      "latest_release": "1.37.3",
+      "latest_release_url": "https://github.com/dani-garcia/vaultwarden/releases/tag/1.37.3"
     },
     {
       "name": "Memos",
@@ -1208,7 +1269,10 @@
       "source_url": "https://github.com/usememos/memos",
       "docs_url": "https://usememos.com/docs/deploy/docker",
       "homepage_url": "https://usememos.com/",
-      "icon_text": "✍"
+      "icon_text": "✍",
+      "upstream_repo": "usememos/memos",
+      "latest_release": "v0.31.0",
+      "latest_release_url": "https://github.com/usememos/memos/releases/tag/v0.31.0"
     },
     {
       "name": "Vikunja",
@@ -1232,7 +1296,10 @@
       "source_url": "https://github.com/go-vikunja/vikunja",
       "docs_url": "https://vikunja.io/docs/installing/",
       "homepage_url": "https://vikunja.io/",
-      "icon_text": "✅"
+      "icon_text": "✅",
+      "upstream_repo": "go-vikunja/vikunja",
+      "latest_release": "v2.6.0",
+      "latest_release_url": "https://github.com/go-vikunja/vikunja/releases/tag/v2.6.0"
     },
     {
       "name": "Linkding",
@@ -1256,7 +1323,10 @@
       "source_url": "https://github.com/sissbruecker/linkding",
       "docs_url": "https://linkding.link/installation/",
       "homepage_url": "https://linkding.link/",
-      "icon_text": "🔖"
+      "icon_text": "🔖",
+      "upstream_repo": "sissbruecker/linkding",
+      "latest_release": "v1.47.0",
+      "latest_release_url": "https://github.com/sissbruecker/linkding/releases/tag/v1.47.0"
     },
     {
       "name": "Actual Budget",
@@ -1280,7 +1350,10 @@
       "source_url": "https://github.com/actualbudget/actual",
       "docs_url": "https://actualbudget.org/docs/install/docker/",
       "homepage_url": "https://actualbudget.org/",
-      "icon_text": "💰"
+      "icon_text": "💰",
+      "upstream_repo": "actualbudget/actual",
+      "latest_release": "v26.9.0",
+      "latest_release_url": "https://github.com/actualbudget/actual/releases/tag/v26.9.0"
     },
     {
       "name": "CyberChef",
@@ -1304,7 +1377,10 @@
       "source_url": "https://github.com/gchq/CyberChef",
       "docs_url": "https://github.com/gchq/CyberChef",
       "homepage_url": "https://gchq.github.io/CyberChef/",
-      "icon_text": "🔐"
+      "icon_text": "🔐",
+      "upstream_repo": "gchq/CyberChef",
+      "latest_release": "v11.5.0",
+      "latest_release_url": "https://github.com/gchq/CyberChef/releases/tag/v11.5.0"
     },
     {
       "name": "OpenSpeedTest",
@@ -1328,7 +1404,8 @@
       "source_url": "https://github.com/openspeedtest/Speed-Test",
       "docs_url": "https://github.com/openspeedtest/Speed-Test",
       "homepage_url": "https://openspeedtest.com/",
-      "icon_text": "🌐"
+      "icon_text": "🌐",
+      "upstream_repo": "openspeedtest/Speed-Test"
     },
     {
       "name": "AdGuard Home",
@@ -1365,7 +1442,10 @@
       "source_url": "https://github.com/AdguardTeam/AdGuardHome",
       "docs_url": "https://github.com/AdguardTeam/AdGuardHome/wiki/Docker",
       "homepage_url": "https://adguard.com/adguard-home/overview.html",
-      "icon_text": "🌐"
+      "icon_text": "🌐",
+      "upstream_repo": "AdguardTeam/AdGuardHome",
+      "latest_release": "v0.107.79",
+      "latest_release_url": "https://github.com/AdguardTeam/AdGuardHome/releases/tag/v0.107.79"
     },
     {
       "name": "Qdrant",
@@ -1382,8 +1462,15 @@
       "category_en": "AI 🧠 › Vector Databases",
       "description_en": "High-performance vector database for RAG, semantic search and AI agent memory.",
       "notes_en": "REST API and dashboard use port 6333, gRPC uses 6334. The default deployment has no authentication, so do not expose it directly to the Internet.",
-      "engines": ["docker"],
-      "archs": ["x86_64", "amd64", "aarch64", "arm64"],
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "aarch64",
+        "arm64"
+      ],
       "source_url": "https://github.com/qdrant/qdrant",
       "docs_url": "https://qdrant.tech/documentation/quick-start/",
       "homepage_url": "https://qdrant.tech/",
@@ -1396,7 +1483,9 @@
       "backup_priority": "high",
       "security_exposure": "lan_only",
       "compose_required": false,
-      "balena_verified": false
+      "balena_verified": false,
+      "latest_release": "v1.19.1",
+      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.19.1"
     },
     {
       "name": "AnythingLLM",
@@ -1413,22 +1502,33 @@
       "category_en": "AI 💬 › UI",
       "description_en": "Ready-to-use environment for chatting with documents, agents and local or remote LLMs.",
       "notes_en": "Requires about 2 GB RAM minimum and access to an LLM provider such as Ollama or an API. DCC will show an additional confirmation for --cap-add SYS_ADMIN.",
-      "engines": ["docker"],
-      "archs": ["x86_64", "amd64", "aarch64", "arm64"],
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "aarch64",
+        "arm64"
+      ],
       "source_url": "https://github.com/Mintplex-Labs/anything-llm",
       "docs_url": "https://github.com/Mintplex-Labs/anything-llm/blob/master/docker/HOW_TO_USE_DOCKER.md",
       "homepage_url": "https://anythingllm.com/",
       "icon_text": "💬",
       "upstream_repo": "Mintplex-Labs/anything-llm",
       "verified": true,
-      "requires": ["llm_provider"],
+      "requires": [
+        "llm_provider"
+      ],
       "gpu": false,
       "ram_min_mb": 2048,
       "storage_type": "persistent",
       "backup_priority": "high",
       "security_exposure": "lan_only",
       "compose_required": false,
-      "balena_verified": false
+      "balena_verified": false,
+      "latest_release": "v1.16.1",
+      "latest_release_url": "https://github.com/Mintplex-Labs/anything-llm/releases/tag/v1.16.1"
     },
     {
       "name": "Duplicati",
@@ -1445,8 +1545,18 @@
       "category_en": "Backup 💾",
       "description_en": "Encrypted backups to local and remote backends such as S3, WebDAV and SFTP with a web UI.",
       "notes_en": "Duplicati configuration is persisted in /data. Add source folders as extra bind mounts in the container start editor. On first launch check the logs for the sign-in link or configure a web UI password.",
-      "engines": ["docker"],
-      "archs": ["x86_64", "amd64", "armv7l", "armv7", "armhf", "aarch64", "arm64"],
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "armv7l",
+        "armv7",
+        "armhf",
+        "aarch64",
+        "arm64"
+      ],
       "source_url": "https://github.com/duplicati/duplicati",
       "docs_url": "https://docs.duplicati.com/",
       "homepage_url": "https://duplicati.com/",
@@ -1459,7 +1569,9 @@
       "backup_priority": "high",
       "security_exposure": "lan_only",
       "compose_required": false,
-      "balena_verified": false
+      "balena_verified": false,
+      "latest_release": "v2.4.0.0_stable_2026-09-03",
+      "latest_release_url": "https://github.com/duplicati/duplicati/releases/tag/v2.4.0.0_stable_2026-09-03"
     },
     {
       "name": "Forgejo",
@@ -1476,8 +1588,17 @@
       "category_en": "DevOps 🛠",
       "description_en": "Lightweight community-driven Git hosting with repositories, issue tracking, pull requests and a web UI.",
       "notes_en": "The setup UI is available on the web port and Git over SSH on host port 2223. Data is persisted in /data.",
-      "engines": ["docker"],
-      "archs": ["x86_64", "amd64", "aarch64", "arm64", "armv6", "arm"],
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "aarch64",
+        "arm64",
+        "armv6",
+        "arm"
+      ],
       "source_url": "https://codeberg.org/forgejo/forgejo",
       "docs_url": "https://forgejo.org/docs/latest/admin/installation/docker/",
       "homepage_url": "https://forgejo.org/",
@@ -1506,8 +1627,15 @@
       "category_en": "Monitoring 📊 › Metrics",
       "description_en": "Lightweight host and container monitoring with a web UI, REST API and CPU, RAM, disk, network and process metrics.",
       "notes_en": "This preset gives Glances read-only access to docker.sock and the host PID namespace so it can inspect containers and processes. DCC should warn before mounting the Docker socket.",
-      "engines": ["docker"],
-      "archs": ["x86_64", "amd64", "aarch64", "arm64"],
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "aarch64",
+        "arm64"
+      ],
       "source_url": "https://github.com/nicolargo/glances",
       "docs_url": "https://github.com/nicolargo/glances#docker-the-cloudy-way",
       "homepage_url": "https://nicolargo.github.io/glances/",
@@ -1520,7 +1648,9 @@
       "backup_priority": "low",
       "security_exposure": "lan_only",
       "compose_required": false,
-      "balena_verified": false
+      "balena_verified": false,
+      "latest_release": "v4.5.6",
+      "latest_release_url": "https://github.com/nicolargo/glances/releases/tag/v4.5.6"
     },
     {
       "name": "VictoriaMetrics",
@@ -1537,8 +1667,20 @@
       "category_en": "Monitoring 📊 › Metrics",
       "description_en": "Efficient time-series database compatible with the Prometheus ecosystem and including the VMUI interface.",
       "notes_en": "VMUI is available under /vmui. Metrics data is stored in a persistent volume.",
-      "engines": ["docker"],
-      "archs": ["x86_64", "amd64", "x86", "i386", "armv7l", "armv7", "armhf", "aarch64", "arm64"],
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "x86",
+        "i386",
+        "armv7l",
+        "armv7",
+        "armhf",
+        "aarch64",
+        "arm64"
+      ],
       "source_url": "https://github.com/VictoriaMetrics/VictoriaMetrics",
       "docs_url": "https://docs.victoriametrics.com/victoriametrics/quick-start/",
       "homepage_url": "https://victoriametrics.com/",
@@ -1551,7 +1693,9 @@
       "backup_priority": "high",
       "security_exposure": "lan_only",
       "compose_required": false,
-      "balena_verified": false
+      "balena_verified": false,
+      "latest_release": "v1.152.0",
+      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.152.0"
     },
     {
       "name": "Audiobookshelf",
@@ -1568,8 +1712,15 @@
       "category_en": "Media 🎬",
       "description_en": "Self-hosted audiobook and podcast server with libraries, streaming, metadata and mobile apps.",
       "notes_en": "Configuration and the database are stored in /config and metadata in /metadata. You can later replace the /audiobooks and /podcasts volumes with bind mounts to host media folders.",
-      "engines": ["docker"],
-      "archs": ["x86_64", "amd64", "aarch64", "arm64"],
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "aarch64",
+        "arm64"
+      ],
       "source_url": "https://github.com/advplyr/audiobookshelf",
       "docs_url": "https://audiobookshelf.org/docs/documentation/install/docker/",
       "homepage_url": "https://audiobookshelf.org/",
@@ -1582,7 +1733,9 @@
       "backup_priority": "high",
       "security_exposure": "reverse_proxy_required",
       "compose_required": false,
-      "balena_verified": false
+      "balena_verified": false,
+      "latest_release": "v2.36.1",
+      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.36.1"
     }
   ]
 }
