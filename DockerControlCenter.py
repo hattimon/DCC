@@ -3777,6 +3777,10 @@ class NewContainerDialog(QDialog):
         self.cli_choices = [str(item).lower() for item in (cli_choices or [self.cli_command]) if str(item).strip()]
         self.remote_arch = str(remote_arch or "").strip().lower()
         self.target_host_label = target_host_label.strip() or "Docker"
+        self.catalog_theme = str(getattr(parent, "current_theme", "dark") or "dark").lower()
+        if self.catalog_theme not in {"light", "dark", "black"}:
+            self.catalog_theme = "dark"
+        self.catalog_accent = normalize_accent_color(str(getattr(parent, "accent_color", "#33f0ff")))
 
         self.setWindowTitle(self.texts["wizard_edit_title"] if self.edit_mode else self.texts["wizard_title"])
         self.setWindowFlags(
@@ -3867,13 +3871,20 @@ class NewContainerDialog(QDialog):
         self.setup_tab = QWidget()
         setup_layout = QVBoxLayout(self.setup_tab)
         self.app_card = QFrame()
+        self.app_card.setObjectName("catalogAppCard")
         app_card_layout = QVBoxLayout(self.app_card)
+        app_card_layout.setContentsMargins(14, 12, 14, 12)
+        app_card_layout.setSpacing(7)
         self.app_title_label = QLabel()
+        self.app_title_label.setObjectName("catalogAppTitle")
         app_title_font = self.app_title_label.font()
         app_title_font.setPointSize(max(11, app_title_font.pointSize() + 2))
         app_title_font.setBold(True)
         self.app_title_label.setFont(app_title_font)
+        self.app_category_label = QLabel()
+        self.app_category_label.setObjectName("catalogAppCategory")
         self.app_description_label = QLabel()
+        self.app_description_label.setObjectName("catalogAppDescription")
         self.app_description_label.setWordWrap(True)
         app_links = QHBoxLayout()
         self.btn_app_source = QPushButton(self.texts["wizard_source"])
@@ -3886,8 +3897,10 @@ class NewContainerDialog(QDialog):
         app_links.addStretch()
         app_links.addWidget(self.btn_quick_deploy)
         app_card_layout.addWidget(self.app_title_label)
+        app_card_layout.addWidget(self.app_category_label)
         app_card_layout.addWidget(self.app_description_label)
         app_card_layout.addLayout(app_links)
+        self._apply_catalog_card_style()
         setup_layout.addWidget(self.app_card)
         form = QFormLayout()
         self.name_edit = QLineEdit()
@@ -4051,6 +4064,94 @@ class NewContainerDialog(QDialog):
         self.update_summary()
         QTimer.singleShot(250, lambda: self.refresh_external_catalogs(silent=True))
 
+    def _catalog_visual_colors(self) -> Dict[str, str]:
+        if self.catalog_theme == "light":
+            return {
+                "accent": self.catalog_accent,
+                "title": "#14253d",
+                "description": "#4c6075",
+                "card_bg": "rgba(248, 252, 255, 238)",
+            }
+        return {
+            "accent": self.catalog_accent,
+            "title": "#f4fbff",
+            "description": "#aebfce",
+            "card_bg": "rgba(9, 18, 30, 178)",
+        }
+
+    def _apply_catalog_card_style(self):
+        colors = self._catalog_visual_colors()
+        self.app_card.setStyleSheet(
+            f"""
+            QFrame#catalogAppCard {{
+                border: 1px solid {colors['accent']};
+                border-radius: 12px;
+                background: {colors['card_bg']};
+            }}
+            QLabel#catalogAppTitle {{
+                color: {colors['title']};
+                border: none;
+                background: transparent;
+                font-weight: 700;
+            }}
+            QLabel#catalogAppCategory {{
+                color: {colors['accent']};
+                border: none;
+                background: transparent;
+                font-weight: 600;
+            }}
+            QLabel#catalogAppDescription {{
+                color: {colors['description']};
+                border: none;
+                background: transparent;
+            }}
+            """
+        )
+
+    def _catalog_list_item_widget(self, template: ImageTemplate, badges: str, description: str) -> QWidget:
+        colors = self._catalog_visual_colors()
+        card = QWidget()
+        card.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        row = QHBoxLayout(card)
+        row.setContentsMargins(5, 4, 8, 4)
+        row.setSpacing(10)
+
+        icon_label = QLabel()
+        icon_label.setFixedSize(48, 48)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setPixmap(deployment_catalog_icon(template).pixmap(44, 44))
+        icon_label.setStyleSheet("background: transparent;")
+        row.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
+
+        text_column = QVBoxLayout()
+        text_column.setContentsMargins(0, 0, 0, 0)
+        text_column.setSpacing(1)
+
+        name_label = QLabel(template.name)
+        name_font = name_label.font()
+        name_font.setBold(True)
+        name_font.setPointSize(max(10, name_font.pointSize()))
+        name_label.setFont(name_font)
+        name_label.setStyleSheet(f"color: {colors['title']}; background: transparent;")
+
+        badges_label = QLabel(badges)
+        badges_label.setStyleSheet(
+            f"color: {colors['accent']}; background: transparent; font-weight: 600;"
+        )
+
+        description_label = QLabel(description)
+        description_label.setWordWrap(True)
+        description_label.setStyleSheet(
+            f"color: {colors['description']}; background: transparent;"
+        )
+
+        text_column.addWidget(name_label)
+        text_column.addWidget(badges_label)
+        if description:
+            text_column.addWidget(description_label)
+        row.addLayout(text_column, 1)
+        return card
+
     def filter_catalog(self):
         selected = self.selected_catalog_template()
         selected_key = (selected.name.lower(), selected.image.lower()) if selected else None
@@ -4076,21 +4177,26 @@ class NewContainerDialog(QDialog):
                 description = description[:83].rstrip() + "..."
             badges = item.category_for(self.lang)
             if item.lightweight:
-                badges += " · light"
+                badges += " \u00b7 light"
             if "balena" in [str(engine).lower() for engine in (item.engines or [])]:
-                badges += " · Balena"
+                badges += " \u00b7 Balena"
             if item.repository_source:
-                badges += " · repo"
+                badges += " \u00b7 repo"
             label = f"{item.name}\n{badges}"
             if description:
                 label += f"\n{description}"
-            list_item = QListWidgetItem(deployment_catalog_icon(item), label)
-            list_item.setSizeHint(QSize(330, 78 if description else 58))
+            list_item = QListWidgetItem()
+            list_item.setText(label)
+            list_item.setSizeHint(QSize(330, 86 if description else 64))
             tooltip = f"{item.name}\n{item.image}"
             if item.source_url:
                 tooltip += f"\n{item.source_url}"
             list_item.setToolTip(tooltip)
             self.catalog_list.addItem(list_item)
+            self.catalog_list.setItemWidget(
+                list_item,
+                self._catalog_list_item_widget(item, badges, description),
+            )
         self.catalog_list.blockSignals(previous_block)
         self.catalog_count_label.setText(self.texts["wizard_catalog_count"].format(count=self.catalog_list.count()))
         if self.manual_configuration_mode:
@@ -4122,11 +4228,15 @@ class NewContainerDialog(QDialog):
     def update_store_card(self, template: Optional[ImageTemplate]):
         if template is None:
             self.app_title_label.setText("")
+            self.app_category_label.setText("")
+            self.app_category_label.setVisible(False)
             self.app_description_label.setText("")
             for button in (self.btn_app_source, self.btn_app_docs, self.btn_app_homepage, self.btn_quick_deploy):
                 button.setEnabled(False)
             return
-        self.app_title_label.setText(f"{template.name} · {template.category_for(self.lang)}")
+        self.app_title_label.setText(template.name)
+        self.app_category_label.setText(template.category_for(self.lang))
+        self.app_category_label.setVisible(True)
         description = template.description_for(self.lang) or template.image
         if template.latest_release:
             description += "\n" + self.texts["wizard_latest_release"].format(version=template.latest_release)
@@ -4140,11 +4250,15 @@ class NewContainerDialog(QDialog):
         image = self.image_edit.text().strip()
         if self.edit_mode and self.existing_name:
             self.app_title_label.setText(self.texts["wizard_current_container_title"].format(name=self.existing_name))
+            self.app_category_label.setText("")
+            self.app_category_label.setVisible(False)
             self.app_description_label.setText(
                 self.texts["wizard_current_container_description"].format(image=image or "-")
             )
         else:
             self.app_title_label.setText(self.texts["wizard_manual_title"])
+            self.app_category_label.setText("")
+            self.app_category_label.setVisible(False)
             self.app_description_label.setText(self.texts["wizard_manual_description"])
         for button in (self.btn_app_source, self.btn_app_docs, self.btn_app_homepage):
             button.setEnabled(False)

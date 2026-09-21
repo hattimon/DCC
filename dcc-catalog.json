@@ -936,6 +936,30 @@
       "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.5"
     },
     {
+      "name": "Uptime Kuma",
+      "image": "louislam/uptime-kuma:1",
+      "category": "Monitoring 📊",
+      "description": "Wyłączony wpis zgodności dla starszych wersji DCC. Uptime Kuma 1 został zastąpiony przez Uptime Kuma 2.",
+      "default_name": "uptime-kuma-v1-disabled",
+      "container_port": "3001",
+      "host_port": "3002",
+      "extra": "",
+      "command": "",
+      "notes": "Ten wpis celowo ma silnik disabled. Nadpisuje wbudowany preset Uptime Kuma 1 w starszych wersjach DCC i usuwa starą kategorię Monitoring po odświeżeniu katalogu.",
+      "lightweight": false,
+      "category_en": "Monitoring 📊",
+      "description_en": "Disabled compatibility entry for older DCC versions. Uptime Kuma 1 has been replaced by Uptime Kuma 2.",
+      "notes_en": "This entry intentionally uses the disabled engine. It overrides the built-in Uptime Kuma 1 preset in older DCC versions and removes the legacy Monitoring category after a catalog refresh.",
+      "engines": [
+        "disabled"
+      ],
+      "archs": null,
+      "source_url": "",
+      "docs_url": "",
+      "homepage_url": "",
+      "icon_text": "📊"
+    },
+    {
       "name": "Pi-hole",
       "image": "pihole/pihole:latest",
       "category": "Sieć 🌐 › DNS",
