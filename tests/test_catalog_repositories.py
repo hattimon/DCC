@@ -50,6 +50,31 @@ class CatalogRepositoryTests(unittest.TestCase):
         parsed = [dcc.image_template_from_dict(item, dcc.DEFAULT_DEPLOYMENT_REPOSITORY) for item in payload["apps"]]
         self.assertTrue(all(item is not None for item in parsed))
 
+    def test_extended_catalog_metadata_is_parsed(self):
+        parsed = dcc.image_template_from_dict(
+            {
+                "name": "Metadata test",
+                "image": "example/test:latest",
+                "requires": ["postgresql", " redis ", ""],
+                "gpu": True,
+                "ram_min_mb": 2048,
+                "storage_type": "persistent",
+                "backup_priority": "high",
+                "security_exposure": "reverse_proxy_required",
+                "compose_required": True,
+                "balena_verified": False,
+            }
+        )
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.requires, ["postgresql", "redis"])
+        self.assertTrue(parsed.gpu)
+        self.assertEqual(parsed.ram_min_mb, 2048)
+        self.assertEqual(parsed.storage_type, "persistent")
+        self.assertEqual(parsed.backup_priority, "high")
+        self.assertEqual(parsed.security_exposure, "reverse_proxy_required")
+        self.assertTrue(parsed.compose_required)
+        self.assertFalse(parsed.balena_verified)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,6 +12,9 @@ do pola `engines`, a nie do nazwy kategorii.
 | AI / Runtime | AI / Runtime | Ollama |
 | AI / UI | AI / UI | Open WebUI |
 | AI / Wyszukiwanie | AI / Search | SearXNG, Vane |
+| AI / Bazy wektorowe | AI / Vector Databases | Qdrant |
+| AI / Monitoring | AI / Monitoring | Langfuse |
+| AI / Developer | AI / Developer | Tabby, OpenHands |
 | Automatyzacja / Low-code | Automation / Low-code | NocoDB |
 | Administracja / Kontenery | Administration / Containers | Portainer |
 | Administracja / Logi | Administration / Logs | Dozzle |
@@ -28,6 +31,8 @@ do pola `engines`, a nie do nazwy kategorii.
 | Narzędzia / Pliki | Tools / Files | SFTPGo |
 | Narzędzia / Dokumenty | Tools / Documents | Stirling PDF |
 | Narzędzia / Developer | Tools / Developer | IT-Tools |
+| Backup | Backup | Duplicati, Restic REST Server |
+| Analityka | Analytics | Umami |
 | Finanse / Budżet | Finance / Budgeting | Actual Budget |
 | Bazy danych | Databases | PostgreSQL, MariaDB |
 | Messaging | Messaging | RabbitMQ, NATS |

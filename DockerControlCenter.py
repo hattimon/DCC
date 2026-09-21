@@ -1380,6 +1380,14 @@ class ImageTemplate:
     latest_release_url: str = ""
     last_checked: str = ""
     verified: bool = False
+    requires: Optional[List[str]] = None
+    gpu: bool = False
+    ram_min_mb: int = 0
+    storage_type: str = ""
+    backup_priority: str = ""
+    security_exposure: str = ""
+    compose_required: bool = False
+    balena_verified: bool = False
 
     def supports_engine(self, engine: str) -> bool:
         engine = str(engine or "").lower().strip()
@@ -1441,6 +1449,14 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
         latest_release_url=str(raw.get("latest_release_url") or raw.get("release_url") or "").strip(),
         last_checked=str(raw.get("last_checked") or "").strip(),
         verified=bool(raw.get("verified", False)),
+        requires=[str(item).strip() for item in (raw.get("requires") or []) if str(item).strip()],
+        gpu=bool(raw.get("gpu", False)),
+        ram_min_mb=max(0, int(raw.get("ram_min_mb") or 0)),
+        storage_type=str(raw.get("storage_type") or "").strip(),
+        backup_priority=str(raw.get("backup_priority") or "").strip(),
+        security_exposure=str(raw.get("security_exposure") or "").strip(),
+        compose_required=bool(raw.get("compose_required", False)),
+        balena_verified=bool(raw.get("balena_verified", False)),
     )
 
 
