@@ -11,50 +11,24 @@
 A cross-platform desktop control panel for managing Docker on Windows and Debian-family Linux, locally, through WSL/WSL2, and on remote hosts over SSH or Balena OS.
 
 ### Download Latest Version
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/latest/download/DockerControlCenter-Setup.exe)
-[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/latest/download/DockerControlCenter_1.3.8_amd64.deb)
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.8/DockerControlCenter-Setup-1.3.8.exe)
+[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.8/DockerControlCenter_1.3.8_amd64.deb)
 
 ## What's New in v1.3.8
 
 ### EN
-- Fixed SmartWAN artwork and description overlap in the application catalog.
-- Kept search, the application counter, manual configuration and online refresh in one compact row.
-- Added `Day` and `Night` themes with dedicated background artwork and readable menus.
-- Made every category button visible without scrolling or clipped labels, with extra space below the last row.
-- Increased application-card height so two-line descriptions remain fully visible.
-- Expanded the application store and added the DCC Repo Builder workflow.
+- Added new `Day` and `Night` themes and improved GUI readability/layout.
+- Expanded the application store and Repo Builder workflow.
+- Linux DEB now includes the DCC icon and a dedicated Repo Builder launcher.
 
-`Day theme - main application`
-
-![DCC v1.3.8 Day theme - English main window](images/release-1.3.8/main-day-en.png)
-
-`Night theme - SmartWAN in the application store`
-
-![DCC v1.3.8 Night theme - English SmartWAN store](images/release-1.3.8/store-smartwan-night-en.png)
-
-`Day theme - Repo Builder`
-
-![DCC v1.3.8 Day theme - English Repo Builder](images/release-1.3.8/repo-builder-day-en.png)
+![Docker Control Center v1.3.5 - English overview](images/release-1.3.5/09-v1.3.5-overview-en.png)
 
 ### PL
-- Poprawiono nakładanie grafiki SmartWAN i opisu w katalogu aplikacji.
-- Pole wyszukiwania, licznik aplikacji, konfiguracja ręczna i odświeżanie online mieszczą się w jednym wierszu.
-- Dodano motywy `Day` i `Noc` z osobnymi tłami oraz czytelnymi menu.
-- Wszystkie przyciski kategorii są widoczne bez przewijania i uciętych nazw, z dodatkowym miejscem pod ostatnim rzędem.
-- Zwiększono wysokość kart aplikacji, aby dwuwierszowe opisy były w pełni widoczne.
-- Rozbudowano sklep aplikacji i dodano workflow DCC Repo Builder.
+- Dodano nowe motywy `Day` i `Noc` oraz poprawiono czytelność i układ interfejsu.
+- Rozbudowano sklep aplikacji i workflow Repo Builder.
+- Pakiet Linux DEB zawiera teraz ikonę DCC i osobny launcher Repo Buildera.
 
-`Motyw Day - aplikacja główna`
-
-![DCC v1.3.8 motyw Day - główne okno PL](images/release-1.3.8/main-day-pl.png)
-
-`Motyw Noc - SmartWAN w sklepie aplikacji`
-
-![DCC v1.3.8 motyw Noc - sklep SmartWAN PL](images/release-1.3.8/store-smartwan-night-pl.png)
-
-`Motyw Day - Repo Builder`
-
-![DCC v1.3.8 motyw Day - Repo Builder PL](images/release-1.3.8/repo-builder-day-pl.png)
+![Docker Control Center v1.3.5 - polskie podsumowanie](images/release-1.3.5/08-v1.3.5-overview-pl.png)
 
 ## English
 
@@ -64,34 +38,30 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 - Connect to remote Docker hosts over SSH or Balena OS (auto-detected).
 - Browse container logs, inspect containers, open web links, and manage autostart.
 - Create and modify container run commands with presets and AI-assisted editing.
-- Switch between `Day`, `Light`, `Dark`, `Black`, and `Night` themes with background artwork support.
+- Switch between `Light`, `Dark`, and `Black` themes with background artwork support.
 
 ### Screenshots
-The v1.3.8 screenshots show both new themes using the English UI.
+Screenshots below use the English UI.
 
-`Main application - Day`
+`Main view - local containers`
 
-![Main application - Day](images/release-1.3.8/main-day-en.png)
+![Main view - local containers](images/image.png)
 
-`Main application - Night`
+`Remote view - SSH-connected containers`
 
-![Main application - Night](images/release-1.3.8/main-night-en.png)
+![Remote view - SSH-connected containers](images/image1.png)
 
-`Application store / SmartWAN - Day`
+`New container wizard`
 
-![Application store SmartWAN - Day](images/release-1.3.8/store-smartwan-day-en.png)
+![New container wizard](images/image2.png)
 
-`Application store / SmartWAN - Night`
+`AI assistant`
 
-![Application store SmartWAN - Night](images/release-1.3.8/store-smartwan-night-en.png)
+![AI assistant](images/image3.png)
 
-`Repo Builder - Day`
+`New remote profile`
 
-![Repo Builder - Day](images/release-1.3.8/repo-builder-day-en.png)
-
-`Repo Builder - Night`
-
-![Repo Builder - Night](images/release-1.3.8/repo-builder-night-en.png)
+![New remote profile](images/image4.png)
 
 ### Distribution
 - `Installer`: installs for the current Windows user.
@@ -135,34 +105,30 @@ The v1.3.8 screenshots show both new themes using the English UI.
 - Laczy sie ze zdalnymi hostami Docker przez SSH lub Balena OS (auto-wykrywanie).
 - Pokazuje logi, inspect, linki WWW i pozwala ustawic autostart kontenerow.
 - Umozliwia tworzenie i edycje komend `docker run` z presetami oraz wsparciem AI.
-- Pozwala przelaczac motywy `Day`, `Light`, `Dark`, `Black` i `Night` oraz korzystac z tapet graficznych.
+- Pozwala przelaczac motywy `Light`, `Dark` i `Black` oraz korzystac z tapet graficznych.
 
 ### Zrzuty ekranu
-Poniższe zrzuty pokazują oba nowe motywy w polskim interfejsie.
+Ponizsze zrzuty pokazuja interfejs w jezyku angielskim.
 
-`Aplikacja główna - Day`
+`Widok glowny - lokalne kontenery`
 
-![Aplikacja główna - Day](images/release-1.3.8/main-day-pl.png)
+![Widok glowny - lokalne kontenery](images/image.png)
 
-`Aplikacja główna - Noc`
+`Widok zdalny - kontenery przez SSH`
 
-![Aplikacja główna - Noc](images/release-1.3.8/main-night-pl.png)
+![Widok zdalny - kontenery przez SSH](images/image1.png)
 
-`Sklep aplikacji / SmartWAN - Day`
+`Kreator nowego kontenera`
 
-![Sklep aplikacji SmartWAN - Day](images/release-1.3.8/store-smartwan-day-pl.png)
+![Kreator nowego kontenera](images/image2.png)
 
-`Sklep aplikacji / SmartWAN - Noc`
+`Asystent AI`
 
-![Sklep aplikacji SmartWAN - Noc](images/release-1.3.8/store-smartwan-night-pl.png)
+![Asystent AI](images/image3.png)
 
-`Repo Builder - Day`
+`Dodawanie nowego profilu zdalnego`
 
-![Repo Builder - Day](images/release-1.3.8/repo-builder-day-pl.png)
-
-`Repo Builder - Noc`
-
-![Repo Builder - Noc](images/release-1.3.8/repo-builder-night-pl.png)
+![Dodawanie nowego profilu zdalnego](images/image4.png)
 
 ### Dystrybucja
 - `Installer`: instaluje aplikacje dla aktualnego uzytkownika Windows.
@@ -203,4 +169,3 @@ Poniższe zrzuty pokazują oba nowe motywy w polskim interfejsie.
 - `images/` - README screenshots
 - `icon.ico` / `icon.png` - application icons
 - `bg.mp3` - optional in-app background music
-
