@@ -1,0 +1,102 @@
+name: Build and publish DCC release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install NSIS
+        shell: powershell
+        run: choco install nsis -y --no-progress
+
+      - name: Build Windows installer
+        shell: powershell
+        run: |
+          $env:DCC_BUILD_PYTHON = (Get-Command python).Source
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\build_installer.ps1
+
+      - name: Upload Windows release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: release/DockerControlCenter-Setup-*.exe
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build/runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-venv libgl1 libegl1 libdbus-1-3 libfontconfig1 \
+            libx11-6 libx11-xcb1 libxcb1 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-xfixes0 libxcb-xkb1 libxkbcommon-x11-0 \
+            openssh-client xdg-utils policykit-1
+
+      - name: Build Debian package
+        run: bash packaging/linux/build_deb.sh
+
+      - name: Verify Debian package contents
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DEB="release/DockerControlCenter_${VERSION}_amd64.deb"
+          dpkg-deb --info "$DEB"
+          dpkg-deb --contents "$DEB" | grep -E 'docker-control-center\.desktop|dcc-repo-builder\.desktop|docker-control-center\.png|/usr/bin/dcc-repo-builder|/usr/bin/docker-control-center'
+
+      - name: Upload Linux release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: release/DockerControlCenter_*_amd64.deb
+          if-no-files-found: error
+
+  publish:
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd release-assets
+          sha256sum DockerControlCenter-Setup-${VERSION}.exe DockerControlCenter_${VERSION}_amd64.deb > "SHA256SUMS-${VERSION}.txt"
+          sha256sum ../dcc-catalog.json >> "SHA256SUMS-${VERSION}.txt"
+          cat "SHA256SUMS-${VERSION}.txt"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES="release/RELEASE_NOTES_${VERSION}.md"
+          gh release create "$GITHUB_REF_NAME" \
+            release-assets/DockerControlCenter-Setup-${VERSION}.exe \
+            release-assets/DockerControlCenter_${VERSION}_amd64.deb \
+            release-assets/SHA256SUMS-${VERSION}.txt \
+            --title "Docker Control Center ${VERSION}" \
+            --notes-file "$NOTES"

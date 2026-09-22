@@ -1,5 +1,10 @@
 # Python / virtualenv
 .venv/
+.venv312/
+.uv-python-137/
+.uv-cache/
+venv/
+.docker-tmp/
 __pycache__/
 *.pyc
 
@@ -16,10 +21,16 @@ __pycache__/
 *.spec
 !DockerControlCenter.spec
 !DockerControlCenterDebug.spec
+!RepoBuilder.spec
+!packaging/linux/DockerControlCenter-linux.spec
+!packaging/linux/RepoBuilder-linux.spec
 
 # Temporary local files
 /_tmp*.txt
 /test_write_probe.txt
+*.bak
+.pytest_cache/
+dcc_catalog_refresh_*.py
 
 # OS / editor
 Thumbs.db

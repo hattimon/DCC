@@ -4,6 +4,7 @@ Name=Docker Control Center
 Comment=Manage the local Docker Engine and remote Docker/Balena hosts
 Exec=/usr/bin/docker-control-center
 Icon=docker-control-center
+StartupWMClass=DockerControlCenter
 Terminal=false
 Categories=System;Utility;
 Keywords=Docker;Balena;Containers;SSH;

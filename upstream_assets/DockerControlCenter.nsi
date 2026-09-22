@@ -6,9 +6,10 @@ RequestExecutionLevel user
 
 !define APP_NAME "Docker Control Center"
 !define APP_EXE "DockerControlCenter.exe"
+!define REPO_BUILDER_EXE "DCCRepoBuilder.exe"
 !define APP_ID "DockerControlCenter"
 !define APP_PUBLISHER "Docker Control Center"
-!define APP_VERSION "1.3.5"
+!define APP_VERSION "1.3.8"
 
 Name "${APP_NAME}"
 OutFile "..\release\DockerControlCenter-Setup.exe"
@@ -33,6 +34,7 @@ Section "Install"
 
   SetOutPath "$InstDir"
   File "/oname=${APP_EXE}" "..\dist\DockerControlCenter.exe"
+  File "/oname=${REPO_BUILDER_EXE}" "..\dist\DCCRepoBuilder.exe"
 
   ; PyInstaller bundles Python/Qt/Paramiko. This verifies the packaged runtime
   ; before shortcuts and uninstall metadata are committed.
@@ -86,15 +88,18 @@ openssh_done:
 
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$InstDir\${APP_EXE}"
+  CreateShortcut "$SMPROGRAMS\${APP_NAME}\DCC Repo Builder.lnk" "$InstDir\${REPO_BUILDER_EXE}"
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$InstDir\${APP_EXE}"
 SectionEnd
 
 Section "Uninstall"
   Delete "$DESKTOP\${APP_NAME}.lnk"
   Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
+  Delete "$SMPROGRAMS\${APP_NAME}\DCC Repo Builder.lnk"
   RMDir "$SMPROGRAMS\${APP_NAME}"
 
   Delete "$InstDir\${APP_EXE}"
+  Delete "$InstDir\${REPO_BUILDER_EXE}"
   Delete "$InstDir\Uninstall.exe"
   RMDir "$InstDir"
 

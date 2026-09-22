@@ -2,7 +2,9 @@
 import base64
 import ctypes
 import getpass
+import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -16,7 +18,7 @@ import uuid
 import webbrowser
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
@@ -27,6 +29,7 @@ if os.name == 'nt':
 import docker
 import qdarktheme
 from PyQt6.QtCore import QEvent, QObject, QProcess, QPropertyAnimation, QRectF, QSettings, QSize, Qt, QThread, QTimer, QUrl, pyqtSignal
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 try:
     import paramiko
 except Exception:
@@ -86,6 +89,9 @@ USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
 PROFILE_FILE = USER_DATA_DIR / "docker_connection_profiles.json"
 DEPLOYMENT_REPOSITORIES_FILE = USER_DATA_DIR / "deployment_repositories.json"
 DEPLOYMENT_CATALOG_CACHE_FILE = USER_DATA_DIR / "deployment_catalog_cache.json"
+BUNDLED_DEPLOYMENT_CATALOG_FILE = RESOURCE_DIR / "dcc-catalog.json"
+STORE_MEDIA_CACHE_DIR = USER_DATA_DIR / "store-media-cache"
+STORE_MEDIA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 MUSIC_FILE = RESOURCE_DIR / "bg.mp3"
 SECRET_FILE = USER_DATA_DIR / "docker_control_center_secrets.json"
 BACKGROUND_DIR = RESOURCE_DIR / "backgrounds"
@@ -162,7 +168,7 @@ LLM_OPENAI_COMPATIBLE_BASE_URLS = {
     "xai": "https://api.x.ai/v1",
 }
 
-APP_VERSION = "1.3.5"
+APP_VERSION = "1.3.8"
 APP_VERSION_TAG = f"v{APP_VERSION}"
 GITHUB_REPO = "hattimon/DCC"
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
@@ -214,6 +220,11 @@ TEXTS = {
         "info_update_cancel": "Cancel",
         "info_update_downloading": "Downloading update {release}...",
         "info_update_download_failed": "Could not download or start the update.",
+        "info_update_linux_auth_title": "Linux update - password required",
+        "info_update_linux_auth": "The update package has been downloaded. Linux will now open a system authorization window. Enter your user/administrator password there to allow the package installation. Docker Control Center will remain open until the installation finishes.",
+        "info_update_linux_installing": "Installing the Linux update... Complete the system password prompt if it is still visible.",
+        "info_update_linux_installed": "The update was installed successfully. Docker Control Center will now close. Start it again to use the new version.",
+        "info_update_linux_install_failed": "The Linux update was not installed. The password prompt may have been cancelled or the package manager returned an error.",
         "info_update_no_installer": "This release does not contain an installer compatible with this operating system and architecture.",
         "info_update_none_title": "No updates",
         "info_update_none": "You are already on the latest version.",
@@ -221,6 +232,9 @@ TEXTS = {
         "menu_config": "Configure",
         "menu_llm": "LLM",
         "menu_app": "Application",
+        "menu_repo_builder": "Repo Builder",
+        "repo_builder_missing": "Repo Builder is not installed in this build.",
+        "repo_builder_start_failed": "Could not start Repo Builder: {error}",
         "menu_reset_settings": "Reset settings to defaults...",
         "menu_factory_reset": "Factory reset...",
         "reset_settings_title": "Reset settings to defaults?",
@@ -252,6 +266,7 @@ TEXTS = {
         "dependencies_intro": "Install or repair optional system components used by Docker Control Center. Status is checked on this computer each time this window is opened or refreshed.",
         "dependencies_docker_windows": "Docker Desktop",
         "dependencies_docker_linux": "Docker Engine",
+        "dependencies_docker_linux_desktop": "Docker Desktop (Linux)",
         "dependencies_ssh": "OpenSSH client / SSH Agent",
         "dependencies_ready": "✓ Installed and available",
         "dependencies_installed_not_running": "Installed, but the local Docker engine is not running or is not reachable.",
@@ -263,6 +278,17 @@ TEXTS = {
         "dependencies_auto_unavailable": "Automatic installation is unavailable on this system.",
         "dependencies_install_docker_desktop": "Install Docker Desktop",
         "dependencies_install_docker": "Install Docker",
+        "dependencies_install_docker_engine": "Install Docker Engine",
+        "dependencies_add_docker_group": "Add user to Docker group",
+        "dependencies_docker_group_added": "\u2713 Added to Docker group",
+        "dependencies_docker_group_member": "User is already assigned to the docker group.",
+        "dependencies_docker_group_missing": "Docker is installed, but this user is not assigned to the docker group yet.",
+        "dependencies_docker_group_session": "? Docker group is configured. This running DCC process has not inherited the permission yet. Click Connect local and choose Restart DCC with Docker access, or sign out and back in once.",
+        "docker_group_relaunch_title": "Docker permission needs activation",
+        "docker_group_relaunch_hint": "Your account is already in the docker group, but this running DCC process was started before that permission became active. DCC can restart itself inside the docker group now. If that does not work in this desktop session, sign out and back in once.",
+        "docker_group_restart_app": "Restart DCC with Docker access",
+        "docker_group_restart_failed": "DCC could not restart itself inside the docker group. Sign out and back in once, then start DCC again.",
+        "dependencies_docker_group_active_no_daemon": "\u2713 Docker group permission is active, but the Docker daemon is not reachable. Check that the Docker service is running.",
         "dependencies_install_ssh": "Install SSH tools",
         "dependencies_open": "Dependencies...",
         "dependencies_install_success": "Installation completed. Dependency status will be checked again.",
@@ -271,6 +297,11 @@ TEXTS = {
         "dependencies_ssh_install_status": "Installing OpenSSH Client and SSH Agent components...",
         "dependencies_docker_desktop_install_title": "Installing Docker Desktop",
         "dependencies_docker_desktop_install_status": "Installing Docker Desktop with Windows Package Manager...",
+        "docker_desktop_linux_stopped": "Docker Desktop is installed, but it is currently stopped. Start it to manage local containers.",
+        "docker_desktop_linux_missing": "Docker Desktop is not installed. You can open the official Docker Desktop for Linux installation page.",
+        "docker_desktop_linux_install_opened": "The official Docker Desktop for Linux installation page was opened in your browser.",
+        "docker_desktop_linux_install_failed": "Could not open the Docker Desktop for Linux installation page automatically.",
+        "docker_desktop_starting": "Starting Docker Desktop and waiting for the local Docker engine...",
         "first_run_title": "Docker Control Center setup",
         "first_run_intro": "First-run setup checks this computer, Docker and portable SSH profiles.",
         "first_run_system_tab": "1. System",
@@ -282,10 +313,19 @@ TEXTS = {
         "first_run_docker_missing": "Docker is not available on this Linux system. DCC can install the distribution package and start the service.",
         "first_run_docker_unsupported": "Automatic Docker installation is available on Debian/Ubuntu/MX and other apt-based systems. Install Docker manually on this system.",
         "first_run_install_docker": "Install Docker",
+        "first_run_add_docker_group": "Add me to the Docker group",
+        "first_run_docker_group_added": "\u2713 Added to Docker group",
         "first_run_recheck_docker": "Check again",
         "first_run_install_title": "Installing Docker",
         "first_run_install_status": "Installing Docker and configuring the local service...",
         "first_run_install_success": "Docker installation completed. If DCC still has no access, log out and back in once so the new docker-group membership becomes active.",
+        "docker_group_auth_title": "Docker user permissions",
+        "docker_group_auth_info": "The system authorization window will open. Enter your Linux account/administrator password there. DCC does not see or store this password.\n\nAfter the change completes, sign out and back in once so the new docker-group membership becomes active.",
+        "docker_group_install_title": "Configuring Docker permissions",
+        "docker_group_install_status": "Adding the current user to the docker group...",
+        "docker_group_install_success": "The user was added to the docker group successfully. Sign out and back in once, then reopen DCC to activate Docker access.",
+        "docker_group_already_member": "This user already belongs to the docker group. If Docker is still unavailable, sign out and back in once or check whether the Docker service is running.",
+        "docker_group_unsupported": "Automatic docker-group configuration requires Linux with PolicyKit (pkexec).",
         "first_run_profiles_intro": "You can import connection profiles now. Passwords and key passphrases are intentionally not transferred. Key paths from another computer are cleared when they do not exist here.",
         "first_run_import_profiles": "Import profiles",
         "first_run_edit_profiles": "Edit profiles / key paths",
@@ -360,6 +400,7 @@ TEXTS = {
         "music_unavailable": "PyQt6 audio module is not available. Install PyQt6 multimedia support.",
         "hero_title": "DCC | DOCKER CONTROL CENTER",
         "hero_subtitle": "Professional control center for local Docker, WSL and remote SSH hosts with ready deployment presets.",
+        "hero_subtitle_linux": "Professional control center for the local Docker Engine and remote SSH / Balena hosts with ready deployment presets.",
         "profile_label": "Remote profile",
         "profile_name": "Profile name",
         "profile_mode": "Connection mode",
@@ -429,6 +470,8 @@ TEXTS = {
         "col_networks": "Networks",
         "col_autostart": "Autostart",
         "select_all": "Select all",
+        "column_magnet": "Magnet",
+        "column_magnet_tooltip": "Keep the manually set column proportions and fit them to the table width when the window is resized.",
         "container_search_placeholder": "Search containers by name...",
         "group_by_label": "Group",
         "group_by_project": "Projects",
@@ -441,6 +484,7 @@ TEXTS = {
         "group_summary": "{count} containers · {running} running · networks: {networks}",
         "group_display_expand": "Expand group",
         "group_display_collapse": "Collapse group",
+        "group_select_all": "Select all containers in this group",
         "controls_connection": "CONNECTIONS",
         "controls_containers": "CONTAINERS",
         "controls_view": "VIEW & HOST",
@@ -487,6 +531,24 @@ TEXTS = {
         "wizard_docs": "Documentation",
         "wizard_homepage": "Website",
         "wizard_quick_deploy": "Deploy selected app",
+        "wizard_store_tab": "Description",
+        "wizard_store_install": "Install",
+        "wizard_store_uninstall": "Uninstall",
+        "wizard_store_installed": "Installed on this host",
+        "wizard_store_not_installed": "Not installed on this host",
+        "wizard_store_features": "Highlights",
+        "wizard_store_gallery": "Gallery",
+        "wizard_store_requirements": "Requirements",
+        "wizard_store_categories": "Categories",
+        "wizard_store_apps": "Applications",
+        "wizard_store_no_media": "No preview image supplied by the catalog.",
+        "wizard_store_uninstall_title": "Uninstall application?",
+        "wizard_store_uninstall_confirm": "DCC found {count} matching container(s):\n\n{names}\n\nThe containers will be removed. Named volumes and bind-mounted data are not deleted automatically, but data stored only in the writable container layer can be lost. Continue?",
+        "wizard_store_uninstall_done": "Application container(s) removed.",
+        "wizard_balena_category": "Balena OS 🌊",
+        "wizard_credentials_title": "Access details detected",
+        "wizard_credentials_intro": "DCC found the following access details in the container startup logs. They are shown here only and are not saved by DCC:",
+        "wizard_credentials_none": "Deployment completed. No login credentials were detected in the startup logs.",
         "wizard_auto_fix": "Automatically resolve safe name and host-port conflicts",
         "wizard_ai_fallback": "Use AI only if deterministic repair cannot solve the failure",
         "wizard_safe_changes_title": "Safe deployment adjustments",
@@ -600,6 +662,8 @@ TEXTS = {
         "docker_not_available": "Docker connection unavailable. Is Docker Desktop or the remote host running?",
         "docker_local_unavailable_title": "Local Docker is unavailable",
         "docker_local_unavailable_hint": "No local Docker engine is reachable. You can install or start the required Docker runtime here, then retry the local connection.",
+        "docker_local_unavailable_hint_linux": "The local Docker Engine is not reachable from DCC. DCC follows DOCKER_HOST and the active Docker CLI context (including Docker Desktop/rootless sockets), then falls back to the system Docker socket.",
+        "docker_local_endpoint_detected": "Detected Docker endpoint: {context} -> {endpoint}",
         "docker_local_open_desktop": "Start Docker Desktop",
         "docker_local_install_desktop": "Install Docker Desktop",
         "docker_local_install_docker": "Install Docker",
@@ -615,7 +679,9 @@ TEXTS = {
         "wsl_help_title": "WSL / WSL2 Docker",
         "wsl_help_text": "Detected distribution: {distro}\n\nGUI connection options:\n1. Easiest: Docker Desktop with WSL integration and the Connect local button.\n2. Click Local WSL to manage Docker running directly in this distribution.\n3. SSH profile: run OpenSSH in WSL and connect using an SSH profile.\n4. Tunnel profile: expose the Docker socket from WSL over TCP and connect using a tunnel profile.\n\nQuick terminal test:\nwsl -d {distro} sh -lc \"docker ps\"",
         "local_profiles_text": "Local profiles for beginners:\n\n1. Local containers\nUse this when Docker Desktop or a local daemon is running on Windows.\nCheck: PowerShell -> docker ps\n\n2. Local WSL\nUse this when Docker runs directly in Ubuntu, Debian, Kali or another WSL2 distribution.\nCheck: PowerShell -> wsl -d Ubuntu sh -lc \"docker ps\"\n\nHow to add a container:\n- click New container\n- choose a preset image or paste a docker run command\n- review the summary and run it\n\nWhich mode to use:\n- Windows / Docker Desktop: Connect local\n- WSL2 with its own dockerd: Local WSL\n- Raspberry Pi / server / NAS: Start profile through SSH or tunnel",
+        "local_profiles_text_linux": "Linux connection modes for beginners:\n\n1. Local Docker Engine\nUse Connect local to manage Docker running directly on this Linux computer.\nCheck in a terminal: docker ps\n\nIf DCC has just added your account to the docker group, use the offered DCC restart with Docker access or sign out and back in once.\n\n2. Remote Linux / Balena / Raspberry Pi / server / NAS\nCreate an SSH profile and start that profile to manage Docker remotely.\n\nHow to add a container:\n- click New container\n- choose a preset image or paste a docker run command\n- review the summary and run it",
         "remote_hint": "Local, WSL and remote Docker engines in one operator panel.",
+        "remote_hint_linux": "Local Linux Docker Engine and remote SSH / Balena Docker hosts in one operator panel.",
         "remote_sysinfo_label": "Remote host: {os} | {arch}",
         "remote_sysinfo_unknown": "Remote host: unknown",
         "remote_sysinfo_fetch_failed": "Remote host: unavailable",
@@ -694,6 +760,11 @@ TEXTS = {
         "info_update_cancel": "Anuluj",
         "info_update_downloading": "Pobieranie aktualizacji {release}...",
         "info_update_download_failed": "Nie udało się pobrać lub uruchomić aktualizacji.",
+        "info_update_linux_auth_title": "Aktualizacja Linux - wymagane hasło",
+        "info_update_linux_auth": "Pakiet aktualizacji został pobrany. Linux otworzy teraz systemowe okno uwierzytelnienia. Wpisz w nim hasło swojego konta/użytkownika administratora, aby zezwolić na instalację pakietu. Docker Control Center pozostanie uruchomiony aż do zakończenia instalacji.",
+        "info_update_linux_installing": "Instalowanie aktualizacji Linux... Jeśli okno hasła jest nadal widoczne, wpisz hasło i zatwierdź.",
+        "info_update_linux_installed": "Aktualizacja została zainstalowana poprawnie. Docker Control Center zostanie teraz zamknięty. Uruchom aplikację ponownie, aby korzystać z nowej wersji.",
+        "info_update_linux_install_failed": "Aktualizacja Linux nie została zainstalowana. Okno hasła mogło zostać anulowane albo menedżer pakietów zwrócił błąd.",
         "info_update_no_installer": "Ta wersja nie zawiera instalatora zgodnego z tym systemem operacyjnym i architekturą.",
         "info_update_none_title": "Brak aktualizacji",
         "info_update_none": "Masz najnowszą wersję.",
@@ -701,6 +772,9 @@ TEXTS = {
         "menu_config": "Konfiguruj",
         "menu_llm": "LLM",
         "menu_app": "Aplikacja",
+        "menu_repo_builder": "Repo Builder",
+        "repo_builder_missing": "Repo Builder nie jest zainstalowany w tej kompilacji.",
+        "repo_builder_start_failed": "Nie udało się uruchomić Repo Buildera: {error}",
         "menu_reset_settings": "Resetuj ustawienia do domyślnych...",
         "menu_factory_reset": "Reset do ustawień fabrycznych...",
         "reset_settings_title": "Zresetować ustawienia do domyślnych?",
@@ -732,6 +806,7 @@ TEXTS = {
         "dependencies_intro": "Zainstaluj lub napraw opcjonalne składniki systemowe używane przez Docker Control Center. Stan jest sprawdzany na tym komputerze przy każdym otwarciu lub odświeżeniu okna.",
         "dependencies_docker_windows": "Docker Desktop",
         "dependencies_docker_linux": "Docker Engine",
+        "dependencies_docker_linux_desktop": "Docker Desktop (Linux)",
         "dependencies_ssh": "Klient OpenSSH / Agent SSH",
         "dependencies_ready": "✓ Zainstalowane i dostępne",
         "dependencies_installed_not_running": "Zainstalowane, ale lokalny silnik Docker nie działa lub jest niedostępny.",
@@ -743,6 +818,17 @@ TEXTS = {
         "dependencies_auto_unavailable": "Automatyczna instalacja nie jest dostępna w tym systemie.",
         "dependencies_install_docker_desktop": "Zainstaluj Docker Desktop",
         "dependencies_install_docker": "Zainstaluj Docker",
+        "dependencies_install_docker_engine": "Zainstaluj Docker Engine",
+        "dependencies_add_docker_group": "Dodaj użytkownika do grupy Docker",
+        "dependencies_docker_group_added": "\u2713 Dodano do grupy Docker",
+        "dependencies_docker_group_member": "Użytkownik jest już przypisany do grupy docker.",
+        "dependencies_docker_group_missing": "Docker jest zainstalowany, ale ten użytkownik nie jest jeszcze przypisany do grupy docker.",
+        "dependencies_docker_group_session": "\u2713 Grupa docker jest skonfigurowana. Uruchomiony proces DCC nie odziedziczy\u0142 jeszcze tego uprawnienia. Kliknij Po\u0142\u0105cz lokalnie i wybierz Uruchom DCC ponownie z dost\u0119pem do Docker albo wyloguj si\u0119 i zaloguj ponownie jeden raz.",
+        "docker_group_relaunch_title": "Trzeba aktywowa\u0107 uprawnienie Docker",
+        "docker_group_relaunch_hint": "Twoje konto jest ju\u017c w grupie docker, ale uruchomiony proces DCC wystartowa\u0142 zanim to uprawnienie sta\u0142o si\u0119 aktywne. DCC mo\u017ce teraz uruchomi\u0107 si\u0119 ponownie wewn\u0105trz grupy docker. Je\u017celi ta metoda nie zadzia\u0142a w tej sesji pulpitu, wyloguj si\u0119 i zaloguj ponownie jeden raz.",
+        "docker_group_restart_app": "Uruchom DCC ponownie z dost\u0119pem do Docker",
+        "docker_group_restart_failed": "Nie uda\u0142o si\u0119 uruchomi\u0107 DCC ponownie wewn\u0105trz grupy docker. Wyloguj si\u0119 i zaloguj ponownie jeden raz, a nast\u0119pnie uruchom DCC.",
+        "dependencies_docker_group_active_no_daemon": "\u2713 Uprawnienie grupy docker jest aktywne, ale demon Docker jest niedost\u0119pny. Sprawd\u017a, czy us\u0142uga Docker jest uruchomiona.",
         "dependencies_install_ssh": "Zainstaluj narzędzia SSH",
         "dependencies_open": "Zależności...",
         "dependencies_install_success": "Instalacja zakończona. Stan zależności zostanie sprawdzony ponownie.",
@@ -751,6 +837,11 @@ TEXTS = {
         "dependencies_ssh_install_status": "Instalowanie składników OpenSSH Client i Agenta SSH...",
         "dependencies_docker_desktop_install_title": "Instalacja Docker Desktop",
         "dependencies_docker_desktop_install_status": "Instalowanie Docker Desktop przez Menedżer pakietów Windows...",
+        "docker_desktop_linux_stopped": "Docker Desktop jest zainstalowany, ale obecnie jest wyłączony. Uruchom go, aby zarządzać lokalnymi kontenerami.",
+        "docker_desktop_linux_missing": "Docker Desktop nie jest zainstalowany. Możesz otworzyć oficjalną stronę instalacji Docker Desktop dla Linux.",
+        "docker_desktop_linux_install_opened": "Otworzono w przeglądarce oficjalną stronę instalacji Docker Desktop dla Linux.",
+        "docker_desktop_linux_install_failed": "Nie udało się automatycznie otworzyć strony instalacji Docker Desktop dla Linux.",
+        "docker_desktop_starting": "Uruchamianie Docker Desktop i oczekiwanie na lokalny silnik Docker...",
         "first_run_title": "Konfiguracja Docker Control Center",
         "first_run_intro": "Kreator pierwszego uruchomienia sprawdza ten komputer, Docker oraz przenośne profile SSH.",
         "first_run_system_tab": "1. System",
@@ -762,10 +853,19 @@ TEXTS = {
         "first_run_docker_missing": "Docker nie jest dostępny w tym systemie Linux. DCC może zainstalować pakiet dystrybucji i uruchomić usługę.",
         "first_run_docker_unsupported": "Automatyczna instalacja Dockera jest dostępna dla Debian/Ubuntu/MX i innych systemów opartych na apt. W tym systemie zainstaluj Docker ręcznie.",
         "first_run_install_docker": "Zainstaluj Docker",
+        "first_run_add_docker_group": "Dodaj mnie do grupy Docker",
+        "first_run_docker_group_added": "\u2713 Dodano do grupy Docker",
         "first_run_recheck_docker": "Sprawdź ponownie",
         "first_run_install_title": "Instalacja Dockera",
         "first_run_install_status": "Instalowanie Dockera i konfigurowanie lokalnej usługi...",
         "first_run_install_success": "Instalacja Dockera zakończona. Jeżeli DCC nadal nie ma dostępu, wyloguj się i zaloguj ponownie jeden raz, aby aktywować członkostwo w grupie docker.",
+        "docker_group_auth_title": "Uprawnienia użytkownika Docker",
+        "docker_group_auth_info": "Za chwilę otworzy się systemowe okno autoryzacji. Wpisz w nim hasło swojego konta Linux / administratora. DCC nie widzi ani nie zapisuje tego hasła.\n\nPo zakończeniu wyloguj się i zaloguj ponownie jeden raz, aby aktywować członkostwo w grupie docker.",
+        "docker_group_install_title": "Konfiguracja uprawnień Docker",
+        "docker_group_install_status": "Dodawanie bieżącego użytkownika do grupy docker...",
+        "docker_group_install_success": "Użytkownik został poprawnie dodany do grupy docker. Wyloguj się i zaloguj ponownie, a następnie uruchom ponownie DCC, aby aktywować dostęp do Dockera.",
+        "docker_group_already_member": "Ten użytkownik już należy do grupy docker. Jeżeli Docker nadal jest niedostępny, wyloguj się i zaloguj ponownie albo sprawdź, czy usługa Docker działa.",
+        "docker_group_unsupported": "Automatyczna konfiguracja grupy docker wymaga Linuxa z PolicyKit (pkexec).",
         "first_run_profiles_intro": "Możesz teraz zaimportować profile połączeń. Hasła i hasła do kluczy celowo nie są przenoszone. Ścieżki kluczy z innego komputera są czyszczone, jeżeli tutaj nie istnieją.",
         "first_run_import_profiles": "Importuj profile",
         "first_run_edit_profiles": "Edytuj profile / ścieżki kluczy",
@@ -841,6 +941,7 @@ TEXTS = {
         "music_unavailable": "Moduł audio PyQt6 nie jest dostępny. Doinstaluj PyQt6-Qt6 / multimedia.",
         "hero_title": "DCC | DOCKER CONTROL CENTER",
         "hero_subtitle": "Profesjonalny panel do zarządzania Dockerem lokalnym, WSL i zdalnymi hostami SSH z gotowymi presetami wdrożeń.",
+        "hero_subtitle_linux": "Profesjonalny panel do lokalnego Docker Engine oraz zdalnych host\u00f3w SSH / Balena z gotowymi presetami wdro\u017ce\u0144.",
         "profile_label": "Profil zdalny",
         "profile_name": "Nazwa profilu",
         "profile_mode": "Tryb połączenia",
@@ -910,6 +1011,8 @@ TEXTS = {
         "col_networks": "Sieci",
         "col_autostart": "Autostart",
         "select_all": "Zaznacz wszystkie",
+        "column_magnet": "Magnes",
+        "column_magnet_tooltip": "Zachowuj ręcznie ustawione proporcje kolumn i dopasowuj je do szerokości tabeli przy zmianie rozmiaru okna.",
         "container_search_placeholder": "Szukaj kontenera po nazwie...",
         "group_by_label": "Grupuj",
         "group_by_project": "Projekty",
@@ -922,6 +1025,7 @@ TEXTS = {
         "group_summary": "{count} kontenerów · {running} uruchomionych · sieci: {networks}",
         "group_display_expand": "Rozwiń grupę",
         "group_display_collapse": "Zwiń grupę",
+        "group_select_all": "Zaznacz wszystkie kontenery w tej grupie",
         "controls_connection": "POŁĄCZENIA",
         "controls_containers": "KONTENERY",
         "controls_view": "WIDOK I HOST",
@@ -968,6 +1072,24 @@ TEXTS = {
         "wizard_docs": "Dokumentacja",
         "wizard_homepage": "Strona",
         "wizard_quick_deploy": "Wdróż wybraną aplikację",
+        "wizard_store_tab": "Opis",
+        "wizard_store_install": "Instaluj",
+        "wizard_store_uninstall": "Odinstaluj",
+        "wizard_store_installed": "Zainstalowana na tym hoście",
+        "wizard_store_not_installed": "Niezainstalowana na tym hoście",
+        "wizard_store_features": "Najważniejsze funkcje",
+        "wizard_store_gallery": "Galeria",
+        "wizard_store_requirements": "Wymagania",
+        "wizard_store_categories": "Kategorie",
+        "wizard_store_apps": "Aplikacje",
+        "wizard_store_no_media": "Katalog nie zawiera grafiki podglądowej.",
+        "wizard_store_uninstall_title": "Odinstalować aplikację?",
+        "wizard_store_uninstall_confirm": "DCC znalazło pasujące kontenery ({count}):\n\n{names}\n\nKontenery zostaną usunięte. Nazwane wolumeny i dane bind-mounted nie są kasowane automatycznie, ale dane zapisane wyłącznie w zapisywalnej warstwie kontenera mogą zostać utracone. Kontynuować?",
+        "wizard_store_uninstall_done": "Kontenery aplikacji zostały usunięte.",
+        "wizard_balena_category": "Balena OS 🌊",
+        "wizard_credentials_title": "Wykryto dane dostępu",
+        "wizard_credentials_intro": "DCC znalazło poniższe dane dostępu w logach startowych kontenera. Są wyświetlane tylko tutaj i DCC ich nie zapisuje:",
+        "wizard_credentials_none": "Wdrożenie zakończone. W logach startowych nie wykryto danych logowania.",
         "wizard_auto_fix": "Automatycznie rozwiązuj bezpieczne konflikty nazw i portów hosta",
         "wizard_ai_fallback": "Użyj AI tylko, gdy reguły lokalne nie potrafią naprawić błędu",
         "wizard_safe_changes_title": "Bezpieczne poprawki wdrożenia",
@@ -1081,6 +1203,8 @@ TEXTS = {
         "docker_not_available": "Brak połączenia z Docker. Czy Docker Desktop lub host zdalny działa?",
         "docker_local_unavailable_title": "Lokalny Docker jest niedostępny",
         "docker_local_unavailable_hint": "Lokalny silnik Docker jest niedostępny. Możesz tutaj zainstalować lub uruchomić wymagany Docker, a następnie ponowić połączenie lokalne.",
+        "docker_local_unavailable_hint_linux": "Lokalny Docker Engine jest niedost\u0119pny z poziomu DCC. DCC korzysta z DOCKER_HOST i aktywnego kontekstu Docker CLI (w tym socketu Docker Desktop/rootless), a dopiero potem z systemowego socketu Dockera.",
+        "docker_local_endpoint_detected": "Wykryty endpoint Dockera: {context} -> {endpoint}",
         "docker_local_open_desktop": "Uruchom Docker Desktop",
         "docker_local_install_desktop": "Zainstaluj Docker Desktop",
         "docker_local_install_docker": "Zainstaluj Docker",
@@ -1096,7 +1220,9 @@ TEXTS = {
         "wsl_help_title": "WSL / WSL2 Docker",
         "wsl_help_text": "Wykryta dystrybucja: {distro}\n\nOpcje połączenia z GUI:\n1. Najłatwiej: Docker Desktop z integracją WSL i przycisk Połącz lokalnie.\n2. Kliknij WSL lokalne, aby zarządzać Dockerem uruchomionym bezpośrednio w tej dystrybucji.\n3. Profil SSH: uruchom OpenSSH w WSL i połącz profilem SSH.\n4. Profil tunelowy: wystaw socket Dockera z WSL do TCP i połącz profilem tunelowym.\n\nSzybki test w terminalu:\nwsl -d {distro} sh -lc \"docker ps\"",
         "local_profiles_text": "Profile lokalne dla początkujących:\n\n1. Kontenery lokalne\nUżywaj, gdy Docker Desktop albo lokalny daemon jest uruchomiony w Windows.\nSprawdź: PowerShell -> docker ps\n\n2. WSL lokalne\nUżywaj, gdy Docker działa bezpośrednio w Ubuntu, Debianie, Kali albo innej dystrybucji WSL2.\nSprawdź: PowerShell -> wsl -d Ubuntu sh -lc \"docker ps\"\n\nJak dodać kontener:\n- kliknij Nowy kontener\n- wybierz gotowy obraz albo wklej komendę docker run\n- sprawdź podsumowanie i uruchom\n\nKiedy który tryb:\n- Windows / Docker Desktop: Połącz lokalnie\n- WSL2 z własnym dockerd: WSL lokalne\n- Raspberry Pi / serwer / NAS: Start profilu przez SSH lub tunel",
+        "local_profiles_text_linux": "Tryby po\u0142\u0105czenia na Linux dla pocz\u0105tkuj\u0105cych:\n\n1. Lokalny Docker Engine\nU\u017cyj Po\u0142\u0105cz lokalnie, aby zarz\u0105dza\u0107 Dockerem uruchomionym bezpo\u015brednio na tym komputerze Linux.\nSprawdzenie w terminalu: docker ps\n\nJe\u017celi DCC dopiero doda\u0142o Twoje konto do grupy docker, skorzystaj z proponowanego ponownego uruchomienia DCC z dost\u0119pem do Docker albo wyloguj si\u0119 i zaloguj ponownie jeden raz.\n\n2. Zdalny Linux / Balena / Raspberry Pi / serwer / NAS\nUtw\u00f3rz profil SSH i uruchom ten profil, aby zarz\u0105dza\u0107 Dockerem zdalnie.\n\nJak doda\u0107 kontener:\n- kliknij Nowy kontener\n- wybierz gotowy obraz albo wklej komend\u0119 docker run\n- sprawd\u017a podsumowanie i uruchom",
         "remote_hint": "Lokalne, WSL i zdalne silniki Dockera w jednym panelu operatorskim.",
+        "remote_hint_linux": "Lokalny Docker Engine na Linux oraz zdalne hosty Docker przez SSH / Balena w jednym panelu operatorskim.",
         "remote_sysinfo_label": "Host zdalny: {os} | {arch}",
         "remote_sysinfo_unknown": "Host zdalny: nieznany",
         "remote_sysinfo_fetch_failed": "Host zdalny: brak danych",
@@ -1302,6 +1428,24 @@ class ImageTemplate:
     latest_release_url: str = ""
     last_checked: str = ""
     verified: bool = False
+    requires: Optional[List[str]] = None
+    gpu: bool = False
+    ram_min_mb: int = 0
+    storage_type: str = ""
+    backup_priority: str = ""
+    security_exposure: str = ""
+    compose_required: bool = False
+    balena_verified: bool = False
+    store_description: str = ""
+    store_description_en: str = ""
+    features: Optional[List[str]] = None
+    features_en: Optional[List[str]] = None
+    icon_url: str = ""
+    hero_image_url: str = ""
+    gallery: Optional[List[Dict[str, str]]] = None
+    credential_patterns: Optional[List[Dict[str, str]]] = None
+    post_install_hints: Optional[List[str]] = None
+    post_install_hints_en: Optional[List[str]] = None
 
     def supports_engine(self, engine: str) -> bool:
         engine = str(engine or "").lower().strip()
@@ -1328,6 +1472,19 @@ class ImageTemplate:
     def notes_for(self, lang: str) -> str:
         return self.notes_en if lang == "EN" and self.notes_en else self.notes
 
+    def store_description_for(self, lang: str) -> str:
+        if lang == "EN" and self.store_description_en:
+            return self.store_description_en
+        return self.store_description or self.description_for(lang)
+
+    def features_for(self, lang: str) -> List[str]:
+        values = self.features_en if lang == "EN" and self.features_en else self.features
+        return [str(item).strip() for item in (values or []) if str(item).strip()]
+
+    def post_install_hints_for(self, lang: str) -> List[str]:
+        values = self.post_install_hints_en if lang == "EN" and self.post_install_hints_en else self.post_install_hints
+        return [str(item).strip() for item in (values or []) if str(item).strip()]
+
 
 def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional[ImageTemplate]:
     if not isinstance(raw, dict):
@@ -1336,6 +1493,33 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
     image = str(raw.get("image") or raw.get("docker_image") or "").strip()
     if not name or not image:
         return None
+    raw_gallery = raw.get("gallery") or raw.get("screenshots") or []
+    gallery: List[Dict[str, str]] = []
+    if isinstance(raw_gallery, list):
+        for entry in raw_gallery:
+            if isinstance(entry, str) and entry.strip():
+                gallery.append({"url": entry.strip()})
+            elif isinstance(entry, dict):
+                url = str(entry.get("url") or entry.get("image") or "").strip()
+                if url:
+                    gallery.append({
+                        "url": url,
+                        "caption": str(entry.get("caption") or "").strip(),
+                        "caption_en": str(entry.get("caption_en") or "").strip(),
+                    })
+    credential_patterns: List[Dict[str, str]] = []
+    raw_patterns = raw.get("credential_patterns") or []
+    if isinstance(raw_patterns, list):
+        for entry in raw_patterns:
+            if not isinstance(entry, dict):
+                continue
+            regex = str(entry.get("regex") or entry.get("pattern") or "").strip()
+            if regex:
+                credential_patterns.append({
+                    "label": str(entry.get("label") or entry.get("name") or "Credential").strip(),
+                    "label_en": str(entry.get("label_en") or "").strip(),
+                    "regex": regex,
+                })
     return ImageTemplate(
         name=name,
         image=image,
@@ -1363,7 +1547,115 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
         latest_release_url=str(raw.get("latest_release_url") or raw.get("release_url") or "").strip(),
         last_checked=str(raw.get("last_checked") or "").strip(),
         verified=bool(raw.get("verified", False)),
+        requires=[str(item).strip() for item in (raw.get("requires") or []) if str(item).strip()],
+        gpu=bool(raw.get("gpu", False)),
+        ram_min_mb=max(0, int(raw.get("ram_min_mb") or 0)),
+        storage_type=str(raw.get("storage_type") or "").strip(),
+        backup_priority=str(raw.get("backup_priority") or "").strip(),
+        security_exposure=str(raw.get("security_exposure") or "").strip(),
+        compose_required=bool(raw.get("compose_required", False)),
+        balena_verified=bool(raw.get("balena_verified", False)),
+        store_description=str(raw.get("store_description") or "").strip(),
+        store_description_en=str(raw.get("store_description_en") or "").strip(),
+        features=[str(item).strip() for item in (raw.get("features") or []) if str(item).strip()],
+        features_en=[str(item).strip() for item in (raw.get("features_en") or []) if str(item).strip()],
+        icon_url=str(raw.get("icon_url") or "").strip(),
+        hero_image_url=str(raw.get("hero_image_url") or raw.get("hero_url") or "").strip(),
+        gallery=gallery,
+        credential_patterns=credential_patterns,
+        post_install_hints=[str(item).strip() for item in (raw.get("post_install_hints") or []) if str(item).strip()],
+        post_install_hints_en=[str(item).strip() for item in (raw.get("post_install_hints_en") or []) if str(item).strip()],
     )
+
+
+def normalize_container_image(value: str) -> str:
+    value = str(value or "").strip().lower()
+    if value.startswith("docker.io/"):
+        value = value[len("docker.io/"):]
+    if "@sha256:" in value:
+        value = value.split("@sha256:", 1)[0]
+    if value and ":" not in value.rsplit("/", 1)[-1]:
+        value += ":latest"
+    return value
+
+
+def container_image_name(container) -> str:
+    attrs = getattr(container, "attrs", {}) or {}
+    config = attrs.get("Config", {}) or {}
+    value = str(config.get("Image") or "").strip()
+    if value:
+        return value
+    image = getattr(container, "image", None)
+    tags = getattr(image, "tags", []) if image is not None else []
+    return str(tags[0]) if tags else ""
+
+
+def template_matches_container(template: ImageTemplate, container) -> bool:
+    target = normalize_container_image(template.image)
+    current = normalize_container_image(container_image_name(container))
+    if target and current and target == current:
+        return True
+    target_repo = target.rsplit(":", 1)[0] if target else ""
+    current_repo = current.rsplit(":", 1)[0] if current else ""
+    name = str(getattr(container, "name", "") or "").lstrip("/").casefold()
+    return bool(
+        template.default_name
+        and name == template.default_name.casefold()
+        and target_repo
+        and current_repo
+        and target_repo == current_repo
+    )
+
+
+def container_name_from_run_args(args: List[str]) -> str:
+    for index, token in enumerate(args):
+        token = str(token)
+        if token == "--name" and index + 1 < len(args):
+            return str(args[index + 1]).strip()
+        if token.startswith("--name="):
+            return token.split("=", 1)[1].strip()
+    return ""
+
+
+def parse_credentials_from_logs(log_text: str, template: Optional[ImageTemplate] = None, lang: str = "EN") -> List[tuple[str, str]]:
+    text = str(log_text or "")
+    if not text.strip():
+        return []
+    found: List[tuple[str, str]] = []
+    seen = set()
+
+    def add(label: str, value: str):
+        clean_value = str(value or "").strip().strip("'\"`.,;[]()")
+        clean_label = str(label or "Credential").strip()
+        if not clean_value or len(clean_value) > 256:
+            return
+        key = (clean_label.casefold(), clean_value)
+        if key not in seen:
+            seen.add(key)
+            found.append((clean_label, clean_value))
+
+    for rule in (template.credential_patterns if template else []) or []:
+        try:
+            pattern = str(rule.get("regex") or "")
+            label = str(rule.get("label_en") if lang == "EN" and rule.get("label_en") else rule.get("label") or "Credential")
+            for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
+                value = match.groupdict().get("value") if match.groupdict() else None
+                if value is None and match.lastindex:
+                    value = match.group(1)
+                if value:
+                    add(label, value)
+        except re.error:
+            continue
+
+    generic_patterns = [
+        ("Password" if lang == "EN" else "Hasło", r"(?:web\s+)?(?:admin\s+)?password\s*(?:is|:|=|->)\s*(?P<value>[^\s]+)"),
+        ("Username" if lang == "EN" else "Login", r"(?:user(?:name)?|login)\s*(?:is|:|=|->)\s*(?P<value>[^\s]+)"),
+        ("Token", r"(?:access\s+)?token\s*(?:is|:|=|->)\s*(?P<value>[A-Za-z0-9._~+/-]{8,})"),
+    ]
+    for label, pattern in generic_patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
+            add(label, match.group("value"))
+    return found[:8]
 
 
 def normalize_deployment_repository_source(source: str) -> str:
@@ -1424,6 +1716,53 @@ def load_cached_deployment_catalog() -> List[ImageTemplate]:
     return [item for item in parsed if item is not None]
 
 
+def load_bundled_deployment_catalog() -> List[ImageTemplate]:
+    if not BUNDLED_DEPLOYMENT_CATALOG_FILE.is_file():
+        return []
+    try:
+        payload = json.loads(BUNDLED_DEPLOYMENT_CATALOG_FILE.read_text(encoding="utf-8"))
+        apps = payload.get("apps", []) if isinstance(payload, dict) else []
+        parsed = [image_template_from_dict(item, DEFAULT_DEPLOYMENT_REPOSITORY) for item in apps if isinstance(item, dict)]
+        return [item for item in parsed if item is not None]
+    except Exception:
+        return []
+
+
+STORE_METADATA_FIELDS = (
+    "store_description",
+    "store_description_en",
+    "features",
+    "features_en",
+    "icon_url",
+    "hero_image_url",
+    "gallery",
+    "credential_patterns",
+    "post_install_hints",
+    "post_install_hints_en",
+)
+
+
+def merge_catalog_template(base: ImageTemplate, override: ImageTemplate) -> ImageTemplate:
+    data = asdict(override)
+    for field_name in STORE_METADATA_FIELDS:
+        value = data.get(field_name)
+        if value in (None, "", []):
+            data[field_name] = getattr(base, field_name, value)
+    return ImageTemplate(**data)
+
+
+def merge_catalog_lists(*catalogs: List[ImageTemplate]) -> List[ImageTemplate]:
+    merged: Dict[tuple[str, str], ImageTemplate] = {}
+    for catalog in catalogs:
+        for item in catalog:
+            key = (item.name.lower(), item.image.lower())
+            if key in merged:
+                merged[key] = merge_catalog_template(merged[key], item)
+            else:
+                merged[key] = item
+    return list(merged.values())
+
+
 def save_cached_deployment_catalog(items: List[ImageTemplate]) -> None:
     DEPLOYMENT_CATALOG_CACHE_FILE.write_text(
         json.dumps({"apps": [asdict(item) for item in items]}, indent=2, ensure_ascii=False),
@@ -1445,6 +1784,29 @@ def _catalog_source_candidates(source: str) -> List[str]:
         f"https://raw.githubusercontent.com/{owner}/{repo}/master/dcc-catalog.json",
         f"https://raw.githubusercontent.com/{owner}/{repo}/master/catalog.json",
     ]
+
+
+def resolve_catalog_media_source(template: Optional[ImageTemplate], value: str) -> str:
+    value = str(value or "").strip().replace("\\", "/")
+    if not value:
+        return ""
+    if re.match(r"^https?://", value, re.IGNORECASE):
+        return value
+    source = str(getattr(template, "repository_source", "") or DEFAULT_DEPLOYMENT_REPOSITORY).strip()
+    github = re.match(r"^https?://github\.com/([^/]+)/([^/#?]+?)(?:\.git)?/?(?:[?#].*)?$", source, re.IGNORECASE)
+    if github:
+        owner, repo = github.group(1), github.group(2)
+        return f"https://raw.githubusercontent.com/{owner}/{repo}/main/{value.lstrip('/')}"
+    try:
+        source_path = Path(source).expanduser()
+        if source_path.is_file():
+            source_path = source_path.parent
+        candidate = (source_path / value).resolve()
+        if candidate.is_file():
+            return candidate.as_uri()
+    except Exception:
+        pass
+    return value
 
 
 def fetch_deployment_repository(source: str, timeout: int = 10) -> List[ImageTemplate]:
@@ -2964,18 +3326,24 @@ def normalize_accent_color(value: str, fallback: str = "#33f0ff") -> str:
 
 def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transparency_level: int, neon_animate: bool = True, accent_color: str = "#33f0ff") -> str:
     palette = palette_for_theme(theme)
+    base = QColor(normalize_accent_color(accent_color))
     if neon_animate:
-        accent = QColor.fromHsvF(glow_phase, 0.72, 1.0).name()
-        accent_soft = QColor.fromHsvF(glow_phase, 0.46, 0.78).name()
+        hue, saturation, value, _alpha = base.getHsvF()
+        pulse = 0.78 + 0.22 * (0.5 + 0.5 * math.sin(float(glow_phase) * math.tau))
+        animated = QColor.fromHsvF(hue if hue >= 0 else 0.0, max(0.18, saturation), max(0.35, min(1.0, value * pulse)))
+        accent = animated.name()
+        soft = QColor(animated)
+        soft.setAlpha(150)
+        accent_soft = soft.name(QColor.NameFormat.HexArgb)
     else:
-        base = QColor(normalize_accent_color(accent_color))
         accent = base.name()
         soft = QColor(base)
         soft.setAlpha(160)
         accent_soft = soft.name(QColor.NameFormat.HexArgb)
     input_bg = "rgba(255,255,255,0.92)" if theme == "light" else "rgba(255,255,255,0.06)"
     surface = palette["bg0"] if transparent else palette["solid0"]
-    status_bg = "rgba(255,255,255,0.03)" if transparent else palette["solid1"]
+    status_bg = "rgba(255,255,255,0.72)" if transparent and theme == "light" else ("rgba(5,12,20,0.72)" if transparent else palette["solid1"])
+    menu_bg = palette["solid2"] if theme == "light" else palette["solid1"]
     return f"""
     QWidget {{
         color: {palette['fg']};
@@ -2986,6 +3354,29 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
     }}
     QMainWindow {{
         background: transparent;
+    }}
+    QMenuBar {{
+        background: {menu_bg};
+        color: {palette['fg']};
+        border-bottom: 1px solid {palette['border']};
+    }}
+    QMenuBar::item {{
+        background: transparent;
+        color: {palette['fg']};
+        padding: 5px 8px;
+    }}
+    QMenuBar::item:selected {{
+        background: {accent_soft};
+        color: {palette['fg']};
+    }}
+    QMenu {{
+        background: {menu_bg};
+        color: {palette['fg']};
+        border: 1px solid {palette['border']};
+    }}
+    QMenu::item:selected {{
+        background: {accent_soft};
+        color: {palette['fg']};
     }}
     QScrollArea#mainScrollArea {{
         background: transparent;
@@ -3046,6 +3437,19 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         border-radius: 10px;
         min-height: 20px;
     }}
+    QPushButton#containerGroupButton {{
+        border: 0;
+        background: transparent;
+        text-align: left;
+        font-weight: 600;
+        color: {accent};
+        padding: 0;
+    }}
+    QPushButton#containerGroupButton:hover {{
+        border: 0;
+        background: transparent;
+        color: {accent};
+    }}
     QWidget#linkPanel {{
         background: transparent;
     }}
@@ -3102,12 +3506,12 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         background: rgba(255,255,255,0.04);
         border: 0;
         border-bottom: 1px solid {palette['border']};
-        padding: 5px 6px;
+        padding: 5px 10px 5px 6px;
         color: {palette['glow_text']};
         font-weight: 700;
     }}
     QTableWidget::item:selected {{ background: {accent}; color: #08172c; }}
-    QStatusBar {{ background: {status_bg}; color: {accent}; border-top: 1px solid {palette['border']}; }}
+    QStatusBar {{ background: {status_bg}; color: {palette['fg']}; border-top: 1px solid {accent}; font-weight: 600; }}
     QMessageBox QLabel {{ color: {palette['fg']}; }}
     """
 
@@ -3123,6 +3527,29 @@ def make_colored_icon(color: QColor, size: int = 14) -> QIcon:
     painter.drawEllipse(1, 1, radius * 2, radius * 2)
     painter.end()
     return QIcon(pix)
+
+
+class ResizeGripHeader(QHeaderView):
+    """Interactive table header with a visible resize grip at each divider."""
+
+    def paintSection(self, painter: QPainter, rect, logical_index: int):
+        super().paintSection(painter, rect, logical_index)
+        if (
+            not rect.isValid()
+            or logical_index < 0
+            or self.visualIndex(logical_index) >= self.count() - 1
+        ):
+            return
+        painter.save()
+        grip_color = self.palette().color(self.foregroundRole())
+        grip_color.setAlpha(150)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(grip_color)
+        x = rect.right() - 3.0
+        center_y = rect.center().y()
+        for offset in (-4.0, 0.0, 4.0):
+            painter.drawEllipse(QRectF(x - 1.15, center_y + offset - 1.15, 2.3, 2.3))
+        painter.restore()
 
 
 def resolve_background_path(theme: str) -> Path:
@@ -3526,8 +3953,7 @@ class AppSettingsDialog(QDialog):
             self.neon_color_combo.setItemData(self.neon_color_combo.count() - 1, QColor(saved_color), Qt.ItemDataRole.DecorationRole)
             color_index = self.neon_color_combo.count() - 1
         self.neon_color_combo.setCurrentIndex(color_index)
-        self.neon_color_combo.setEnabled(not neon_enabled)
-        self.neon_checkbox.toggled.connect(lambda checked: self.neon_color_combo.setEnabled(not checked))
+        self.neon_color_combo.setEnabled(True)
 
         form.addRow(self.texts["app_settings_theme"], self.theme_combo)
         form.addRow(self.neon_checkbox)
@@ -3637,13 +4063,10 @@ class NewContainerDialog(QDialog):
         self.client = client
         self.texts = texts
         self.run_command_callback = run_command_callback
-        self.base_catalog = default_image_catalog()
+        self.base_catalog = merge_catalog_lists(default_image_catalog(), load_bundled_deployment_catalog())
         self.repository_sources = load_deployment_repository_sources()
         self.external_catalog = load_cached_deployment_catalog()
-        merged_catalog = {}
-        for item in self.base_catalog + self.external_catalog:
-            merged_catalog[(item.name.lower(), item.image.lower())] = item
-        self.catalog = list(merged_catalog.values())
+        self.catalog = merge_catalog_lists(self.base_catalog, self.external_catalog)
         self.filtered_catalog = list(self.catalog)
         self._syncing = False
         self.manual_configuration_mode = True
@@ -3664,6 +4087,8 @@ class NewContainerDialog(QDialog):
         if self.catalog_theme not in {"light", "dark", "black"}:
             self.catalog_theme = "dark"
         self.catalog_accent = normalize_accent_color(str(getattr(parent, "accent_color", "#33f0ff")))
+        self.store_network = QNetworkAccessManager(self)
+        self._store_media_generation = 0
 
         self.setWindowTitle(self.texts["wizard_edit_title"] if self.edit_mode else self.texts["wizard_title"])
         self.setWindowFlags(
@@ -3678,11 +4103,11 @@ class NewContainerDialog(QDialog):
         # area once Windows display scaling was applied.
         screen = parent.screen() if parent is not None and parent.screen() is not None else QApplication.primaryScreen()
         available = screen.availableGeometry() if screen is not None else None
-        default_width = 860
-        default_height = 600
+        default_width = 1160
+        default_height = 720
         if available is not None and available.isValid():
-            default_width = min(default_width, max(520, int(available.width() * 0.84)))
-            default_height = min(default_height, max(400, int(available.height() * 0.80)))
+            default_width = min(default_width, max(520, int(available.width() * 0.92)))
+            default_height = min(default_height, max(400, int(available.height() * 0.86)))
         self.setMinimumSize(480, 360)
         self.resize(default_width, default_height)
 
@@ -3722,34 +4147,162 @@ class NewContainerDialog(QDialog):
         store_header.addWidget(self.repo_status_label, 1)
         layout.addLayout(store_header)
 
-        toolbar = QHBoxLayout()
+        self.store_toolbar_frame = QFrame()
+        self.store_toolbar_frame.setObjectName("storeToolbarFrame")
+        toolbar = QHBoxLayout(self.store_toolbar_frame)
+        toolbar.setContentsMargins(12, 9, 12, 9)
+        toolbar.setSpacing(8)
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText(self.texts["wizard_search"])
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.setMinimumHeight(36)
         self.category_combo = QComboBox()
         self.category_combo.addItem(self.texts["wizard_all_categories"])
-        for category in sorted({item.category_for(self.lang) for item in self.catalog}, key=catalog_category_sort_key):
+        for category in self.catalog_category_names():
             self.category_combo.addItem(category)
+        self.category_combo.setVisible(False)
         self.catalog_count_label = QLabel()
         self.catalog_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.btn_manual_config = QPushButton(self.texts["wizard_manual"])
         self.btn_online_refresh = QPushButton(self.texts["wizard_online_refresh"])
-        toolbar.addWidget(QLabel(self.texts["wizard_category"]))
-        toolbar.addWidget(self.category_combo)
         toolbar.addWidget(self.search_edit, 1)
         toolbar.addWidget(self.catalog_count_label)
         toolbar.addWidget(self.btn_manual_config)
         toolbar.addWidget(self.btn_online_refresh)
-        layout.addLayout(toolbar)
+        layout.addWidget(self.store_toolbar_frame)
 
         catalog_row = QHBoxLayout()
+        catalog_row.setSpacing(10)
+        self.store_browser_frame = QFrame()
+        self.store_browser_frame.setObjectName("storeBrowserFrame")
+        browser_layout = QHBoxLayout(self.store_browser_frame)
+        browser_layout.setContentsMargins(10, 10, 10, 10)
+        browser_layout.setSpacing(10)
+
+        category_column = QVBoxLayout()
+        category_column.setSpacing(6)
+        self.store_categories_title = QLabel(self.texts["wizard_store_categories"])
+        self.store_categories_title.setObjectName("storeColumnTitle")
+        category_column.addWidget(self.store_categories_title)
+        self.category_nav = QListWidget()
+        self.category_nav.setObjectName("storeCategoryNav")
+        self.category_nav.setMinimumWidth(155)
+        self.category_nav.setMaximumWidth(205)
+        self.category_nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.category_nav.setSpacing(2)
+        category_column.addWidget(self.category_nav, 1)
+        browser_layout.addLayout(category_column, 0)
+
+        apps_column = QVBoxLayout()
+        apps_column.setSpacing(6)
+        self.store_apps_title = QLabel(self.texts["wizard_store_apps"])
+        self.store_apps_title.setObjectName("storeColumnTitle")
+        apps_column.addWidget(self.store_apps_title)
         self.catalog_list = QListWidget()
-        self.catalog_list.setMinimumWidth(220)
+        self.catalog_list.setObjectName("storeCatalogList")
+        self.catalog_list.setMinimumWidth(300)
         self.catalog_list.setIconSize(QSize(44, 44))
-        self.catalog_list.setSpacing(4)
+        self.catalog_list.setSpacing(2)
         self.catalog_list.setWordWrap(True)
-        catalog_row.addWidget(self.catalog_list, 1)
+        apps_column.addWidget(self.catalog_list, 1)
+        browser_layout.addLayout(apps_column, 1)
+        catalog_row.addWidget(self.store_browser_frame, 2)
 
         self.editor_tabs = QTabWidget()
+
+        self.store_tab = QWidget()
+        store_page_layout = QVBoxLayout(self.store_tab)
+        store_page_layout.setContentsMargins(12, 12, 12, 12)
+        store_page_layout.setSpacing(12)
+
+        self.store_hero_card = QFrame()
+        self.store_hero_card.setObjectName("storeHeroCard")
+        hero_layout = QHBoxLayout(self.store_hero_card)
+        hero_layout.setContentsMargins(16, 14, 16, 14)
+        hero_layout.setSpacing(14)
+        self.store_icon_label = QLabel()
+        self.store_icon_label.setFixedSize(86, 86)
+        self.store_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_layout.addWidget(self.store_icon_label, 0, Qt.AlignmentFlag.AlignTop)
+        hero_text = QVBoxLayout()
+        hero_text.setSpacing(4)
+        self.store_title_label = QLabel()
+        self.store_title_label.setObjectName("storeTitle")
+        store_title_font = self.store_title_label.font()
+        store_title_font.setBold(True)
+        store_title_font.setPointSize(max(14, store_title_font.pointSize() + 5))
+        self.store_title_label.setFont(store_title_font)
+        self.store_category_label = QLabel()
+        self.store_category_label.setObjectName("storeCategory")
+        self.store_install_state_label = QLabel()
+        self.store_install_state_label.setObjectName("storeInstallState")
+        hero_text.addWidget(self.store_title_label)
+        hero_text.addWidget(self.store_category_label)
+        hero_text.addWidget(self.store_install_state_label)
+        hero_text.addStretch()
+        hero_layout.addLayout(hero_text, 1)
+        self.btn_store_primary = QPushButton(self.texts["wizard_store_install"])
+        self.btn_store_primary.setObjectName("primaryAction")
+        self.btn_store_primary.setMinimumWidth(130)
+        hero_layout.addWidget(self.btn_store_primary, 0, Qt.AlignmentFlag.AlignTop)
+        store_page_layout.addWidget(self.store_hero_card)
+
+        self.store_hero_image = QLabel(self.texts["wizard_store_no_media"])
+        self.store_hero_image.setObjectName("storeHeroImage")
+        self.store_hero_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.store_hero_image.setMinimumHeight(170)
+        self.store_hero_image.setMaximumHeight(260)
+        self.store_hero_image.setWordWrap(True)
+        store_page_layout.addWidget(self.store_hero_image)
+
+        self.store_description_label = QLabel()
+        self.store_description_label.setObjectName("storeDescription")
+        self.store_description_label.setWordWrap(True)
+        self.store_description_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        store_page_layout.addWidget(self.store_description_label)
+
+        self.store_features_title = QLabel(self.texts["wizard_store_features"])
+        self.store_features_title.setObjectName("storeSectionTitle")
+        store_page_layout.addWidget(self.store_features_title)
+        self.store_features_label = QLabel()
+        self.store_features_label.setWordWrap(True)
+        self.store_features_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        store_page_layout.addWidget(self.store_features_label)
+
+        self.store_metadata_label = QLabel()
+        self.store_metadata_label.setObjectName("storeMetadata")
+        self.store_metadata_label.setWordWrap(True)
+        self.store_metadata_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        store_page_layout.addWidget(self.store_metadata_label)
+
+        store_links = QHBoxLayout()
+        self.btn_store_source = QPushButton(self.texts["wizard_source"])
+        self.btn_store_docs = QPushButton(self.texts["wizard_docs"])
+        self.btn_store_homepage = QPushButton(self.texts["wizard_homepage"])
+        store_links.addWidget(self.btn_store_source)
+        store_links.addWidget(self.btn_store_docs)
+        store_links.addWidget(self.btn_store_homepage)
+        store_links.addStretch()
+        store_page_layout.addLayout(store_links)
+
+        self.store_gallery_title = QLabel(self.texts["wizard_store_gallery"])
+        self.store_gallery_title.setObjectName("storeSectionTitle")
+        store_page_layout.addWidget(self.store_gallery_title)
+        gallery_layout = QHBoxLayout()
+        gallery_layout.setSpacing(8)
+        self.store_gallery_labels = []
+        for _index in range(3):
+            label = QLabel()
+            label.setObjectName("storeGalleryImage")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setMinimumSize(130, 86)
+            label.setMaximumHeight(130)
+            label.setVisible(False)
+            gallery_layout.addWidget(label, 1)
+            self.store_gallery_labels.append(label)
+        store_page_layout.addLayout(gallery_layout)
+        store_page_layout.addStretch()
+        self.editor_tabs.addTab(self.store_tab, self.texts["wizard_store_tab"])
 
         self.setup_tab = QWidget()
         setup_layout = QVBoxLayout(self.setup_tab)
@@ -3903,7 +4456,7 @@ class NewContainerDialog(QDialog):
         ai_layout.addLayout(ai_buttons)
         self.editor_tabs.addTab(self.ai_tab, self.texts["wizard_ai_tab"])
 
-        catalog_row.addWidget(self.editor_tabs, 2)
+        catalog_row.addWidget(self.editor_tabs, 3)
         layout.addLayout(catalog_row)
 
         buttons = QHBoxLayout()
@@ -3916,6 +4469,8 @@ class NewContainerDialog(QDialog):
 
         self.search_edit.textChanged.connect(self.filter_catalog)
         self.category_combo.currentIndexChanged.connect(self.filter_catalog)
+        self.category_combo.currentIndexChanged.connect(self._sync_category_sidebar_from_combo)
+        self.category_nav.currentRowChanged.connect(self._on_category_sidebar_changed)
         self.catalog_list.currentRowChanged.connect(self.apply_selected_template)
         self.cli_combo.currentIndexChanged.connect(self.on_cli_changed)
         for widget in [self.name_edit, self.image_edit, self.cport_edit, self.hport_edit, self.extra_edit, self.command_edit]:
@@ -3935,14 +4490,29 @@ class NewContainerDialog(QDialog):
         self.btn_app_docs.clicked.connect(lambda: self.open_selected_app_url("docs"))
         self.btn_app_homepage.clicked.connect(lambda: self.open_selected_app_url("homepage"))
         self.btn_quick_deploy.clicked.connect(self.on_run_clicked)
+        self.btn_store_source.clicked.connect(lambda: self.open_selected_app_url("source"))
+        self.btn_store_docs.clicked.connect(lambda: self.open_selected_app_url("docs"))
+        self.btn_store_homepage.clicked.connect(lambda: self.open_selected_app_url("homepage"))
+        self.btn_store_primary.clicked.connect(self.on_store_primary_action)
         self.btn_run.clicked.connect(self.on_run_clicked)
         self.btn_cancel.clicked.connect(self.reject)
 
+        self._populate_category_sidebar()
         self.filter_catalog()
         self.update_cli_labels()
         if self.initial_args:
             self.load_run_args(self.initial_args)
-        self.select_manual_configuration()
+            self.select_manual_configuration()
+        elif self.edit_mode:
+            self.select_manual_configuration()
+        elif self.catalog_list.count() > 0:
+            # Normal deployment opens as an application store.  Manual mode is
+            # still one click away and edit mode keeps the current container
+            # parameters visible instead of silently replacing them.
+            self.manual_configuration_mode = False
+            self.catalog_list.setCurrentRow(0)
+        else:
+            self.select_manual_configuration()
         self.load_ai_models(fetch=False)
         self.update_summary()
         QTimer.singleShot(250, lambda: self.refresh_external_catalogs(silent=True))
@@ -3954,16 +4524,105 @@ class NewContainerDialog(QDialog):
                 "title": "#14253d",
                 "description": "#4c6075",
                 "card_bg": "rgba(248, 252, 255, 238)",
+                "surface": "rgba(241, 247, 252, 246)",
+                "surface_alt": "rgba(226, 237, 246, 232)",
+                "border": "rgba(80, 112, 140, 105)",
             }
         return {
             "accent": self.catalog_accent,
             "title": "#f4fbff",
             "description": "#aebfce",
             "card_bg": "rgba(9, 18, 30, 178)",
+            "surface": "rgba(7, 14, 24, 220)",
+            "surface_alt": "rgba(17, 30, 46, 210)",
+            "border": "rgba(112, 143, 166, 92)",
         }
 
     def _apply_catalog_card_style(self):
         colors = self._catalog_visual_colors()
+        self.store_toolbar_frame.setStyleSheet(
+            f"""
+            QFrame#storeToolbarFrame {{
+                border: 1px solid {colors['border']};
+                border-radius: 14px;
+                background: {colors['surface']};
+            }}
+            QLineEdit {{
+                border: 1px solid {colors['border']};
+                border-radius: 10px;
+                padding: 7px 11px;
+                background: {colors['card_bg']};
+                color: {colors['title']};
+            }}
+            QLabel {{ color: {colors['description']}; background: transparent; }}
+            """
+        )
+        self.store_browser_frame.setStyleSheet(
+            f"""
+            QFrame#storeBrowserFrame {{
+                border: 1px solid {colors['border']};
+                border-radius: 16px;
+                background: {colors['surface']};
+            }}
+            QLabel#storeColumnTitle {{
+                color: {colors['title']};
+                background: transparent;
+                font-weight: 800;
+                font-size: 12pt;
+                padding: 3px 4px 7px 4px;
+            }}
+            """
+        )
+        self.category_nav.setStyleSheet(
+            f"""
+            QListWidget#storeCategoryNav {{
+                border: none;
+                background: transparent;
+                outline: 0;
+            }}
+            QListWidget#storeCategoryNav::item {{
+                color: {colors['description']};
+                border: 1px solid transparent;
+                border-radius: 9px;
+                padding: 8px 9px;
+                margin: 1px 0px;
+            }}
+            QListWidget#storeCategoryNav::item:hover {{
+                color: {colors['title']};
+                background: {colors['surface_alt']};
+            }}
+            QListWidget#storeCategoryNav::item:selected {{
+                color: {colors['title']};
+                border: 1px solid {colors['accent']};
+                background: {colors['surface_alt']};
+                font-weight: 700;
+            }}
+            """
+        )
+        self.catalog_list.setStyleSheet(
+            f"""
+            QListWidget#storeCatalogList {{
+                border: none;
+                background: transparent;
+                outline: 0;
+            }}
+            QListWidget#storeCatalogList::item {{
+                border: 1px solid {colors['border']};
+                border-radius: 12px;
+                background: {colors['card_bg']};
+                margin: 3px 1px;
+                padding: 2px;
+            }}
+            QListWidget#storeCatalogList::item:hover {{
+                border: 1px solid {colors['accent']};
+                background: {colors['surface_alt']};
+            }}
+            QListWidget#storeCatalogList::item:selected {{
+                border: 2px solid {colors['accent']};
+                background: {colors['surface_alt']};
+            }}
+            """
+        )
         self.app_card.setStyleSheet(
             f"""
             QFrame#catalogAppCard {{
@@ -3990,6 +4649,111 @@ class NewContainerDialog(QDialog):
             }}
             """
         )
+        self.store_hero_card.setStyleSheet(
+            f"""
+            QFrame#storeHeroCard {{
+                border: 1px solid {colors['accent']};
+                border-radius: 14px;
+                background: {colors['card_bg']};
+            }}
+            QLabel#storeTitle {{ color: {colors['title']}; background: transparent; }}
+            QLabel#storeCategory {{ color: {colors['accent']}; background: transparent; font-weight: 700; }}
+            QLabel#storeInstallState {{ color: {colors['description']}; background: transparent; }}
+            """
+        )
+        self.store_hero_image.setStyleSheet(
+            f"border: 1px solid {colors['accent']}; border-radius: 12px; "
+            f"background: {colors['card_bg']}; color: {colors['description']}; padding: 8px;"
+        )
+        for label in self.store_gallery_labels:
+            label.setStyleSheet(
+                f"border: 1px solid {colors['accent']}; border-radius: 10px; "
+                f"background: {colors['card_bg']}; color: {colors['description']}; padding: 4px;"
+            )
+        self.store_description_label.setStyleSheet(f"color: {colors['title']}; background: transparent;")
+        self.store_features_title.setStyleSheet(f"color: {colors['accent']}; background: transparent; font-weight: 700;")
+        self.store_gallery_title.setStyleSheet(f"color: {colors['accent']}; background: transparent; font-weight: 700;")
+        self.store_features_label.setStyleSheet(f"color: {colors['description']}; background: transparent;")
+        self.store_metadata_label.setStyleSheet(f"color: {colors['description']}; background: transparent;")
+
+    def _catalog_category_icon(self, category: str) -> str:
+        raw = str(category or "")
+        if raw == self.texts["wizard_all_categories"]:
+            return "▦"
+        if raw == self.texts["wizard_balena_category"]:
+            return "◉"
+        head = raw.split("/", 1)[0].strip().casefold()
+        icon_map = {
+            "ai": "✦",
+            "automatyzacja": "↻",
+            "automation": "↻",
+            "administracja": "⚙",
+            "administration": "⚙",
+            "monitoring": "▥",
+            "sieć": "◎",
+            "network": "◎",
+            "powiadomienia": "●",
+            "notifications": "●",
+            "bezpieczeństwo": "◆",
+            "security": "◆",
+            "produktywność": "✓",
+            "productivity": "✓",
+            "narzędzia": "◇",
+            "tools": "◇",
+            "finanse": "¤",
+            "finance": "¤",
+            "bazy danych": "▤",
+            "databases": "▤",
+            "messaging": "◌",
+            "cache": "ϟ",
+            "www": "◍",
+            "web": "◍",
+            "aplikacje www": "◍",
+            "web apps": "◍",
+            "smart home": "⌂",
+            "media": "▶",
+            "devops": "⌘",
+            "baza": "□",
+            "base": "□",
+            "runtime": "⌨",
+        }
+        return icon_map.get(head, "•")
+
+    def _populate_category_sidebar(self):
+        if not hasattr(self, "category_nav"):
+            return
+        current = self.category_combo.currentText()
+        previous_block = self.category_nav.blockSignals(True)
+        self.category_nav.clear()
+        for index in range(self.category_combo.count()):
+            category = self.category_combo.itemText(index)
+            item = QListWidgetItem(f"{self._catalog_category_icon(category)}   {category}")
+            item.setData(Qt.ItemDataRole.UserRole, category)
+            item.setToolTip(category)
+            self.category_nav.addItem(item)
+        self.category_nav.blockSignals(previous_block)
+        row = self.category_combo.findText(current)
+        self.category_nav.setCurrentRow(max(0, row))
+
+    def _on_category_sidebar_changed(self, row: int):
+        if row < 0 or row >= self.category_nav.count():
+            return
+        category = str(self.category_nav.item(row).data(Qt.ItemDataRole.UserRole) or "")
+        index = self.category_combo.findText(category)
+        if index >= 0 and index != self.category_combo.currentIndex():
+            self.category_combo.setCurrentIndex(index)
+
+    def _sync_category_sidebar_from_combo(self):
+        if not hasattr(self, "category_nav"):
+            return
+        category = self.category_combo.currentText()
+        for row in range(self.category_nav.count()):
+            if self.category_nav.item(row).data(Qt.ItemDataRole.UserRole) == category:
+                if self.category_nav.currentRow() != row:
+                    previous_block = self.category_nav.blockSignals(True)
+                    self.category_nav.setCurrentRow(row)
+                    self.category_nav.blockSignals(previous_block)
+                break
 
     def _catalog_list_item_widget(self, template: ImageTemplate, badges: str, description: str) -> QWidget:
         colors = self._catalog_visual_colors()
@@ -4035,6 +4799,16 @@ class NewContainerDialog(QDialog):
         row.addLayout(text_column, 1)
         return card
 
+    def catalog_category_names(self) -> List[str]:
+        categories = {
+            item.category_for(self.lang)
+            for item in self.catalog
+            if item.category_for(self.lang)
+        }
+        if any(item.supports_engine("balena") for item in self.catalog):
+            categories.add(self.texts["wizard_balena_category"])
+        return sorted(categories, key=catalog_category_sort_key)
+
     def filter_catalog(self):
         selected = self.selected_catalog_template()
         selected_key = (selected.name.lower(), selected.image.lower()) if selected else None
@@ -4042,14 +4816,23 @@ class NewContainerDialog(QDialog):
         category = self.category_combo.currentText().strip()
         self.filtered_catalog = []
         engine = self.current_cli()
+        balena_view = category == self.texts["wizard_balena_category"]
         previous_block = self.catalog_list.blockSignals(True)
         self.catalog_list.clear()
         for item in self.catalog:
-            if not item.supports_engine(engine):
+            if balena_view:
+                if not item.supports_engine("balena"):
+                    continue
+            elif not item.supports_engine(engine):
                 continue
             if self.remote_arch and not item.supports_arch(self.remote_arch):
                 continue
-            if category and category != self.texts["wizard_all_categories"] and item.category_for(self.lang) != category:
+            if (
+                not balena_view
+                and category
+                and category != self.texts["wizard_all_categories"]
+                and item.category_for(self.lang) != category
+            ):
                 continue
             haystack = f"{item.name} {item.image} {item.description_for(self.lang)} {item.notes_for(self.lang)}"
             if query and query not in haystack.lower():
@@ -4116,6 +4899,7 @@ class NewContainerDialog(QDialog):
             self.app_description_label.setText("")
             for button in (self.btn_app_source, self.btn_app_docs, self.btn_app_homepage, self.btn_quick_deploy):
                 button.setEnabled(False)
+            self.update_store_description(None)
             return
         self.app_title_label.setText(template.name)
         self.app_category_label.setText(template.category_for(self.lang))
@@ -4128,6 +4912,7 @@ class NewContainerDialog(QDialog):
         self.btn_app_docs.setEnabled(bool(template.docs_url))
         self.btn_app_homepage.setEnabled(bool(template.homepage_url))
         self.btn_quick_deploy.setEnabled(not self.edit_mode)
+        self.update_store_description(template)
 
     def update_manual_store_card(self):
         image = self.image_edit.text().strip()
@@ -4146,6 +4931,173 @@ class NewContainerDialog(QDialog):
         for button in (self.btn_app_source, self.btn_app_docs, self.btn_app_homepage):
             button.setEnabled(False)
         self.btn_quick_deploy.setEnabled(not self.edit_mode)
+        self.update_store_description(None)
+
+    def matching_installed_containers(self, template: Optional[ImageTemplate]) -> List[object]:
+        if template is None:
+            return []
+        try:
+            containers = self.client.containers.list(all=True)
+        except Exception:
+            return []
+        return [container for container in containers if template_matches_container(template, container)]
+
+    def _store_media_cache_path(self, url: str) -> Path:
+        suffix = Path(QUrl(url).path()).suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+            suffix = ".img"
+        return STORE_MEDIA_CACHE_DIR / (hashlib.sha256(url.encode("utf-8")).hexdigest() + suffix)
+
+    def _set_store_pixmap(self, label: QLabel, data: bytes, hero: bool = False):
+        pixmap = QPixmap()
+        if not data or not pixmap.loadFromData(data):
+            return
+        target = QSize(820, 240) if hero else QSize(230, 125)
+        scaled = pixmap.scaled(
+            target,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        label.setPixmap(scaled)
+        label.setText("")
+
+    def load_store_image(self, url: str, label: QLabel, hero: bool = False, generation: Optional[int] = None):
+        url = str(url or "").strip()
+        if not url:
+            return
+        qurl = QUrl(url)
+        if qurl.isLocalFile():
+            try:
+                self._set_store_pixmap(label, Path(qurl.toLocalFile()).read_bytes(), hero=hero)
+            except Exception:
+                pass
+            return
+        if not re.match(r"^https?://", url, re.IGNORECASE):
+            return
+        cache_path = self._store_media_cache_path(url)
+        try:
+            if cache_path.exists() and cache_path.stat().st_size > 0:
+                self._set_store_pixmap(label, cache_path.read_bytes(), hero=hero)
+                return
+        except Exception:
+            pass
+        request = QNetworkRequest(qurl)
+        request.setRawHeader(b"User-Agent", f"DCC/{APP_VERSION}".encode("ascii", errors="ignore"))
+        reply = self.store_network.get(request)
+        expected_generation = self._store_media_generation if generation is None else generation
+
+        def finished():
+            try:
+                if expected_generation != self._store_media_generation:
+                    return
+                data = bytes(reply.readAll())
+                if data:
+                    try:
+                        cache_path.write_bytes(data)
+                    except Exception:
+                        pass
+                    self._set_store_pixmap(label, data, hero=hero)
+            finally:
+                reply.deleteLater()
+
+        reply.finished.connect(finished)
+
+    def update_store_description(self, template: Optional[ImageTemplate]):
+        self._store_media_generation += 1
+        generation = self._store_media_generation
+        self.store_hero_image.clear()
+        self.store_hero_image.setText(self.texts["wizard_store_no_media"])
+        for label in self.store_gallery_labels:
+            label.clear()
+            label.setVisible(False)
+        if template is None:
+            title = self.texts["wizard_current_container_title"].format(name=self.existing_name) if self.edit_mode and self.existing_name else self.texts["wizard_manual_title"]
+            self.store_title_label.setText(title)
+            self.store_category_label.setText("")
+            self.store_description_label.setText(self.texts["wizard_manual_description"])
+            self.store_features_label.setText("")
+            self.store_metadata_label.setText("")
+            self.store_install_state_label.setText("")
+            self.store_icon_label.clear()
+            self.btn_store_primary.setEnabled(False)
+            for button in (self.btn_store_source, self.btn_store_docs, self.btn_store_homepage):
+                button.setEnabled(False)
+            return
+
+        self.store_title_label.setText(template.name)
+        self.store_category_label.setText(template.category_for(self.lang))
+        self.store_description_label.setText(template.store_description_for(self.lang) or template.description_for(self.lang) or template.image)
+        features = template.features_for(self.lang)
+        self.store_features_label.setText("\n".join(f"• {item}" for item in features) if features else (template.notes_for(self.lang) or ""))
+        requirements = []
+        if template.latest_release:
+            requirements.append(self.texts["wizard_latest_release"].format(version=template.latest_release))
+        if template.ram_min_mb:
+            requirements.append(f"RAM ≥ {template.ram_min_mb} MB")
+        if template.gpu:
+            requirements.append("GPU")
+        if template.compose_required:
+            requirements.append("Docker Compose")
+        if template.archs:
+            requirements.append("Arch: " + ", ".join(template.archs))
+        if template.requires:
+            requirements.append("Requires: " + ", ".join(template.requires))
+        engines = ", ".join(template.engines or ["docker"])
+        requirements.append("Engine: " + engines)
+        self.store_metadata_label.setText("  ·  ".join(requirements))
+
+        self.store_icon_label.setPixmap(deployment_catalog_icon(template).pixmap(78, 78))
+        if template.icon_url:
+            self.load_store_image(resolve_catalog_media_source(template, template.icon_url), self.store_icon_label, hero=False, generation=generation)
+        gallery = list(template.gallery or [])
+        hero_url = template.hero_image_url or (gallery[0].get("url", "") if gallery else "")
+        if hero_url:
+            self.load_store_image(resolve_catalog_media_source(template, hero_url), self.store_hero_image, hero=True, generation=generation)
+        for label, entry in zip(self.store_gallery_labels, gallery[:3]):
+            url = str(entry.get("url") or "")
+            if url:
+                label.setVisible(True)
+                caption = str(entry.get("caption_en") if self.lang == "EN" and entry.get("caption_en") else entry.get("caption") or "")
+                label.setToolTip(caption)
+                self.load_store_image(resolve_catalog_media_source(template, url), label, hero=False, generation=generation)
+
+        self.btn_store_source.setEnabled(bool(template.source_url))
+        self.btn_store_docs.setEnabled(bool(template.docs_url))
+        self.btn_store_homepage.setEnabled(bool(template.homepage_url))
+        installed = self.matching_installed_containers(template)
+        if installed:
+            self.store_install_state_label.setText(self.texts["wizard_store_installed"] + f" · {len(installed)}")
+            self.btn_store_primary.setText(self.texts["wizard_store_uninstall"])
+        else:
+            self.store_install_state_label.setText(self.texts["wizard_store_not_installed"])
+            self.btn_store_primary.setText(self.texts["wizard_store_install"])
+        self.btn_store_primary.setEnabled(not self.edit_mode)
+
+    def on_store_primary_action(self):
+        template = self.selected_catalog_template()
+        if template is None:
+            return
+        installed = self.matching_installed_containers(template)
+        if not installed:
+            self.on_run_clicked()
+            return
+        names = [str(getattr(container, "name", "") or "?") for container in installed]
+        reply = QMessageBox.question(
+            self,
+            self.texts["wizard_store_uninstall_title"],
+            self.texts["wizard_store_uninstall_confirm"].format(count=len(installed), names="\n".join(names)),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            for container in installed:
+                container.remove(force=True)
+        except Exception as exc:
+            QMessageBox.critical(self, self.texts["msg_error"], str(exc))
+            return
+        QMessageBox.information(self, self.texts["msg_info"], self.texts["wizard_store_uninstall_done"])
+        self.update_store_description(template)
 
     def select_manual_configuration(self):
         self.manual_configuration_mode = True
@@ -4173,16 +5125,14 @@ class NewContainerDialog(QDialog):
         self.category_combo.blockSignals(True)
         self.category_combo.clear()
         self.category_combo.addItem(self.texts["wizard_all_categories"])
-        for category in sorted(
-            {item.category_for(self.lang) for item in self.catalog if item.category_for(self.lang)},
-            key=catalog_category_sort_key,
-        ):
+        for category in self.catalog_category_names():
             self.category_combo.addItem(category)
         if current:
             index = self.category_combo.findText(current)
             if index >= 0:
                 self.category_combo.setCurrentIndex(index)
         self.category_combo.blockSignals(False)
+        self._populate_category_sidebar()
 
     def manage_catalog_repositories(self):
         dialog = CatalogRepositoryDialog(self.repository_sources, self.texts, self)
@@ -4220,10 +5170,7 @@ class NewContainerDialog(QDialog):
     def on_external_catalog_refresh_finished(self, refreshed: List[ImageTemplate], errors: List[str]):
         self.external_catalog = list(refreshed)
         save_cached_deployment_catalog(self.external_catalog)
-        merged = {}
-        for item in self.base_catalog + self.external_catalog:
-            merged[(item.name.lower(), item.image.lower())] = item
-        self.catalog = list(merged.values())
+        self.catalog = merge_catalog_lists(self.base_catalog, self.external_catalog)
         self.rebuild_catalog_categories()
         self.filter_catalog()
 
@@ -4674,7 +5621,30 @@ class NewContainerDialog(QDialog):
             "Current containers:\n" + ("\n".join(lines) if lines else "- none")
         )
 
+    def collect_post_install_access_details(self, args: List[str], template: Optional[ImageTemplate]) -> List[tuple[str, str]]:
+        name = container_name_from_run_args(args)
+        if not name:
+            return []
+        for attempt in range(8):
+            try:
+                container = self.client.containers.get(name)
+                raw = container.logs(tail=300)
+                if isinstance(raw, bytes):
+                    log_text = raw.decode("utf-8", errors="ignore")
+                else:
+                    log_text = str(raw or "")
+                detected = parse_credentials_from_logs(log_text, template, self.lang)
+                if detected:
+                    return detected
+            except Exception:
+                pass
+            if attempt < 7:
+                QApplication.processEvents()
+                time.sleep(0.25)
+        return []
+
     def on_run_clicked(self):
+        selected_template = self.selected_catalog_template()
         image = self.image_edit.text().strip()
         if not image:
             QMessageBox.warning(self, self.texts["msg_error"], self.texts["wizard_image"])
@@ -4733,7 +5703,23 @@ class NewContainerDialog(QDialog):
             QMessageBox.critical(self, self.texts["msg_error"], str(exc))
             return
         done_text = self.texts["wizard_recreate_done"] if self.edit_mode else self.texts["wizard_done"]
-        QMessageBox.information(self, self.texts["msg_info"], done_text)
+        access_details_shown = False
+        if not self.edit_mode:
+            credentials = self.collect_post_install_access_details(args, selected_template)
+            hints = selected_template.post_install_hints_for(self.lang) if selected_template else []
+            if credentials or hints:
+                access_details_shown = True
+                details = [done_text, "", self.texts["wizard_credentials_intro"]]
+                details.extend(f"{label}: {value}" for label, value in credentials)
+                if hints:
+                    details.append("")
+                    details.extend(f"• {hint}" for hint in hints)
+                done_text = "\n".join(details)
+        QMessageBox.information(
+            self,
+            self.texts["wizard_credentials_title"] if access_details_shown else self.texts["msg_info"],
+            done_text,
+        )
         self.accept()
 
 class SimpleImageRef:
@@ -5878,9 +6864,13 @@ class FirstRunWizardDialog(QDialog):
         self.docker_status.setWordWrap(True)
         docker_layout.addWidget(self.docker_status)
         docker_actions = QHBoxLayout()
+        self.docker_desktop_button = QPushButton()
         self.install_docker_button = QPushButton(self.texts["first_run_install_docker"])
+        self.add_docker_group_button = QPushButton(self.texts["first_run_add_docker_group"])
         self.recheck_docker_button = QPushButton(self.texts["first_run_recheck_docker"])
+        docker_actions.addWidget(self.docker_desktop_button)
         docker_actions.addWidget(self.install_docker_button)
+        docker_actions.addWidget(self.add_docker_group_button)
         docker_actions.addWidget(self.recheck_docker_button)
         docker_actions.addStretch()
         docker_layout.addLayout(docker_actions)
@@ -5915,7 +6905,9 @@ class FirstRunWizardDialog(QDialog):
         footer.addWidget(self.finish_button)
         layout.addLayout(footer)
 
+        self.docker_desktop_button.clicked.connect(self.handle_docker_desktop)
         self.install_docker_button.clicked.connect(self.install_docker)
+        self.add_docker_group_button.clicked.connect(self.add_to_docker_group)
         self.recheck_docker_button.clicked.connect(self.refresh_state)
         self.import_profiles_button.clicked.connect(self.import_profiles)
         self.edit_profiles_button.clicked.connect(self.edit_profiles)
@@ -5930,19 +6922,55 @@ class FirstRunWizardDialog(QDialog):
         docker_ready = self.main_window.is_local_docker_available()
         docker_binary = bool(shutil.which("docker"))
         supported = self.main_window.linux_docker_auto_install_supported()
+        desktop_installed = self.main_window.linux_docker_desktop_installed()
+        desktop_selected = self.main_window.linux_docker_desktop_selected()
+        group_configured = self.main_window.linux_docker_group_configured()
+        group_active = self.main_window.linux_docker_group_active()
+        group_supported = self.main_window.linux_docker_group_setup_supported()
+        system_socket = self.main_window.linux_docker_uses_system_socket() if docker_binary else False
+        self.add_docker_group_button.setText(
+            self.texts["first_run_docker_group_added"]
+            if group_configured
+            else self.texts["first_run_add_docker_group"]
+        )
         if docker_ready:
             self.docker_status.setText(self.texts["first_run_docker_ready"])
             self.docker_status.setStyleSheet("color: #58d68d;")
-        elif docker_binary:
-            self.docker_status.setText(self.texts["first_run_docker_installed_no_access"])
+        elif desktop_installed and desktop_selected:
+            self.docker_status.setText(self.texts["docker_desktop_linux_stopped"])
             self.docker_status.setStyleSheet("color: #ffcc66;")
+        elif docker_binary:
+            if not system_socket:
+                self.docker_status.setText(self.texts["dependencies_installed_not_running"])
+                self.docker_status.setStyleSheet("color: #ffcc66;")
+            elif group_configured:
+                if group_active:
+                    self.docker_status.setText(self.texts["dependencies_docker_group_active_no_daemon"])
+                    self.docker_status.setStyleSheet("color: #ffcc66;")
+                else:
+                    self.docker_status.setText(self.texts["dependencies_docker_group_session"])
+                    self.docker_status.setStyleSheet("color: #58d68d;")
+            else:
+                self.docker_status.setText(self.texts["dependencies_docker_group_missing"])
+                self.docker_status.setStyleSheet("color: #ffcc66;")
         elif supported:
             self.docker_status.setText(self.texts["first_run_docker_missing"])
             self.docker_status.setStyleSheet("color: #ffcc66;")
         else:
             self.docker_status.setText(self.texts["first_run_docker_unsupported"])
             self.docker_status.setStyleSheet("color: #ff8c8c;")
-        self.install_docker_button.setEnabled((not docker_ready) and (not docker_binary) and supported)
+        desktop_running = self.main_window.linux_docker_desktop_running() if desktop_installed else False
+        self.docker_desktop_button.setText(
+            self.texts["docker_local_open_desktop"]
+            if desktop_installed
+            else self.texts["dependencies_install_docker_desktop"]
+        )
+        self.docker_desktop_button.setEnabled((not desktop_running) if desktop_installed else True)
+        self.install_docker_button.setText(self.texts["first_run_install_docker"])
+        self.install_docker_button.setEnabled((not docker_binary) and supported)
+        self.add_docker_group_button.setEnabled(
+            docker_binary and (not group_configured) and group_supported
+        )
 
         profiles = self.main_window.remote_profiles
         missing = sum(1 for profile in profiles if profile_needs_ssh_key_path(profile))
@@ -5950,9 +6978,32 @@ class FirstRunWizardDialog(QDialog):
         self.key_paths_label.setText(self.texts["first_run_key_paths_missing"].format(count=missing))
         self.key_paths_label.setStyleSheet("color: #ffcc66;" if missing else "color: #58d68d;")
 
+    def handle_docker_desktop(self):
+        if self.main_window.linux_docker_desktop_installed():
+            if self.main_window.try_start_docker_desktop():
+                self.main_window.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                QTimer.singleShot(1800, self.main_window.reconnect_local_docker_after_desktop_start)
+            else:
+                QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_local_open_failed"])
+        elif self.main_window.linux_docker_desktop_selected():
+            opened = self.main_window.open_linux_docker_desktop_install_page()
+            QMessageBox.information(
+                self,
+                self.texts["msg_info"],
+                self.texts["docker_desktop_linux_install_opened"]
+                if opened
+                else self.texts["docker_desktop_linux_install_failed"],
+            )
+        self.refresh_state()
+
     def install_docker(self):
         if self.main_window.install_linux_docker_with_progress():
             QMessageBox.information(self, self.texts["msg_info"], self.texts["first_run_install_success"])
+        self.refresh_state()
+
+    def add_to_docker_group(self):
+        if self.main_window.add_current_user_to_docker_group_with_progress():
+            QMessageBox.information(self, self.texts["msg_info"], self.texts["docker_group_install_success"])
         self.refresh_state()
 
     def import_profiles(self):
@@ -5989,8 +7040,14 @@ class DependencyManagerDialog(QDialog):
         self.docker_status.setWordWrap(True)
         docker_actions = QHBoxLayout()
         self.docker_action = QPushButton()
+        self.docker_engine_action = QPushButton(self.texts["dependencies_install_docker_engine"])
+        self.docker_group_action = QPushButton(self.texts["dependencies_add_docker_group"])
         self.docker_action.clicked.connect(self.handle_docker_action)
+        self.docker_engine_action.clicked.connect(self.handle_docker_engine_action)
+        self.docker_group_action.clicked.connect(self.handle_docker_group_action)
         docker_actions.addWidget(self.docker_action)
+        docker_actions.addWidget(self.docker_engine_action)
+        docker_actions.addWidget(self.docker_group_action)
         docker_actions.addStretch()
         docker_layout.addWidget(self.docker_title)
         docker_layout.addWidget(self.docker_status)
@@ -6033,6 +7090,8 @@ class DependencyManagerDialog(QDialog):
     def refresh_state(self):
         docker_ready = self.main_window.is_local_docker_available()
         if os.name == "nt":
+            self.docker_group_action.setVisible(False)
+            self.docker_engine_action.setVisible(False)
             self.docker_title.setText(self.texts["dependencies_docker_windows"])
             installed = self.main_window.windows_docker_desktop_installed()
             if docker_ready:
@@ -6051,26 +7110,67 @@ class DependencyManagerDialog(QDialog):
                 self.docker_action.setText(self.texts["dependencies_install_docker_desktop"])
                 self.docker_action.setEnabled(True)
         else:
-            self.docker_title.setText(self.texts["dependencies_docker_linux"])
+            self.docker_group_action.setVisible(True)
+            self.docker_engine_action.setVisible(True)
             docker_binary = bool(shutil.which("docker"))
             supported = self.main_window.linux_docker_auto_install_supported()
+            desktop_installed = self.main_window.linux_docker_desktop_installed()
+            desktop_selected = self.main_window.linux_docker_desktop_selected()
+            desktop_running = self.main_window.linux_docker_desktop_running() if desktop_installed else False
+            group_configured = self.main_window.linux_docker_group_configured()
+            group_active = self.main_window.linux_docker_group_active()
+            group_supported = self.main_window.linux_docker_group_setup_supported()
+            system_socket = self.main_window.linux_docker_uses_system_socket() if docker_binary else False
+            self.docker_title.setText(
+                self.texts["dependencies_docker_linux_desktop"]
+                if desktop_installed or desktop_selected
+                else self.texts["dependencies_docker_linux"]
+            )
             if docker_ready:
                 self.docker_status.setText(self.texts["dependencies_ready"])
                 self.docker_status.setStyleSheet("color: #58d68d;")
-                self.docker_action.setText(self.texts["dependencies_install_docker"])
-                self.docker_action.setEnabled(False)
-            elif docker_binary:
-                self.docker_status.setText(self.texts["dependencies_installed_not_running"])
+            elif desktop_installed and (desktop_selected or not system_socket):
+                self.docker_status.setText(self.texts["docker_desktop_linux_stopped"])
                 self.docker_status.setStyleSheet("color: #ffcc66;")
+            elif docker_binary:
+                if not system_socket:
+                    self.docker_status.setText(self.texts["dependencies_installed_not_running"])
+                    self.docker_status.setStyleSheet("color: #ffcc66;")
+                elif group_configured:
+                    if group_active:
+                        self.docker_status.setText(self.texts["dependencies_docker_group_active_no_daemon"])
+                        self.docker_status.setStyleSheet("color: #ffcc66;")
+                    else:
+                        self.docker_status.setText(self.texts["dependencies_docker_group_session"])
+                        self.docker_status.setStyleSheet("color: #58d68d;")
+                else:
+                    self.docker_status.setText(self.texts["dependencies_docker_group_missing"])
+                    self.docker_status.setStyleSheet("color: #ffcc66;")
                 self.docker_action.setText(self.texts["dependencies_install_docker"])
                 self.docker_action.setEnabled(False)
             else:
-                self.docker_status.setText(
-                    self.texts["dependencies_missing"] if supported else self.texts["dependencies_auto_unavailable"]
-                )
+                self.docker_status.setText(self.texts["docker_desktop_linux_missing"])
                 self.docker_status.setStyleSheet("color: #ffcc66;")
-                self.docker_action.setText(self.texts["dependencies_install_docker"])
-                self.docker_action.setEnabled(supported)
+
+            self.docker_action.setText(
+                self.texts["docker_local_open_desktop"]
+                if desktop_installed
+                else self.texts["dependencies_install_docker_desktop"]
+            )
+            self.docker_action.setEnabled((not desktop_running) if desktop_installed else True)
+            self.docker_engine_action.setEnabled((not docker_binary) and supported)
+            self.docker_group_action.setText(
+                self.texts["dependencies_docker_group_added"]
+                if group_configured
+                else self.texts["dependencies_add_docker_group"]
+            )
+            self.docker_group_action.setEnabled(
+                docker_binary and (not group_configured) and group_supported
+            )
+            if group_configured:
+                self.docker_group_action.setToolTip(self.texts["dependencies_docker_group_member"])
+            else:
+                self.docker_group_action.setToolTip(self.texts["docker_group_auth_info"])
 
         ssh_ready = self.main_window.is_ssh_client_available() and self.main_window.is_ssh_agent_available()
         if ssh_ready:
@@ -6097,9 +7197,37 @@ class DependencyManagerDialog(QDialog):
                 if success:
                     self.main_window.try_start_docker_desktop()
         else:
-            success = self.main_window.install_linux_docker_with_progress()
+            if self.main_window.linux_docker_desktop_installed():
+                success = self.main_window.try_start_docker_desktop()
+                if not success:
+                    QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_local_open_failed"])
+                else:
+                    self.main_window.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                    QTimer.singleShot(1800, self.main_window.reconnect_local_docker_after_desktop_start)
+            else:
+                success = self.main_window.open_linux_docker_desktop_install_page()
+                QMessageBox.information(
+                    self,
+                    self.texts["msg_info"],
+                    self.texts["docker_desktop_linux_install_opened"]
+                    if success
+                    else self.texts["docker_desktop_linux_install_failed"],
+                )
         if success:
+            if os.name == "nt":
+                QMessageBox.information(self, self.texts["msg_info"], self.texts["dependencies_install_success"])
+        self.refresh_state()
+
+    def handle_docker_engine_action(self):
+        if os.name == "nt":
+            return
+        if self.main_window.install_linux_docker_with_progress():
             QMessageBox.information(self, self.texts["msg_info"], self.texts["dependencies_install_success"])
+        self.refresh_state()
+
+    def handle_docker_group_action(self):
+        if self.main_window.add_current_user_to_docker_group_with_progress():
+            QMessageBox.information(self, self.texts["msg_info"], self.texts["docker_group_install_success"])
         self.refresh_state()
 
     def install_ssh_tools(self):
@@ -6132,6 +7260,12 @@ class MainWindow(QMainWindow):
         except Exception:
             self.container_table_zoom = 100
         self.container_table_zoom = max(70, min(160, self.container_table_zoom))
+        self.container_column_magnet = str(
+            self.settings.value("containers/column_magnet", "true")
+        ).lower() in {"1", "true", "yes"}
+        self._container_column_base_widths: Optional[List[float]] = None
+        self._restoring_container_column_widths = False
+        self._applying_column_magnet = False
         self.music_enabled = str(self.settings.value("music_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
@@ -6166,6 +7300,7 @@ class MainWindow(QMainWindow):
         self.latest_release_info: Dict = {}
         self.update_download_thread: Optional[QThread] = None
         self.update_download_worker: Optional[UpdateDownloadWorker] = None
+        self.update_install_process: Optional[QProcess] = None
         self.startup_catalog_refresh_thread: Optional[QThread] = None
         self.startup_catalog_refresh_worker: Optional[CatalogRefreshWorker] = None
         self.group_mode = str(self.settings.value("containers/group_mode", "project") or "project")
@@ -6248,10 +7383,16 @@ class MainWindow(QMainWindow):
         if os.name != "nt" and str(self.settings.value("setup/first_run_complete", "false")).lower() not in {"1", "true", "yes"}:
             first_run_shown = self.run_first_run_wizard()
 
-        if os.name == "nt" and self.auto_start_docker_desktop and not self.is_local_docker_available():
-            self.try_start_docker_desktop()
-            QTimer.singleShot(1500, self.connect_local_docker)
-            return
+        if self.auto_start_docker_desktop and not self.is_local_docker_available():
+            desktop_installed = (
+                self.windows_docker_desktop_installed()
+                if os.name == "nt"
+                else self.linux_docker_desktop_installed()
+            )
+            if desktop_installed and self.try_start_docker_desktop():
+                self.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                QTimer.singleShot(1800, self.reconnect_local_docker_after_desktop_start)
+                return
 
         if os.name != "nt" and not self.is_local_docker_available() and first_run_shown:
             self.client = None
@@ -6283,12 +7424,18 @@ class MainWindow(QMainWindow):
                 self.settings.setValue("window_height", size.height())
             except Exception:
                 pass
+        if hasattr(self, "table"):
+            self._save_container_column_widths()
+        self.settings.sync()
         super().closeEvent(event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if not self.isFullScreen() and not self.isMaximized():
             self._last_normal_geometry = self.geometry()
+        timer = getattr(self, "_column_magnet_resize_timer", None)
+        if self.container_column_magnet and timer is not None:
+            timer.start()
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -6367,14 +7514,133 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setFont(header_font)
         self.table.verticalHeader().setDefaultSectionSize(max(28, round(34 * new_percent / 100.0)))
 
-        for column in range(self.table.columnCount()):
-            current_width = self.table.columnWidth(column)
-            self.table.setColumnWidth(column, max(24, round(current_width * ratio)))
+        self._restoring_container_column_widths = True
+        try:
+            for column in range(self.table.columnCount()):
+                current_width = self.table.columnWidth(column)
+                self.table.setColumnWidth(column, max(24, round(current_width * ratio)))
+        finally:
+            self._restoring_container_column_widths = False
 
         self.settings.setValue("container_table_zoom", new_percent)
+        if self.container_column_magnet:
+            QTimer.singleShot(0, self._apply_container_column_magnet)
         if self.last_containers:
             self.render_container_table(self.last_containers)
         self.statusBar().showMessage(self.texts["container_zoom_status"].format(percent=new_percent), 3500)
+
+    def _restore_container_column_widths(self):
+        if not hasattr(self, "table"):
+            return False
+        raw = self.settings.value("containers/column_widths_v1", "")
+        if not raw:
+            return False
+        try:
+            widths = json.loads(str(raw))
+            if not isinstance(widths, list) or len(widths) != self.table.columnCount():
+                return False
+            self._container_column_base_widths = [max(24.0, float(value)) for value in widths]
+            zoom_factor = max(0.01, self.container_table_zoom / 100.0)
+            self._restoring_container_column_widths = True
+            try:
+                for column, base_width in enumerate(self._container_column_base_widths):
+                    self.table.setColumnWidth(column, max(24, round(base_width * zoom_factor)))
+            finally:
+                self._restoring_container_column_widths = False
+            return True
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return False
+
+    def _save_container_column_widths(self):
+        if (
+            not hasattr(self, "table")
+            or getattr(self, "_restoring_container_column_widths", False)
+            or getattr(self, "_applying_column_magnet", False)
+        ):
+            return
+        zoom_factor = max(0.01, self.container_table_zoom / 100.0)
+        widths = [
+            round(self.table.columnWidth(column) / zoom_factor, 2)
+            for column in range(self.table.columnCount())
+        ]
+        self._container_column_base_widths = list(widths)
+        self.settings.setValue("containers/column_widths_v1", json.dumps(widths, separators=(",", ":")))
+
+    def _queue_container_column_width_save(self, *_args):
+        if (
+            getattr(self, "_restoring_container_column_widths", False)
+            or getattr(self, "_applying_column_magnet", False)
+        ):
+            return
+        timer = getattr(self, "_column_width_save_timer", None)
+        if timer is not None:
+            timer.start()
+
+    def _commit_container_column_widths(self):
+        self._save_container_column_widths()
+        if self.container_column_magnet:
+            self._apply_container_column_magnet()
+
+    def set_container_column_magnet(self, enabled: bool):
+        self._save_container_column_widths()
+        self.container_column_magnet = bool(enabled)
+        self.settings.setValue("containers/column_magnet", "true" if self.container_column_magnet else "false")
+        self.settings.sync()
+        if self.container_column_magnet:
+            QTimer.singleShot(0, self._apply_container_column_magnet)
+
+    def _apply_container_column_magnet(self):
+        if not self.container_column_magnet or not hasattr(self, "table"):
+            return
+        target_width = self.table.viewport().width()
+        if target_width <= 0 or self.table.columnCount() <= 0:
+            return
+        zoom_factor = max(0.01, self.container_table_zoom / 100.0)
+        base_widths = self._container_column_base_widths
+        if not base_widths or len(base_widths) != self.table.columnCount():
+            base_widths = [
+                max(24.0, self.table.columnWidth(column) / zoom_factor)
+                for column in range(self.table.columnCount())
+            ]
+            self._container_column_base_widths = list(base_widths)
+
+        weights = [max(1.0, float(width)) for width in base_widths]
+        minimum = 24
+        if target_width <= minimum * len(weights):
+            scaled = [minimum] * len(weights)
+        else:
+            total = sum(weights) or float(len(weights))
+            scaled = [max(minimum, round(target_width * weight / total)) for weight in weights]
+            delta = target_width - sum(scaled)
+            visual_order = [
+                self.table.horizontalHeader().logicalIndex(visual)
+                for visual in range(self.table.columnCount())
+            ]
+            if delta > 0:
+                index = 0
+                while delta > 0:
+                    logical = visual_order[index % len(visual_order)]
+                    scaled[logical] += 1
+                    delta -= 1
+                    index += 1
+            elif delta < 0:
+                index = len(visual_order) - 1
+                remaining = -delta
+                guard = 0
+                while remaining > 0 and guard < target_width * 2:
+                    logical = visual_order[index % len(visual_order)]
+                    if scaled[logical] > minimum:
+                        scaled[logical] -= 1
+                        remaining -= 1
+                    index -= 1
+                    guard += 1
+
+        self._applying_column_magnet = True
+        try:
+            for column, width in enumerate(scaled):
+                self.table.setColumnWidth(column, width)
+        finally:
+            self._applying_column_magnet = False
 
     def show_shortcuts_dialog(self):
         QMessageBox.information(
@@ -6401,7 +7667,7 @@ class MainWindow(QMainWindow):
         hero_layout.setSpacing(12)
         self.hero_title = QLabel(self.texts["hero_title"])
         self.hero_title.setObjectName("heroTitle")
-        self.hero_subtitle = QLabel(self.texts["hero_subtitle"])
+        self.hero_subtitle = QLabel(self.platform_text("hero_subtitle"))
         self.hero_subtitle.setObjectName("heroSubtitle")
         self.hero_subtitle.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         hero_layout.addWidget(self.hero_title)
@@ -6437,11 +7703,11 @@ class MainWindow(QMainWindow):
         self.transparency_slider.setRange(35, 100)
         self.transparency_slider.setValue(self.transparency_level)
         self.transparency_slider.valueChanged.connect(self.set_transparency_level)
-        self.remote_hint = QLabel(self.texts["remote_hint"])
+        self.remote_hint = QLabel(self.platform_text("remote_hint"))
         self.remote_hint.setWordWrap(False)
         self.remote_hint.setMaximumWidth(1)
         self.remote_hint.setVisible(False)
-        self.remote_hint.setToolTip(self.texts["remote_hint"])
+        self.remote_hint.setToolTip(self.platform_text("remote_hint"))
         self.remote_sysinfo_label = QLabel(self.texts["remote_sysinfo_unknown"])
         self.remote_sysinfo_label.setWordWrap(False)
         self.remote_sysinfo_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
@@ -6592,6 +7858,11 @@ class MainWindow(QMainWindow):
         self.host_metrics_label.setWordWrap(False)
         self.host_metrics_label.setMaximumWidth(420)
         self.host_metrics_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.column_magnet_checkbox = QCheckBox(self.texts["column_magnet"])
+        self.column_magnet_checkbox.setChecked(self.container_column_magnet)
+        self.column_magnet_checkbox.setToolTip(self.texts["column_magnet_tooltip"])
+        self.column_magnet_checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.column_magnet_checkbox.toggled.connect(self.set_container_column_magnet)
 
         view_panel = QFrame()
         view_panel.setObjectName("controlPanel")
@@ -6608,6 +7879,7 @@ class MainWindow(QMainWindow):
         infra_layout.addWidget(self.group_by_label)
         infra_layout.addWidget(self.group_by_combo)
         infra_layout.addWidget(self.host_metrics_label, 1)
+        infra_layout.addWidget(self.column_magnet_checkbox, 0)
         view_panel_layout.addLayout(infra_layout)
 
         host_actions_layout = QHBoxLayout()
@@ -6618,6 +7890,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(view_panel)
 
         self.table = QTableWidget(0, 12)
+        self.table.setHorizontalHeader(ResizeGripHeader(Qt.Orientation.Horizontal, self.table))
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.container_table_base_font = QFont(self.table.font())
         base_font_size = self.container_table_base_font.pointSizeF()
@@ -6642,6 +7915,19 @@ class MainWindow(QMainWindow):
         zoom_factor = self.container_table_zoom / 100.0
         for column, base_width in enumerate(base_widths):
             self.table.setColumnWidth(column, max(24, round(base_width * zoom_factor)))
+        self._restoring_container_column_widths = False
+        restored_widths = self._restore_container_column_widths()
+        if not restored_widths:
+            self._container_column_base_widths = [float(width) for width in base_widths]
+        self._column_width_save_timer = QTimer(self)
+        self._column_width_save_timer.setSingleShot(True)
+        self._column_width_save_timer.setInterval(250)
+        self._column_width_save_timer.timeout.connect(self._commit_container_column_widths)
+        header.sectionResized.connect(self._queue_container_column_width_save)
+        self._column_magnet_resize_timer = QTimer(self)
+        self._column_magnet_resize_timer.setSingleShot(True)
+        self._column_magnet_resize_timer.setInterval(35)
+        self._column_magnet_resize_timer.timeout.connect(self._apply_container_column_magnet)
         self.table.setWordWrap(True)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
@@ -6656,6 +7942,8 @@ class MainWindow(QMainWindow):
         self.table.installEventFilter(self)
         self.table.viewport().installEventFilter(self)
         main_layout.addWidget(self.table, 1)
+        if self.container_column_magnet:
+            QTimer.singleShot(0, self._apply_container_column_magnet)
 
         self.main_scroll_area = QScrollArea(self)
         self.main_scroll_area.setObjectName("mainScrollArea")
@@ -6722,49 +8010,102 @@ class MainWindow(QMainWindow):
     def _build_menus(self):
         menubar = self.menuBar()
         menubar.clear()
-        file_menu = QMenu(self.texts["menu_file"], self)
-        menubar.addMenu(file_menu)
-        file_menu.addAction(self.texts["menu_profiles_import"]).triggered.connect(self.import_profiles_from_file)
-        file_menu.addAction(self.texts["menu_profiles_export"]).triggered.connect(self.export_profiles_to_file)
-        file_menu.addSeparator()
-        file_menu.addAction(self.texts["menu_quit"]).triggered.connect(self.close)
+        self.file_menu = QMenu(self.texts["menu_file"], self)
+        menubar.addMenu(self.file_menu)
+        self.action_profiles_import = self.file_menu.addAction(self.texts["menu_profiles_import"])
+        self.action_profiles_import.triggered.connect(self.import_profiles_from_file)
+        self.action_profiles_export = self.file_menu.addAction(self.texts["menu_profiles_export"])
+        self.action_profiles_export.triggered.connect(self.export_profiles_to_file)
+        self.file_menu.addSeparator()
+        self.action_quit = self.file_menu.addAction(self.texts["menu_quit"])
+        self.action_quit.triggered.connect(self.close)
 
-        view_menu = QMenu(self.texts["menu_view"], self)
-        menubar.addMenu(view_menu)
-        fullscreen_action = view_menu.addAction(self.texts["menu_fullscreen"])
-        fullscreen_action.setShortcut("F11")
-        fullscreen_action.triggered.connect(self.toggle_fullscreen)
-        view_menu.addSeparator()
+        self.view_menu = QMenu(self.texts["menu_view"], self)
+        menubar.addMenu(self.view_menu)
+        self.action_fullscreen = self.view_menu.addAction(self.texts["menu_fullscreen"])
+        self.action_fullscreen.setShortcut("F11")
+        self.action_fullscreen.triggered.connect(self.toggle_fullscreen)
+        self.view_menu.addSeparator()
 
-        theme_menu = QMenu(self.texts["menu_theme"], self)
-        view_menu.addMenu(theme_menu)
-        theme_menu.addAction(self.texts["theme_light"]).triggered.connect(lambda: self.set_theme("light"))
-        theme_menu.addAction(self.texts["theme_dark"]).triggered.connect(lambda: self.set_theme("dark"))
-        theme_menu.addAction(self.texts["theme_black"]).triggered.connect(lambda: self.set_theme("black"))
+        self.theme_menu = QMenu(self.texts["menu_theme"], self)
+        self.view_menu.addMenu(self.theme_menu)
+        self.action_theme_light = self.theme_menu.addAction(self.texts["theme_light"])
+        self.action_theme_light.triggered.connect(lambda: self.set_theme("light"))
+        self.action_theme_dark = self.theme_menu.addAction(self.texts["theme_dark"])
+        self.action_theme_dark.triggered.connect(lambda: self.set_theme("dark"))
+        self.action_theme_black = self.theme_menu.addAction(self.texts["theme_black"])
+        self.action_theme_black.triggered.connect(lambda: self.set_theme("black"))
 
-        lang_menu = QMenu(self.texts["menu_lang"], self)
-        view_menu.addMenu(lang_menu)
-        lang_menu.addAction(self.texts["lang_en"]).triggered.connect(lambda: self.set_language("EN"))
-        lang_menu.addAction(self.texts["lang_pl"]).triggered.connect(lambda: self.set_language("PL"))
+        self.lang_menu = QMenu(self.texts["menu_lang"], self)
+        self.view_menu.addMenu(self.lang_menu)
+        self.action_lang_en = self.lang_menu.addAction(self.texts["lang_en"])
+        self.action_lang_en.triggered.connect(lambda: self.set_language("EN"))
+        self.action_lang_pl = self.lang_menu.addAction(self.texts["lang_pl"])
+        self.action_lang_pl.triggered.connect(lambda: self.set_language("PL"))
 
-        config_menu = QMenu(self.texts["menu_config"], self)
-        menubar.addMenu(config_menu)
-        config_menu.addAction(self.texts["menu_llm"]).triggered.connect(self.open_llm_settings_dialog)
-        config_menu.addAction(self.texts["menu_app"]).triggered.connect(self.open_app_settings_dialog)
-        config_menu.addAction(self.texts["menu_dependencies"]).triggered.connect(self.open_dependencies_dialog)
+        self.config_menu = QMenu(self.texts["menu_config"], self)
+        menubar.addMenu(self.config_menu)
+        self.action_llm = self.config_menu.addAction(self.texts["menu_llm"])
+        self.action_llm.triggered.connect(self.open_llm_settings_dialog)
+        self.action_app_settings = self.config_menu.addAction(self.texts["menu_app"])
+        self.action_app_settings.triggered.connect(self.open_app_settings_dialog)
+        self.action_repo_builder = self.config_menu.addAction(self.texts["menu_repo_builder"])
+        self.action_repo_builder.triggered.connect(self.open_repo_builder)
+        self.action_dependencies = self.config_menu.addAction(self.texts["menu_dependencies"])
+        self.action_dependencies.triggered.connect(self.open_dependencies_dialog)
+        self.action_first_run_wizard = None
         if os.name != "nt":
-            config_menu.addAction(self.texts["menu_first_run_wizard"]).triggered.connect(lambda: self.run_first_run_wizard(force=True))
-        config_menu.addSeparator()
-        config_menu.addAction(self.texts["menu_reset_settings"]).triggered.connect(self.reset_settings_to_defaults)
-        config_menu.addAction(self.texts["menu_factory_reset"]).triggered.connect(self.factory_reset)
+            self.action_first_run_wizard = self.config_menu.addAction(self.texts["menu_first_run_wizard"])
+            self.action_first_run_wizard.triggered.connect(lambda: self.run_first_run_wizard(force=True))
+        self.config_menu.addSeparator()
+        self.action_reset_settings = self.config_menu.addAction(self.texts["menu_reset_settings"])
+        self.action_reset_settings.triggered.connect(self.reset_settings_to_defaults)
+        self.action_factory_reset = self.config_menu.addAction(self.texts["menu_factory_reset"])
+        self.action_factory_reset.triggered.connect(self.factory_reset)
 
-        info_menu = QMenu(self.texts["menu_info"], self)
-        menubar.addMenu(info_menu)
-        info_menu.addAction(self.texts["info_app"]).triggered.connect(self.show_app_info_dialog)
-        info_menu.addAction(self.texts["info_check_updates"]).triggered.connect(lambda: self.check_for_updates(True))
-        info_menu.addAction(self.texts["info_shortcuts"]).triggered.connect(self.show_shortcuts_dialog)
-        info_menu.addSeparator()
-        info_menu.addAction(self.texts["info_safe_danger"]).triggered.connect(self.show_info_dialog)
+        self.info_menu = QMenu(self.texts["menu_info"], self)
+        menubar.addMenu(self.info_menu)
+        self.action_info_app = self.info_menu.addAction(self.texts["info_app"])
+        self.action_info_app.triggered.connect(self.show_app_info_dialog)
+        self.action_check_updates = self.info_menu.addAction(self.texts["info_check_updates"])
+        self.action_check_updates.triggered.connect(lambda: self.check_for_updates(True))
+        self.action_shortcuts = self.info_menu.addAction(self.texts["info_shortcuts"])
+        self.action_shortcuts.triggered.connect(self.show_shortcuts_dialog)
+        self.info_menu.addSeparator()
+        self.action_safe_danger = self.info_menu.addAction(self.texts["info_safe_danger"])
+        self.action_safe_danger.triggered.connect(self.show_info_dialog)
+
+    def _translate_menus(self):
+        """Translate existing menu objects without deleting an active Linux QMenu."""
+        if not hasattr(self, "file_menu"):
+            return
+        self.file_menu.setTitle(self.texts["menu_file"])
+        self.action_profiles_import.setText(self.texts["menu_profiles_import"])
+        self.action_profiles_export.setText(self.texts["menu_profiles_export"])
+        self.action_quit.setText(self.texts["menu_quit"])
+        self.view_menu.setTitle(self.texts["menu_view"])
+        self.action_fullscreen.setText(self.texts["menu_fullscreen"])
+        self.theme_menu.setTitle(self.texts["menu_theme"])
+        self.action_theme_light.setText(self.texts["theme_light"])
+        self.action_theme_dark.setText(self.texts["theme_dark"])
+        self.action_theme_black.setText(self.texts["theme_black"])
+        self.lang_menu.setTitle(self.texts["menu_lang"])
+        self.action_lang_en.setText(self.texts["lang_en"])
+        self.action_lang_pl.setText(self.texts["lang_pl"])
+        self.config_menu.setTitle(self.texts["menu_config"])
+        self.action_llm.setText(self.texts["menu_llm"])
+        self.action_app_settings.setText(self.texts["menu_app"])
+        self.action_repo_builder.setText(self.texts["menu_repo_builder"])
+        self.action_dependencies.setText(self.texts["menu_dependencies"])
+        if self.action_first_run_wizard is not None:
+            self.action_first_run_wizard.setText(self.texts["menu_first_run_wizard"])
+        self.action_reset_settings.setText(self.texts["menu_reset_settings"])
+        self.action_factory_reset.setText(self.texts["menu_factory_reset"])
+        self.info_menu.setTitle(self.texts["menu_info"])
+        self.action_info_app.setText(self.texts["info_app"])
+        self.action_check_updates.setText(self.texts["info_check_updates"])
+        self.action_shortcuts.setText(self.texts["info_shortcuts"])
+        self.action_safe_danger.setText(self.texts["info_safe_danger"])
 
     def _set_table_headers(self):
         def sortable_label(label: str, column: int) -> str:
@@ -6871,9 +8212,37 @@ class MainWindow(QMainWindow):
                 app.setStyleSheet(extra_qss)
         if self.root_surface is not None:
             self.root_surface.set_visual_state(self.current_theme, self.transparent_mode, self.transparency_level)
+        self.refresh_dynamic_theme_elements()
         self.apply_window_surface()
         self.update_transparency_button()
         self.update_music_button()
+
+    def refresh_dynamic_theme_elements(self):
+        """Refresh widgets/items whose colors are stored outside the global QSS."""
+        table = getattr(self, "table", None)
+        if table is None:
+            return
+        accent = QColor(normalize_accent_color(self.accent_color))
+        background = QColor(accent)
+        background.setAlpha(38 if self.current_theme != "light" else 26)
+        for row in range(table.rowCount()):
+            item = table.item(row, 0)
+            if item is None:
+                continue
+            metadata = item.data(Qt.ItemDataRole.UserRole)
+            if not isinstance(metadata, dict) or metadata.get("row_type") != "group":
+                continue
+            item.setBackground(QBrush(background))
+            item.setForeground(QBrush(accent))
+            header_widget = table.cellWidget(row, 0)
+            if header_widget is None:
+                continue
+            group_button = header_widget.findChild(QPushButton, "containerGroupButton")
+            if group_button is not None:
+                group_button.style().unpolish(group_button)
+                group_button.style().polish(group_button)
+                group_button.update()
+        table.viewport().update()
 
     def apply_window_surface(self):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, self.transparent_mode)
@@ -6963,6 +8332,13 @@ class MainWindow(QMainWindow):
         self.settings.setValue("theme", theme)
         self._load_theme()
 
+    def platform_text(self, key: str) -> str:
+        if os.name != "nt":
+            linux_key = f"{key}_linux"
+            if linux_key in self.texts:
+                return self.texts[linux_key]
+        return self.texts[key]
+
     def set_language(self, lang: str):
         lang = lang.upper()
         if lang not in TEXTS:
@@ -6970,7 +8346,22 @@ class MainWindow(QMainWindow):
         self.lang = lang
         self.texts = TEXTS[self.lang]
         self.settings.setValue("language", self.lang)
+        if os.name != "nt":
+            # Some Linux Qt/X11 combinations (including MX/Xfce) can crash if
+            # widgets are translated while the QAction from an open popup menu
+            # is still dispatching. Defer the entire UI refresh until after the
+            # popup has had time to close and the menu event has fully unwound.
+            QTimer.singleShot(120, self._apply_language_after_menu_close)
+            return
         self.apply_language()
+        QTimer.singleShot(0, self._build_menus)
+
+    def _apply_language_after_menu_close(self):
+        self.apply_language()
+        # Do not clear/recreate the menu bar here. On MX Linux/Xfce this can
+        # destroy the QMenu that emitted the language QAction and crash Qt.
+        # Updating the existing menu/action captions in place is safe.
+        self._translate_menus()
 
     def apply_compact_action_labels(self):
         actions = [
@@ -7000,9 +8391,8 @@ class MainWindow(QMainWindow):
 
     def apply_language(self):
         self.setWindowTitle(self.texts["app_title"])
-        self._build_menus()
         self.hero_title.setText(self.texts["hero_title"])
-        self.hero_subtitle.setText(self.texts["hero_subtitle"])
+        self.hero_subtitle.setText(self.platform_text("hero_subtitle"))
         self.profile_label_widget.setText(self.texts["profile_label"])
         self.apply_compact_action_labels()
         if self.remote_arch:
@@ -7010,12 +8400,16 @@ class MainWindow(QMainWindow):
         else:
             self.remote_sysinfo_label.setText(self.texts["remote_sysinfo_unknown"])
         self.transparency_label.setText(self.texts["transparency_level"])
-        self.remote_hint.setText(self.texts["remote_hint"])
+        self.remote_hint.setText(self.platform_text("remote_hint"))
+        self.remote_hint.setToolTip(self.platform_text("remote_hint"))
         self.wsl_label.setText(self.texts["wsl_label"])
         self.connection_section_title.setText(self.texts["controls_connection"])
         self.container_section_title.setText(self.texts["controls_containers"])
         self.view_section_title.setText(self.texts["controls_view"])
         self.select_all_checkbox.setText(self.texts["select_all"])
+        if hasattr(self, "column_magnet_checkbox"):
+            self.column_magnet_checkbox.setText(self.texts["column_magnet"])
+            self.column_magnet_checkbox.setToolTip(self.texts["column_magnet_tooltip"])
         self.container_search.setPlaceholderText(self.texts["container_search_placeholder"])
         self.group_by_label.setText(self.texts["group_by_label"])
         self.populate_group_mode_combo()
@@ -7174,7 +8568,34 @@ class MainWindow(QMainWindow):
             self.update_glow_timer()
             self._load_theme()
             if self.auto_start_docker_desktop and self.current_backend == "local" and not self.is_local_docker_available():
-                self.try_start_docker_desktop()
+                if self.try_start_docker_desktop():
+                    self.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                    QTimer.singleShot(1800, self.reconnect_local_docker_after_desktop_start)
+
+    def open_repo_builder(self):
+        commands: List[List[str]] = []
+        executable_dir = Path(sys.executable).resolve().parent
+        if os.name == "nt":
+            commands.append([str(executable_dir / "DCCRepoBuilder.exe")])
+        else:
+            commands.append(["/usr/bin/dcc-repo-builder"])
+            commands.append([str(executable_dir / "dcc-repo-builder")])
+        for path in (
+            Path(__file__).resolve().parent / "RepoBuilder.py",
+            RESOURCE_DIR / "RepoBuilder.py",
+        ):
+            if path.is_file():
+                commands.append([sys.executable, str(path)])
+        for command in commands:
+            executable = Path(command[0]) if os.path.isabs(command[0]) else None
+            if executable is not None and not executable.exists():
+                continue
+            try:
+                subprocess.Popen(command, cwd=str(Path(__file__).resolve().parent), creationflags=CREATE_NO_WINDOW)
+                return
+            except Exception:
+                continue
+        QMessageBox.warning(self, self.texts["menu_repo_builder"], self.texts["repo_builder_missing"])
 
     def open_dependencies_dialog(self):
         DependencyManagerDialog(self, self).exec()
@@ -7374,11 +8795,38 @@ class MainWindow(QMainWindow):
                 pkexec = shutil.which("pkexec")
                 apt_get = shutil.which("apt-get")
                 if pkexec and apt_get:
-                    subprocess.Popen([pkexec, apt_get, "install", "-y", package_path], cwd=str(Path(path).parent))
+                    QMessageBox.information(
+                        self,
+                        self.texts["info_update_linux_auth_title"],
+                        self.texts["info_update_linux_auth"],
+                    )
+                    process = QProcess(self)
+                    process.setWorkingDirectory(str(Path(path).parent))
+                    process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+                    process.finished.connect(self.on_linux_update_install_finished)
+                    process.errorOccurred.connect(self.on_linux_update_install_error)
+                    self.update_install_process = process
+                    self.statusBar().showMessage(self.texts["info_update_linux_installing"])
+                    process.start(pkexec, [apt_get, "install", "-y", package_path])
+                    return
                 elif shutil.which("xdg-open"):
+                    QMessageBox.information(
+                        self,
+                        self.texts["info_update_linux_auth_title"],
+                        self.texts["info_update_linux_auth"],
+                    )
                     subprocess.Popen(["xdg-open", package_path], cwd=str(Path(path).parent))
+                    self.statusBar().showMessage(self.texts["info_update_linux_installing"])
+                    return
                 else:
+                    QMessageBox.information(
+                        self,
+                        self.texts["info_update_linux_auth_title"],
+                        self.texts["info_update_linux_auth"],
+                    )
                     launch_interactive_terminal(shell_command=f"sudo apt install {shlex.quote(package_path)}")
+                    self.statusBar().showMessage(self.texts["info_update_linux_installing"])
+                    return
             else:
                 subprocess.Popen([path], cwd=str(Path(path).parent))
         except Exception as exc:
@@ -7389,6 +8837,43 @@ class MainWindow(QMainWindow):
             )
             return
         QTimer.singleShot(500, self.close)
+
+    def on_linux_update_install_error(self, error):
+        process = self.update_install_process
+        if process is None:
+            return
+        if error != QProcess.ProcessError.FailedToStart:
+            return
+        details = self.texts["info_update_linux_install_failed"]
+        output = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace").strip()
+        if output:
+            details += f"\n\n{output}"
+        QMessageBox.warning(self, self.texts["msg_error"], details)
+        self.statusBar().showMessage(self.texts["status_ready"])
+        process.deleteLater()
+        self.update_install_process = None
+
+    def on_linux_update_install_finished(self, exit_code: int, _exit_status):
+        process = self.update_install_process
+        if process is None:
+            return
+        output = bytes(process.readAllStandardOutput()).decode("utf-8", errors="replace").strip()
+        process.deleteLater()
+        self.update_install_process = None
+        if exit_code == 0:
+            self.statusBar().showMessage(self.texts["status_ready"])
+            QMessageBox.information(
+                self,
+                self.texts["info_update_linux_auth_title"],
+                self.texts["info_update_linux_installed"],
+            )
+            QTimer.singleShot(250, self.close)
+            return
+        details = self.texts["info_update_linux_install_failed"]
+        if output:
+            details += f"\n\n{output}"
+        QMessageBox.warning(self, self.texts["msg_error"], details)
+        self.statusBar().showMessage(self.texts["status_ready"])
 
     def check_for_updates(self, notify_always: bool = False):
         info = self.fetch_latest_release_info()
@@ -7513,7 +8998,10 @@ class MainWindow(QMainWindow):
             self.wsl_combo.addItem(self.texts["wsl_none"])
 
     def show_local_profiles_info(self):
-        info = self.texts["local_profiles_text"]
+        info = self.platform_text("local_profiles_text")
+        if os.name != "nt":
+            QMessageBox.information(self, self.texts["msg_info"], info)
+            return
         distro = self.wsl_combo.currentText().strip() if hasattr(self, "wsl_combo") else ""
         if distro and distro != self.texts["wsl_none"]:
             info = info + "\n\n" + self.texts["local_profiles_wsl_command"].format(distro=distro)
@@ -8285,6 +9773,98 @@ class MainWindow(QMainWindow):
     def windows_docker_auto_install_supported(self) -> bool:
         return os.name == "nt" and bool(shutil.which("winget"))
 
+    def linux_docker_desktop_path(self) -> Optional[Path]:
+        if os.name == "nt":
+            return None
+        detected = shutil.which("docker-desktop")
+        candidates = []
+        if detected:
+            candidates.append(Path(detected))
+        candidates.extend(
+            [
+                Path("/opt/docker-desktop/bin/docker-desktop"),
+                Path.home() / ".local/bin/docker-desktop",
+            ]
+        )
+        for candidate in candidates:
+            try:
+                if candidate.is_file():
+                    return candidate
+            except Exception:
+                continue
+        return None
+
+    def linux_docker_desktop_installed(self) -> bool:
+        if os.name == "nt":
+            return False
+        if self.linux_docker_desktop_path() is not None:
+            return True
+        for marker in (
+            Path("/usr/share/applications/docker-desktop.desktop"),
+            Path("/opt/docker-desktop"),
+        ):
+            try:
+                if marker.exists():
+                    return True
+            except Exception:
+                pass
+        dpkg_query = shutil.which("dpkg-query")
+        if dpkg_query:
+            try:
+                result = subprocess.run(
+                    [dpkg_query, "-W", "-f=${Status}", "docker-desktop"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+                return result.returncode == 0 and "install ok installed" in (result.stdout or "").lower()
+            except Exception:
+                pass
+        return False
+
+    def linux_docker_desktop_selected(self) -> bool:
+        if os.name == "nt":
+            return False
+        try:
+            endpoint, context_name = self._linux_docker_endpoint_info()
+        except Exception:
+            return False
+        endpoint = endpoint.lower()
+        context_name = context_name.lower()
+        return "desktop" in context_name or "/.docker/desktop/" in endpoint or "docker-cli.sock" in endpoint
+
+    def linux_docker_desktop_running(self) -> bool:
+        if os.name == "nt" or not self.linux_docker_desktop_installed():
+            return False
+        if self.linux_docker_desktop_selected() and self.is_local_docker_available():
+            return True
+        systemctl = shutil.which("systemctl")
+        if systemctl:
+            try:
+                result = subprocess.run(
+                    [systemctl, "--user", "is-active", "--quiet", "docker-desktop"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+                if result.returncode == 0:
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def open_linux_docker_desktop_install_page(self) -> bool:
+        if os.name == "nt":
+            return False
+        try:
+            return bool(webbrowser.open("https://docs.docker.com/desktop/setup/install/linux/"))
+        except Exception:
+            return False
+
     def _ssh_program_path(self, program: str) -> Optional[str]:
         detected = shutil.which(program)
         if detected:
@@ -8316,6 +9896,255 @@ class MainWindow(QMainWindow):
 
     def linux_docker_auto_install_supported(self) -> bool:
         return os.name != "nt" and bool(shutil.which("apt-get")) and bool(shutil.which("pkexec"))
+
+    def linux_docker_group_setup_supported(self) -> bool:
+        if os.name == "nt" or not shutil.which("pkexec"):
+            return False
+        return bool(shutil.which("usermod") or Path("/usr/sbin/usermod").is_file())
+
+    def linux_target_username(self) -> str:
+        """Return the real desktop user that should receive Docker permissions."""
+        if os.name == "nt":
+            return getpass.getuser().strip()
+
+        sudo_user = os.getenv("SUDO_USER", "").strip()
+        if sudo_user and sudo_user != "root":
+            return sudo_user
+
+        pkexec_uid = os.getenv("PKEXEC_UID", "").strip()
+        if pkexec_uid.isdigit():
+            try:
+                import pwd
+
+                username = pwd.getpwuid(int(pkexec_uid)).pw_name.strip()
+                if username and username != "root":
+                    return username
+            except Exception:
+                pass
+
+        candidates = [
+            getpass.getuser().strip(),
+            os.getenv("USER", "").strip(),
+            os.getenv("LOGNAME", "").strip(),
+        ]
+        for username in candidates:
+            if username and username != "root":
+                return username
+
+        try:
+            import pwd
+
+            username = pwd.getpwuid(os.getuid()).pw_name.strip()
+            if username and username != "root":
+                return username
+        except Exception:
+            pass
+        return ""
+
+    def _linux_docker_endpoint_info(self, refresh: bool = False) -> tuple[str, str]:
+        """Resolve the Docker endpoint exactly like the Linux Docker CLI context."""
+        if os.name == "nt":
+            return "", ""
+
+        cached = getattr(self, "_linux_docker_endpoint_cache", None)
+        now = time.monotonic()
+        if not refresh and cached and now - cached[0] < 2.0:
+            return cached[1], cached[2]
+
+        endpoint = os.getenv("DOCKER_HOST", "").strip()
+        source = "DOCKER_HOST" if endpoint else ""
+        docker_cli = shutil.which("docker")
+        if not endpoint and docker_cli:
+            try:
+                context_result = subprocess.run(
+                    [docker_cli, "context", "show"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+                context_name = context_result.stdout.strip() if context_result.returncode == 0 else ""
+                if context_name:
+                    inspect_result = subprocess.run(
+                        [docker_cli, "context", "inspect", context_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        check=False,
+                        creationflags=CREATE_NO_WINDOW,
+                    )
+                    if inspect_result.returncode == 0:
+                        payload = json.loads(inspect_result.stdout or "[]")
+                        if isinstance(payload, list) and payload:
+                            docker_endpoint = (payload[0].get("Endpoints") or {}).get("docker") or {}
+                            endpoint = str(docker_endpoint.get("Host") or "").strip()
+                            if endpoint:
+                                source = context_name
+            except Exception:
+                pass
+
+        if not endpoint:
+            runtime_dir = os.getenv("XDG_RUNTIME_DIR", "").strip()
+            candidates = []
+            if runtime_dir:
+                candidates.append((Path(runtime_dir) / "docker.sock", "rootless"))
+            try:
+                candidates.append((Path(f"/run/user/{os.getuid()}/docker.sock"), "rootless"))
+            except Exception:
+                pass
+            candidates.extend(
+                [
+                    (Path.home() / ".docker/desktop/docker-cli.sock", "desktop-linux"),
+                    (Path("/var/run/docker.sock"), "default"),
+                    (Path("/run/docker.sock"), "default"),
+                ]
+            )
+            for socket_path, socket_source in candidates:
+                try:
+                    if socket_path.exists():
+                        endpoint = f"unix://{socket_path}"
+                        source = socket_source
+                        break
+                except Exception:
+                    continue
+
+        if not endpoint:
+            endpoint = "unix:///var/run/docker.sock"
+            source = "default"
+
+        self._linux_docker_endpoint_cache = (now, endpoint, source)
+        return endpoint, source
+
+    def linux_docker_endpoint(self, refresh: bool = False) -> str:
+        return self._linux_docker_endpoint_info(refresh=refresh)[0]
+
+    def linux_docker_uses_system_socket(self) -> bool:
+        endpoint = self.linux_docker_endpoint().strip().lower()
+        return endpoint in {
+            "unix:///var/run/docker.sock",
+            "unix://var/run/docker.sock",
+            "unix:///run/docker.sock",
+            "unix://run/docker.sock",
+        }
+
+    def _linux_user_groups(self, configured: bool = True) -> set[str]:
+        if os.name == "nt":
+            return set()
+        id_program = shutil.which("id") or "/usr/bin/id"
+        if not Path(id_program).is_file() and not shutil.which("id"):
+            return set()
+        command = [id_program, "-nG"]
+        if configured:
+            username = self.linux_target_username()
+            if not username:
+                return set()
+            command.append(username)
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+                creationflags=CREATE_NO_WINDOW,
+            )
+        except Exception:
+            return set()
+        if result.returncode != 0:
+            return set()
+        return {group.strip() for group in result.stdout.split() if group.strip()}
+
+    def linux_docker_group_configured(self) -> bool:
+        return "docker" in self._linux_user_groups(configured=True)
+
+    def linux_docker_group_active(self) -> bool:
+        return "docker" in self._linux_user_groups(configured=False)
+
+    def linux_docker_group_requires_relaunch(self) -> bool:
+        return (
+            os.name != "nt"
+            and self.linux_docker_uses_system_socket()
+            and self.linux_docker_group_configured()
+            and not self.linux_docker_group_active()
+        )
+
+    def linux_docker_group_relaunch_supported(self) -> bool:
+        return self.linux_docker_group_requires_relaunch() and bool(shutil.which("sg"))
+
+    def _linux_docker_group_relaunch_command(self) -> tuple[str, List[str], str]:
+        sg_program = shutil.which("sg")
+        if not sg_program:
+            raise RuntimeError(self.texts["docker_group_restart_failed"])
+        if getattr(sys, "frozen", False):
+            app_command = [sys.executable, *sys.argv[1:]]
+            working_directory = str(Path(sys.executable).resolve().parent)
+        else:
+            app_command = [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]]
+            working_directory = str(Path(__file__).resolve().parent)
+        return sg_program, ["docker", "-c", shlex.join(app_command)], working_directory
+
+    def restart_with_linux_docker_group(self) -> bool:
+        if not self.linux_docker_group_relaunch_supported():
+            return False
+        try:
+            program, arguments, working_directory = self._linux_docker_group_relaunch_command()
+            started, _pid = QProcess.startDetached(program, arguments, working_directory)
+        except Exception:
+            return False
+        if not started:
+            return False
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+        return True
+
+    def _run_linux_docker_group_setup_stream(self, _args: List[str], emit_line):
+        if not self.linux_docker_group_setup_supported():
+            raise RuntimeError(self.texts["docker_group_unsupported"])
+        username = self.linux_target_username()
+        if not username:
+            raise RuntimeError("Could not determine the current user.")
+        if self.linux_docker_group_configured():
+            emit_line(self.texts["docker_group_already_member"])
+            return subprocess.CompletedProcess([], 0, self.texts["docker_group_already_member"], "")
+        pkexec = shutil.which("pkexec")
+        usermod = shutil.which("usermod") or "/usr/sbin/usermod"
+        if not pkexec or not Path(usermod).is_file():
+            raise RuntimeError(self.texts["docker_group_unsupported"])
+        emit_line(self.texts["docker_group_install_status"])
+        quoted_user = shlex.quote(username)
+        quoted_usermod = shlex.quote(usermod)
+        script = "\n".join([
+            "set -e",
+            "getent group docker >/dev/null 2>&1 || groupadd docker",
+            f"{quoted_usermod} -aG docker {quoted_user}",
+        ])
+        return self._run_subprocess_stream(
+            [pkexec, "/bin/sh", "-c", script],
+            emit_line,
+        )
+
+    def add_current_user_to_docker_group_with_progress(self) -> bool:
+        if os.name == "nt":
+            return False
+        if self.linux_docker_group_configured():
+            QMessageBox.information(self, self.texts["docker_group_auth_title"], self.texts["docker_group_already_member"])
+            return False
+        if not self.linux_docker_group_setup_supported():
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_group_unsupported"])
+            return False
+        QMessageBox.information(self, self.texts["docker_group_auth_title"], self.texts["docker_group_auth_info"])
+        dialog = CommandProgressDialog(
+            self.texts["docker_group_install_title"],
+            self.texts["docker_group_install_status"],
+            self._run_linux_docker_group_setup_stream,
+            [],
+            self.texts,
+            self,
+        )
+        dialog.exec()
+        return dialog.success is True
 
     def _run_windows_docker_desktop_install_stream(self, _args: List[str], emit_line):
         if os.name != "nt":
@@ -8418,7 +10247,7 @@ class MainWindow(QMainWindow):
         pkexec = shutil.which("pkexec")
         if not apt_get or not pkexec:
             raise RuntimeError(self.texts["first_run_docker_unsupported"])
-        username = getpass.getuser().strip()
+        username = self.linux_target_username()
         if not username:
             raise RuntimeError("Could not determine the current user.")
         quoted_user = shlex.quote(username)
@@ -8453,32 +10282,105 @@ class MainWindow(QMainWindow):
         return dialog.success is True
 
     def try_start_docker_desktop(self) -> bool:
-        candidate = self.docker_desktop_path()
+        if os.name == "nt":
+            candidate = self.docker_desktop_path()
+            if candidate is not None:
+                try:
+                    subprocess.Popen([str(candidate)])
+                    return True
+                except Exception:
+                    pass
+            try:
+                subprocess.Popen("start \"\" \"docker-desktop:\"", shell=True, creationflags=CREATE_NO_WINDOW)
+                return True
+            except Exception:
+                return False
+
+        if not self.linux_docker_desktop_installed():
+            return False
+        systemctl = shutil.which("systemctl")
+        if systemctl:
+            try:
+                result = subprocess.run(
+                    [systemctl, "--user", "start", "docker-desktop"],
+                    capture_output=True,
+                    text=True,
+                    timeout=12,
+                    check=False,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+                if result.returncode == 0:
+                    return True
+            except Exception:
+                pass
+        candidate = self.linux_docker_desktop_path()
         if candidate is not None:
             try:
-                subprocess.Popen([str(candidate)])
+                subprocess.Popen(
+                    [str(candidate)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
                 return True
             except Exception:
                 pass
-        try:
-            subprocess.Popen("start \"\" \"docker-desktop:\"", shell=True, creationflags=CREATE_NO_WINDOW)
-            return True
-        except Exception:
-            return False
+        return False
+
+    def reconnect_local_docker_after_desktop_start(self, attempt: int = 0):
+        if self.is_local_docker_available():
+            self.connect_local_docker()
+            return
+        if attempt >= 11:
+            self.connect_local_docker()
+            return
+        self.statusBar().showMessage(self.texts["docker_desktop_starting"])
+        QTimer.singleShot(1800, lambda: self.reconnect_local_docker_after_desktop_start(attempt + 1))
 
     def show_local_docker_unavailable(self, details: str = ""):
         self.update_infrastructure_ui(False)
+        linux_group_pending = False
+        linux_desktop_installed = False
+        linux_desktop_selected = False
+        if os.name != "nt" and shutil.which("docker"):
+            linux_group_pending = self.linux_docker_group_requires_relaunch()
+        if os.name != "nt":
+            linux_desktop_installed = self.linux_docker_desktop_installed()
+            linux_desktop_selected = self.linux_docker_desktop_selected()
         message = QMessageBox(self)
         message.setWindowTitle(self.texts["msg_error"])
         message.setIcon(QMessageBox.Icon.Critical)
-        message.setText(self.texts["docker_local_unavailable_title"])
-        info = self.texts["docker_local_unavailable_hint"]
-        if details:
+        message.setText(
+            self.texts["docker_group_relaunch_title"]
+            if linux_group_pending
+            else self.texts["docker_local_unavailable_title"]
+        )
+        info = (
+            self.texts["docker_group_relaunch_hint"]
+            if linux_group_pending
+            else self.platform_text("docker_local_unavailable_hint")
+        )
+        if os.name != "nt" and not linux_group_pending:
+            if linux_desktop_installed and linux_desktop_selected:
+                info = self.texts["docker_desktop_linux_stopped"] + "\n\n" + info
+            elif not linux_desktop_installed:
+                info = self.texts["docker_desktop_linux_missing"] + "\n\n" + info
+        if os.name != "nt" and not linux_group_pending:
+            try:
+                endpoint, context_name = self._linux_docker_endpoint_info(refresh=True)
+                info += "\n\n" + self.texts["docker_local_endpoint_detected"].format(
+                    context=context_name or "default",
+                    endpoint=endpoint,
+                )
+            except Exception:
+                pass
+        if details and not linux_group_pending:
             info += f"\n\n{details}"
         message.setInformativeText(info)
         if self.current_backend == "local":
             primary_button = None
             primary_action = ""
+            linux_engine_button = None
             if os.name == "nt":
                 if self.windows_docker_desktop_installed():
                     primary_button = message.addButton(
@@ -8490,11 +10392,26 @@ class MainWindow(QMainWindow):
                         self.texts["docker_local_install_desktop"], QMessageBox.ButtonRole.AcceptRole
                     )
                     primary_action = "install_windows"
-            elif not shutil.which("docker") and self.linux_docker_auto_install_supported():
-                primary_button = message.addButton(
-                    self.texts["docker_local_install_docker"], QMessageBox.ButtonRole.AcceptRole
-                )
-                primary_action = "install_linux"
+            else:
+                if linux_group_pending and self.linux_docker_group_relaunch_supported():
+                    primary_button = message.addButton(
+                        self.texts["docker_group_restart_app"], QMessageBox.ButtonRole.AcceptRole
+                    )
+                    primary_action = "restart_linux_group"
+                elif linux_desktop_installed:
+                    primary_button = message.addButton(
+                        self.texts["docker_local_open_desktop"], QMessageBox.ButtonRole.AcceptRole
+                    )
+                    primary_action = "start_linux_desktop"
+                else:
+                    primary_button = message.addButton(
+                        self.texts["docker_local_install_desktop"], QMessageBox.ButtonRole.AcceptRole
+                    )
+                    primary_action = "install_linux_desktop"
+                    if not shutil.which("docker") and self.linux_docker_auto_install_supported():
+                        linux_engine_button = message.addButton(
+                            self.texts["dependencies_install_docker_engine"], QMessageBox.ButtonRole.ActionRole
+                        )
 
             dependencies_button = message.addButton(
                 self.texts["dependencies_open"], QMessageBox.ButtonRole.ActionRole
@@ -8504,6 +10421,9 @@ class MainWindow(QMainWindow):
             clicked = message.clickedButton()
             if clicked == dependencies_button:
                 self.open_dependencies_dialog()
+            elif linux_engine_button is not None and clicked == linux_engine_button:
+                if self.install_linux_docker_with_progress():
+                    QTimer.singleShot(1200, self.connect_local_docker)
             elif primary_button is not None and clicked == primary_button:
                 if primary_action == "start_windows":
                     if not self.try_start_docker_desktop():
@@ -8517,6 +10437,28 @@ class MainWindow(QMainWindow):
                 elif primary_action == "install_linux":
                     if self.install_linux_docker_with_progress():
                         QTimer.singleShot(1200, self.connect_local_docker)
+                elif primary_action == "start_linux_desktop":
+                    if not self.try_start_docker_desktop():
+                        QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_local_open_failed"])
+                    else:
+                        self.statusBar().showMessage(self.texts["docker_desktop_starting"])
+                        QTimer.singleShot(1800, self.reconnect_local_docker_after_desktop_start)
+                elif primary_action == "install_linux_desktop":
+                    opened = self.open_linux_docker_desktop_install_page()
+                    QMessageBox.information(
+                        self,
+                        self.texts["msg_info"],
+                        self.texts["docker_desktop_linux_install_opened"]
+                        if opened
+                        else self.texts["docker_desktop_linux_install_failed"],
+                    )
+                elif primary_action == "restart_linux_group":
+                    if not self.restart_with_linux_docker_group():
+                        QMessageBox.warning(
+                            self,
+                            self.texts["msg_error"],
+                            self.texts["docker_group_restart_failed"],
+                        )
             return
         message.addButton(QMessageBox.StandardButton.Ok)
         message.exec()
@@ -8525,6 +10467,11 @@ class MainWindow(QMainWindow):
         self.current_backend = "local"
         self.current_wsl_distro = ""
         self.active_remote_profile = None
+        if os.name != "nt" and shutil.which("docker") and self.linux_docker_group_requires_relaunch():
+            self.client = None
+            self.update_infrastructure_ui(False)
+            self.show_local_docker_unavailable()
+            return
         try:
             self.client = self.build_local_docker_client()
             self.client.ping()
@@ -8703,7 +10650,8 @@ class MainWindow(QMainWindow):
     def build_local_docker_client(self) -> docker.DockerClient:
         if os.name == "nt":
             return docker.DockerClient(base_url="npipe:////./pipe/docker_engine", timeout=DOCKER_HTTP_TIMEOUT)
-        return docker.DockerClient(base_url="unix://var/run/docker.sock", timeout=DOCKER_HTTP_TIMEOUT)
+        endpoint = self.linux_docker_endpoint(refresh=True)
+        return docker.DockerClient(base_url=endpoint, timeout=DOCKER_HTTP_TIMEOUT)
 
     def detect_local_system_info(self) -> tuple[str, str]:
         os_name = ""
@@ -9120,7 +11068,12 @@ class MainWindow(QMainWindow):
         collapsed = storage_key in self.collapsed_groups
         arrow = "▶" if collapsed else "▼"
         summary = self.texts["group_summary"].format(count=len(containers), running=running, networks=networks)
-        item = QTableWidgetItem(f"{arrow}  {self.group_display_name(key)}     {summary}")
+        # Keep the spanning item only for metadata/background.  The visible
+        # caption is rendered by the interactive button below.  Rendering the
+        # same text in both places makes the two captions show through each
+        # other because the cell widget is transparent (especially noticeable
+        # on Linux and with non-100% table zoom).
+        item = QTableWidgetItem("")
         item.setData(Qt.ItemDataRole.UserRole, {"row_type": "group", "key": key, "storage_key": storage_key})
         item.setFlags(Qt.ItemFlag.ItemIsEnabled)
         font = QFont(item.font())
@@ -9133,14 +11086,31 @@ class MainWindow(QMainWindow):
         item.setForeground(QBrush(accent))
         item.setToolTip(self.texts["group_summary"].format(count=len(containers), running=running, networks=networks))
         self.table.setItem(row, 0, item)
+
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(10, 0, 8, 0)
+        header_layout.setSpacing(8)
+        group_checkbox = QCheckBox()
+        group_checkbox.setToolTip(self.texts["group_select_all"])
+        group_checkbox.stateChanged.connect(
+            lambda state, group=storage_key: self.on_group_checkbox_changed(group, state)
+        )
+        group_button = QPushButton(f"{arrow}  {self.group_display_name(key)}     {summary}")
+        group_button.setObjectName("containerGroupButton")
+        group_button.setFlat(True)
+        group_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        group_button.setToolTip(
+            self.texts["group_display_expand"] if collapsed else self.texts["group_display_collapse"]
+        )
+        group_button.clicked.connect(lambda _checked=False, group=storage_key: self.toggle_container_group(group))
+        header_layout.addWidget(group_checkbox, 0)
+        header_layout.addWidget(group_button, 1)
+        self.table.setCellWidget(row, 0, header_widget)
+        self.group_checkboxes[storage_key] = group_checkbox
         self.table.setRowHeight(row, max(28, round(34 * self.container_table_zoom / 100.0)))
 
-    def on_table_cell_clicked(self, row: int, _column: int):
-        item = self.table.item(row, 0)
-        metadata = item.data(Qt.ItemDataRole.UserRole) if item else None
-        if not isinstance(metadata, dict) or metadata.get("row_type") != "group":
-            return
-        storage_key = str(metadata.get("storage_key") or "")
+    def toggle_container_group(self, storage_key: str):
         if not storage_key:
             return
         if storage_key in self.collapsed_groups:
@@ -9149,14 +11119,93 @@ class MainWindow(QMainWindow):
             self.collapsed_groups.add(storage_key)
         self.render_container_table(self.last_containers)
 
-    def on_select_all(self, state):
+    def on_group_checkbox_changed(self, storage_key: str, state):
+        if not storage_key or getattr(self, "_updating_group_selection", False):
+            return
         checked = int(state) == int(Qt.CheckState.Checked.value)
+        self._updating_group_selection = True
+        try:
+            for row in range(self.table.rowCount()):
+                name_item = self.table.item(row, 2)
+                metadata = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+                if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
+                    continue
+                if str(metadata.get("group") or "") != storage_key:
+                    continue
+                checkbox = self.table.cellWidget(row, 0)
+                if isinstance(checkbox, QCheckBox):
+                    checkbox.setChecked(checked)
+        finally:
+            self._updating_group_selection = False
+        self.sync_group_checkbox(storage_key)
+        self.sync_select_all_checkbox()
+
+    def sync_group_checkbox(self, storage_key: str):
+        if not storage_key or getattr(self, "_updating_group_selection", False):
+            return
+        group_checkbox = getattr(self, "group_checkboxes", {}).get(storage_key)
+        if not isinstance(group_checkbox, QCheckBox):
+            return
+        child_states = []
+        for row in range(self.table.rowCount()):
+            name_item = self.table.item(row, 2)
+            metadata = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+            if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
+                continue
+            if str(metadata.get("group") or "") != storage_key:
+                continue
+            checkbox = self.table.cellWidget(row, 0)
+            if isinstance(checkbox, QCheckBox):
+                child_states.append(checkbox.isChecked())
+        group_checkbox.blockSignals(True)
+        group_checkbox.setChecked(bool(child_states) and all(child_states))
+        group_checkbox.blockSignals(False)
+        self.sync_select_all_checkbox()
+
+    def sync_select_all_checkbox(self):
+        if not hasattr(self, "select_all_checkbox"):
+            return
+        child_states = []
         for row in range(self.table.rowCount()):
             if self.table.isRowHidden(row):
                 continue
-            widget = self.table.cellWidget(row, 0)
-            if isinstance(widget, QCheckBox):
-                widget.setChecked(checked)
+            name_item = self.table.item(row, 2)
+            metadata = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+            if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
+                continue
+            checkbox = self.table.cellWidget(row, 0)
+            if isinstance(checkbox, QCheckBox):
+                child_states.append(checkbox.isChecked())
+        self.select_all_checkbox.blockSignals(True)
+        self.select_all_checkbox.setChecked(bool(child_states) and all(child_states))
+        self.select_all_checkbox.blockSignals(False)
+
+    def on_table_cell_clicked(self, row: int, _column: int):
+        item = self.table.item(row, 0)
+        metadata = item.data(Qt.ItemDataRole.UserRole) if item else None
+        if not isinstance(metadata, dict) or metadata.get("row_type") != "group":
+            return
+        storage_key = str(metadata.get("storage_key") or "")
+        self.toggle_container_group(storage_key)
+
+    def on_select_all(self, state):
+        checked = int(state) == int(Qt.CheckState.Checked.value)
+        self._updating_group_selection = True
+        try:
+            for row in range(self.table.rowCount()):
+                if self.table.isRowHidden(row):
+                    continue
+                name_item = self.table.item(row, 2)
+                metadata = name_item.data(Qt.ItemDataRole.UserRole) if name_item else None
+                if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
+                    continue
+                widget = self.table.cellWidget(row, 0)
+                if isinstance(widget, QCheckBox):
+                    widget.setChecked(checked)
+        finally:
+            self._updating_group_selection = False
+        for storage_key in getattr(self, "group_checkboxes", {}):
+            self.sync_group_checkbox(storage_key)
 
     def filter_container_rows(self, text: str = ""):
         needle = (text or "").strip().casefold()
@@ -9205,6 +11254,7 @@ class MainWindow(QMainWindow):
     def render_container_table(self, containers: List[object]):
         if not hasattr(self, "table"):
             return
+        self.group_checkboxes = {}
         self.container_by_name = {
             str(getattr(container, "name", "") or ""): container
             for container in (containers or [])
@@ -9222,7 +11272,12 @@ class MainWindow(QMainWindow):
                 for container in ordered:
                     row = self.table.rowCount()
                     self.table.insertRow(row)
-                    self.table.setCellWidget(row, 0, QCheckBox())
+                    row_checkbox = QCheckBox()
+                    if storage_key:
+                        row_checkbox.stateChanged.connect(
+                            lambda _state, group=storage_key: self.sync_group_checkbox(group)
+                        )
+                    self.table.setCellWidget(row, 0, row_checkbox)
 
                     status = str(getattr(container, "status", "") or "")
                     icon_item = QTableWidgetItem()

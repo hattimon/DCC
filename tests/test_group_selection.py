@@ -14,6 +14,7 @@ class _GroupSelectionHarness:
     sync_group_checkbox = dcc.MainWindow.sync_group_checkbox
     sync_select_all_checkbox = dcc.MainWindow.sync_select_all_checkbox
     get_selected_names = dcc.MainWindow.get_selected_names
+    refresh_dynamic_theme_elements = dcc.MainWindow.refresh_dynamic_theme_elements
 
 
 class GroupSelectionTests(unittest.TestCase):
@@ -92,6 +93,15 @@ class GroupSelectionTests(unittest.TestCase):
         button = header_widget.findChild(QPushButton)
         self.assertIsNotNone(button)
         self.assertIn("Project: alpha", button.text())
+        self.assertEqual(button.objectName(), "containerGroupButton")
+        self.assertEqual(button.styleSheet(), "")
+
+        harness.accent_color = "#ff4bd8"
+        harness.refresh_dynamic_theme_elements()
+        self.assertEqual(metadata_item.foreground().color().name(), "#ff4bd8")
+        self.assertEqual(metadata_item.background().color().red(), 255)
+        self.assertEqual(metadata_item.background().color().green(), 75)
+        self.assertEqual(metadata_item.background().color().blue(), 216)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,9 @@
 import base64
 import ctypes
 import getpass
+import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -16,7 +18,7 @@ import uuid
 import webbrowser
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
@@ -27,6 +29,7 @@ if os.name == 'nt':
 import docker
 import qdarktheme
 from PyQt6.QtCore import QEvent, QObject, QProcess, QPropertyAnimation, QRectF, QSettings, QSize, Qt, QThread, QTimer, QUrl, pyqtSignal
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 try:
     import paramiko
 except Exception:
@@ -40,6 +43,8 @@ except Exception:
 from PyQt6.QtWidgets import (
     QFileDialog,
     QApplication,
+    QAbstractItemView,
+    QBoxLayout,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -51,8 +56,8 @@ from PyQt6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListView,
     QListWidget,
-    QListWidgetItem,
     QListWidgetItem,
     QMainWindow,
     QMenu,
@@ -64,6 +69,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QSlider,
     QSpinBox,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QStatusBar,
     QTableWidget,
     QTableWidgetItem,
@@ -72,6 +79,35 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+class CategoryTileDelegate(QStyledItemDelegate):
+    """Render category tiles as compact icon-left / text-right buttons."""
+
+    def initStyleOption(self, option: QStyleOptionViewItem, index):
+        super().initStyleOption(option, index)
+        option.decorationPosition = QStyleOptionViewItem.Position.Left
+        option.decorationAlignment = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+        option.displayAlignment = Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+
+
+class StaticCategoryListWidget(QListWidget):
+    """Wrapping category buttons that never behave like a scrollable list."""
+
+    def wheelEvent(self, event):
+        # Consume mouse-wheel and touchpad-wheel input instead of passing it to
+        # QListView or the outer dialog scroll area.
+        event.accept()
+
+    def scrollTo(self, index, hint=QAbstractItemView.ScrollHint.EnsureVisible):  # type: ignore[override]
+        # Selecting a chip in the last row must not make QListView move the
+        # first rows outside its viewport.
+        return
+
+    def lock_scroll_position(self) -> None:
+        for scrollbar in (self.verticalScrollBar(), self.horizontalScrollBar()):
+            scrollbar.setValue(0)
+            scrollbar.setRange(0, 0)
 
 DOCKER_HTTP_TIMEOUT = 30
 APP_SETTINGS_ORG = "DockerControlCenter"
@@ -86,14 +122,19 @@ USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
 PROFILE_FILE = USER_DATA_DIR / "docker_connection_profiles.json"
 DEPLOYMENT_REPOSITORIES_FILE = USER_DATA_DIR / "deployment_repositories.json"
 DEPLOYMENT_CATALOG_CACHE_FILE = USER_DATA_DIR / "deployment_catalog_cache.json"
+BUNDLED_DEPLOYMENT_CATALOG_FILE = RESOURCE_DIR / "dcc-catalog.json"
+STORE_MEDIA_CACHE_DIR = USER_DATA_DIR / "store-media-cache"
+STORE_MEDIA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 MUSIC_FILE = RESOURCE_DIR / "bg.mp3"
 SECRET_FILE = USER_DATA_DIR / "docker_control_center_secrets.json"
 BACKGROUND_DIR = RESOURCE_DIR / "backgrounds"
 ICON_FILE = RESOURCE_DIR / "icon.png"
 BACKGROUND_NAMES = {
     "light": ("theme_light", "light"),
+    "day": ("theme_day", "day"),
     "dark": ("theme_dark", "dark"),
     "black": ("theme_black", "black"),
+    "night": ("theme_night", "night"),
 }
 BACKGROUND_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
 NEON_PALETTE = [
@@ -162,7 +203,7 @@ LLM_OPENAI_COMPATIBLE_BASE_URLS = {
     "xai": "https://api.x.ai/v1",
 }
 
-APP_VERSION = "1.3.5"
+APP_VERSION = "1.3.8"
 APP_VERSION_TAG = f"v{APP_VERSION}"
 GITHUB_REPO = "hattimon/DCC"
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
@@ -175,6 +216,7 @@ TEXTS = {
     "EN": {
         "app_title": "Docker Control Center",
         "menu_file": "File",
+        "menu_store": "Application Store / SHOP",
         "menu_profiles_import": "Import connection profiles...",
         "menu_profiles_export": "Export connection profiles...",
         "profiles_import_title": "Import connection profiles",
@@ -191,8 +233,10 @@ TEXTS = {
         "lang_en": "English",
         "lang_pl": "Polish",
         "theme_light": "Light",
+        "theme_day": "Day",
         "theme_dark": "Dark",
         "theme_black": "Black",
+        "theme_night": "Night",
         "menu_info": "Info",
         "info_app": "Application info",
         "info_check_updates": "Check updates",
@@ -204,8 +248,8 @@ TEXTS = {
         "info_app_open_repo": "Open repository",
         "info_app_open_release": "Open latest release",
         "info_app_check_updates": "Check updates",
-        "info_app_changelog_title": "Changelog (v1.3.4)",
-        "info_app_changelog": "- Added the official hattimon/DCC deployment catalog as a permanent primary repository.\n- The application catalog now refreshes repositories automatically in the background when opened, while keeping the local cache available offline.\n- Additional catalog repositories can be added or removed, while the official DCC source is protected from accidental removal.",
+        "info_app_changelog_title": "Changelog (v1.3.8)",
+        "info_app_changelog": "- Added Day and Night themes and improved GUI menu readability.\n- Kept category buttons fixed in place, moved the heading above their frame and added bottom spacing.\n- Fixed SmartWAN artwork and description overlap in the application catalog.\n- Increased application and configuration rows so their text is fully visible.\n- Expanded the application store and Repo Builder workflow.",
         "info_update_available_title": "Update available",
         "info_update_available_body": "A newer release is available: {release}.",
         "info_update_question": "Update to {release} is available. Install it now?",
@@ -226,6 +270,9 @@ TEXTS = {
         "menu_config": "Configure",
         "menu_llm": "LLM",
         "menu_app": "Application",
+        "menu_repo_builder": "Repo Builder",
+        "repo_builder_missing": "Repo Builder is not installed in this build.",
+        "repo_builder_start_failed": "Could not start Repo Builder: {error}",
         "menu_reset_settings": "Reset settings to defaults...",
         "menu_factory_reset": "Factory reset...",
         "reset_settings_title": "Reset settings to defaults?",
@@ -349,6 +396,7 @@ TEXTS = {
         "btn_remove": "Remove",
         "btn_logs": "Logs",
         "btn_new": "New container",
+        "btn_shop_short": "+ SHOP",
         "btn_edit_start": "Edit start",
         "btn_pause": "Pause",
         "btn_unpause": "Unpause",
@@ -362,6 +410,7 @@ TEXTS = {
         "infra_local_wsl": "Infrastructure: WSL ({distro})",
         "infra_remote_label": "Infrastructure: Remote host ({os} | {arch})",
         "infra_remote_tunnel": "Infrastructure: Remote tunnel",
+        "infra_terminal_tooltip": "Click to open the host terminal",
         "btn_host_restart": "Restart host",
         "host_status_running": "Host is reachable",
         "host_status_off": "Host is offline",
@@ -522,6 +571,25 @@ TEXTS = {
         "wizard_docs": "Documentation",
         "wizard_homepage": "Website",
         "wizard_quick_deploy": "Deploy selected app",
+        "wizard_store_tab": "Description",
+        "wizard_store_install": "Install",
+        "wizard_store_uninstall": "Uninstall",
+        "wizard_store_installed": "Installed on this host",
+        "wizard_store_not_installed": "Not installed on this host",
+        "wizard_store_features": "Highlights",
+        "wizard_store_gallery": "Gallery",
+        "wizard_store_requirements": "Requirements",
+        "wizard_store_categories": "Categories",
+        "wizard_store_apps": "Applications",
+        "wizard_store_no_media": "No preview image supplied by the catalog.",
+        "wizard_store_uninstall_title": "Uninstall application?",
+        "wizard_store_uninstall_confirm": "DCC found {count} matching container(s):\n\n{names}\n\nThe containers will be removed. Named volumes and bind-mounted data are not deleted automatically, but data stored only in the writable container layer can be lost. Continue?",
+        "wizard_store_uninstall_done": "Application container(s) removed.",
+        "wizard_balena_category": "Balena OS",
+        "wizard_installed_category": "Installed",
+        "wizard_credentials_title": "Access details detected",
+        "wizard_credentials_intro": "DCC found the following access details in the container startup logs. They are shown here only and are not saved by DCC:",
+        "wizard_credentials_none": "Deployment completed. No login credentials were detected in the startup logs.",
         "wizard_auto_fix": "Automatically resolve safe name and host-port conflicts",
         "wizard_ai_fallback": "Use AI only if deterministic repair cannot solve the failure",
         "wizard_safe_changes_title": "Safe deployment adjustments",
@@ -614,6 +682,7 @@ TEXTS = {
         "progress_title_create": "Container deployment",
         "progress_title_recreate": "Container recreation",
         "progress_status_create": "Container deployment in progress...",
+        "progress_status_build_source": "{name}: step 1/2 - building a local Docker image from the source repository...",
         "progress_status_recreate": "Recreating container with new start parameters...",
         "progress_status_done": "SUCCESS — deployment completed.",
         "progress_status_failed": "FAILED — deployment did not complete.",
@@ -694,6 +763,7 @@ TEXTS = {
     "PL": {
         "app_title": "Docker Control Center",
         "menu_file": "Plik",
+        "menu_store": "Sklep aplikacji / SKLEP",
         "menu_profiles_import": "Importuj profile połączeń...",
         "menu_profiles_export": "Eksportuj profile połączeń...",
         "profiles_import_title": "Import profili połączeń",
@@ -710,8 +780,10 @@ TEXTS = {
         "lang_en": "Angielski",
         "lang_pl": "Polski",
         "theme_light": "Jasny",
+        "theme_day": "Day",
         "theme_dark": "Ciemny",
         "theme_black": "Czarny",
+        "theme_night": "Noc",
         "menu_info": "Informacje",
         "info_app": "Informacje o aplikacji",
         "info_check_updates": "Sprawdź aktualizacje",
@@ -723,8 +795,8 @@ TEXTS = {
         "info_app_open_repo": "Otwórz repozytorium",
         "info_app_open_release": "Otwórz najnowsze wydanie",
         "info_app_check_updates": "Sprawdź aktualizacje",
-        "info_app_changelog_title": "Changelog (v1.3.4)",
-        "info_app_changelog": "- Dodano oficjalny katalog wdrożeń hattimon/DCC jako stałe główne repozytorium.\n- Katalog aplikacji automatycznie odświeża repozytoria w tle po otwarciu i zachowuje lokalną pamięć podręczną do pracy offline.\n- Dodatkowe repozytoria można dodawać i usuwać, a oficjalne źródło DCC jest chronione przed przypadkowym usunięciem.",
+        "info_app_changelog_title": "Changelog (v1.3.8)",
+        "info_app_changelog": "- Dodano motywy Day i Noc oraz poprawiono czytelność menu GUI.\n- Przyciski kategorii są nieruchome, nagłówek przeniesiono nad ramkę i dodano dolny odstęp.\n- Poprawiono nakładanie grafiki SmartWAN i opisu w katalogu aplikacji.\n- Zwiększono wysokość kart aplikacji i pól konfiguracji, aby tekst nie był ucinany.\n- Rozbudowano sklep aplikacji i Repo Builder.",
         "info_update_available_title": "Dostępna aktualizacja",
         "info_update_available_body": "Dostępna jest nowsza wersja: {release}.",
         "info_update_question": "Dostępna jest aktualizacja do wersji {release}. Czy wykonać ja teraz?",
@@ -745,6 +817,9 @@ TEXTS = {
         "menu_config": "Konfiguruj",
         "menu_llm": "LLM",
         "menu_app": "Aplikacja",
+        "menu_repo_builder": "Repo Builder",
+        "repo_builder_missing": "Repo Builder nie jest zainstalowany w tej kompilacji.",
+        "repo_builder_start_failed": "Nie udało się uruchomić Repo Buildera: {error}",
         "menu_reset_settings": "Resetuj ustawienia do domyślnych...",
         "menu_factory_reset": "Reset do ustawień fabrycznych...",
         "reset_settings_title": "Zresetować ustawienia do domyślnych?",
@@ -869,6 +944,7 @@ TEXTS = {
         "btn_remove": "Usuń",
         "btn_logs": "Logi",
         "btn_new": "Nowy kontener",
+        "btn_shop_short": "+ SKLEP",
         "btn_edit_start": "Edytuj start",
         "btn_pause": "Pauza",
         "btn_unpause": "Wznów",
@@ -882,6 +958,7 @@ TEXTS = {
         "infra_local_wsl": "Infrastruktura: WSL ({distro})",
         "infra_remote_label": "Infrastruktura: Host zdalny ({os} | {arch})",
         "infra_remote_tunnel": "Infrastruktura: Tunel zdalny",
+        "infra_terminal_tooltip": "Kliknij, aby otworzyć terminal hosta",
         "btn_host_restart": "Uruchom ponownie komputer",
         "host_status_running": "Host jest dostępny",
         "host_status_off": "Host jest wyłączony",
@@ -1042,6 +1119,25 @@ TEXTS = {
         "wizard_docs": "Dokumentacja",
         "wizard_homepage": "Strona",
         "wizard_quick_deploy": "Wdróż wybraną aplikację",
+        "wizard_store_tab": "Opis",
+        "wizard_store_install": "Instaluj",
+        "wizard_store_uninstall": "Odinstaluj",
+        "wizard_store_installed": "Zainstalowana na tym hoście",
+        "wizard_store_not_installed": "Niezainstalowana na tym hoście",
+        "wizard_store_features": "Najważniejsze funkcje",
+        "wizard_store_gallery": "Galeria",
+        "wizard_store_requirements": "Wymagania",
+        "wizard_store_categories": "Kategorie",
+        "wizard_store_apps": "Aplikacje",
+        "wizard_store_no_media": "Katalog nie zawiera grafiki podglądowej.",
+        "wizard_store_uninstall_title": "Odinstalować aplikację?",
+        "wizard_store_uninstall_confirm": "DCC znalazło pasujące kontenery ({count}):\n\n{names}\n\nKontenery zostaną usunięte. Nazwane wolumeny i dane bind-mounted nie są kasowane automatycznie, ale dane zapisane wyłącznie w zapisywalnej warstwie kontenera mogą zostać utracone. Kontynuować?",
+        "wizard_store_uninstall_done": "Kontenery aplikacji zostały usunięte.",
+        "wizard_balena_category": "Balena OS",
+        "wizard_installed_category": "Zainstalowane",
+        "wizard_credentials_title": "Wykryto dane dostępu",
+        "wizard_credentials_intro": "DCC znalazło poniższe dane dostępu w logach startowych kontenera. Są wyświetlane tylko tutaj i DCC ich nie zapisuje:",
+        "wizard_credentials_none": "Wdrożenie zakończone. W logach startowych nie wykryto danych logowania.",
         "wizard_auto_fix": "Automatycznie rozwiązuj bezpieczne konflikty nazw i portów hosta",
         "wizard_ai_fallback": "Użyj AI tylko, gdy reguły lokalne nie potrafią naprawić błędu",
         "wizard_safe_changes_title": "Bezpieczne poprawki wdrożenia",
@@ -1134,6 +1230,7 @@ TEXTS = {
         "progress_title_create": "Wdrażanie kontenera",
         "progress_title_recreate": "Odtwarzanie kontenera",
         "progress_status_create": "Trwa instalacja / wdrażanie kontenera...",
+        "progress_status_build_source": "{name}: etap 1/2 - budowanie lokalnego obrazu Docker ze źródeł...",
         "progress_status_recreate": "Trwa odtwarzanie kontenera z nowymi parametrami startu...",
         "progress_status_done": "SUKCES — wdrożenie zakończone.",
         "progress_status_failed": "BŁĄD — wdrożenie nie zostało zakończone.",
@@ -1387,7 +1484,19 @@ class ImageTemplate:
     backup_priority: str = ""
     security_exposure: str = ""
     compose_required: bool = False
+    build_context: str = ""
+    build_dockerfile: str = ""
     balena_verified: bool = False
+    store_description: str = ""
+    store_description_en: str = ""
+    features: Optional[List[str]] = None
+    features_en: Optional[List[str]] = None
+    icon_url: str = ""
+    hero_image_url: str = ""
+    gallery: Optional[List[Dict[str, str]]] = None
+    credential_patterns: Optional[List[Dict[str, str]]] = None
+    post_install_hints: Optional[List[str]] = None
+    post_install_hints_en: Optional[List[str]] = None
 
     def supports_engine(self, engine: str) -> bool:
         engine = str(engine or "").lower().strip()
@@ -1414,6 +1523,19 @@ class ImageTemplate:
     def notes_for(self, lang: str) -> str:
         return self.notes_en if lang == "EN" and self.notes_en else self.notes
 
+    def store_description_for(self, lang: str) -> str:
+        if lang == "EN" and self.store_description_en:
+            return self.store_description_en
+        return self.store_description or self.description_for(lang)
+
+    def features_for(self, lang: str) -> List[str]:
+        values = self.features_en if lang == "EN" and self.features_en else self.features
+        return [str(item).strip() for item in (values or []) if str(item).strip()]
+
+    def post_install_hints_for(self, lang: str) -> List[str]:
+        values = self.post_install_hints_en if lang == "EN" and self.post_install_hints_en else self.post_install_hints
+        return [str(item).strip() for item in (values or []) if str(item).strip()]
+
 
 def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional[ImageTemplate]:
     if not isinstance(raw, dict):
@@ -1422,6 +1544,33 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
     image = str(raw.get("image") or raw.get("docker_image") or "").strip()
     if not name or not image:
         return None
+    raw_gallery = raw.get("gallery") or raw.get("screenshots") or []
+    gallery: List[Dict[str, str]] = []
+    if isinstance(raw_gallery, list):
+        for entry in raw_gallery:
+            if isinstance(entry, str) and entry.strip():
+                gallery.append({"url": entry.strip()})
+            elif isinstance(entry, dict):
+                url = str(entry.get("url") or entry.get("image") or "").strip()
+                if url:
+                    gallery.append({
+                        "url": url,
+                        "caption": str(entry.get("caption") or "").strip(),
+                        "caption_en": str(entry.get("caption_en") or "").strip(),
+                    })
+    credential_patterns: List[Dict[str, str]] = []
+    raw_patterns = raw.get("credential_patterns") or []
+    if isinstance(raw_patterns, list):
+        for entry in raw_patterns:
+            if not isinstance(entry, dict):
+                continue
+            regex = str(entry.get("regex") or entry.get("pattern") or "").strip()
+            if regex:
+                credential_patterns.append({
+                    "label": str(entry.get("label") or entry.get("name") or "Credential").strip(),
+                    "label_en": str(entry.get("label_en") or "").strip(),
+                    "regex": regex,
+                })
     return ImageTemplate(
         name=name,
         image=image,
@@ -1456,8 +1605,110 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
         backup_priority=str(raw.get("backup_priority") or "").strip(),
         security_exposure=str(raw.get("security_exposure") or "").strip(),
         compose_required=bool(raw.get("compose_required", False)),
+        build_context=str(raw.get("build_context") or raw.get("build_source") or "").strip(),
+        build_dockerfile=str(raw.get("build_dockerfile") or raw.get("dockerfile") or "").strip(),
         balena_verified=bool(raw.get("balena_verified", False)),
+        store_description=str(raw.get("store_description") or "").strip(),
+        store_description_en=str(raw.get("store_description_en") or "").strip(),
+        features=[str(item).strip() for item in (raw.get("features") or []) if str(item).strip()],
+        features_en=[str(item).strip() for item in (raw.get("features_en") or []) if str(item).strip()],
+        icon_url=str(raw.get("icon_url") or "").strip(),
+        hero_image_url=str(raw.get("hero_image_url") or raw.get("hero_url") or "").strip(),
+        gallery=gallery,
+        credential_patterns=credential_patterns,
+        post_install_hints=[str(item).strip() for item in (raw.get("post_install_hints") or []) if str(item).strip()],
+        post_install_hints_en=[str(item).strip() for item in (raw.get("post_install_hints_en") or []) if str(item).strip()],
     )
+
+
+def normalize_container_image(value: str) -> str:
+    value = str(value or "").strip().lower()
+    if value.startswith("docker.io/"):
+        value = value[len("docker.io/"):]
+    if "@sha256:" in value:
+        value = value.split("@sha256:", 1)[0]
+    if value and ":" not in value.rsplit("/", 1)[-1]:
+        value += ":latest"
+    return value
+
+
+def container_image_name(container) -> str:
+    attrs = getattr(container, "attrs", {}) or {}
+    config = attrs.get("Config", {}) or {}
+    value = str(config.get("Image") or "").strip()
+    if value:
+        return value
+    image = getattr(container, "image", None)
+    tags = getattr(image, "tags", []) if image is not None else []
+    return str(tags[0]) if tags else ""
+
+
+def template_matches_container(template: ImageTemplate, container) -> bool:
+    target = normalize_container_image(template.image)
+    current = normalize_container_image(container_image_name(container))
+    if target and current and target == current:
+        return True
+    target_repo = target.rsplit(":", 1)[0] if target else ""
+    current_repo = current.rsplit(":", 1)[0] if current else ""
+    name = str(getattr(container, "name", "") or "").lstrip("/").casefold()
+    return bool(
+        template.default_name
+        and name == template.default_name.casefold()
+        and target_repo
+        and current_repo
+        and target_repo == current_repo
+    )
+
+
+def container_name_from_run_args(args: List[str]) -> str:
+    for index, token in enumerate(args):
+        token = str(token)
+        if token == "--name" and index + 1 < len(args):
+            return str(args[index + 1]).strip()
+        if token.startswith("--name="):
+            return token.split("=", 1)[1].strip()
+    return ""
+
+
+def parse_credentials_from_logs(log_text: str, template: Optional[ImageTemplate] = None, lang: str = "EN") -> List[tuple[str, str]]:
+    text = str(log_text or "")
+    if not text.strip():
+        return []
+    found: List[tuple[str, str]] = []
+    seen = set()
+
+    def add(label: str, value: str):
+        clean_value = str(value or "").strip().strip("'\"`.,;[]()")
+        clean_label = str(label or "Credential").strip()
+        if not clean_value or len(clean_value) > 256:
+            return
+        key = (clean_label.casefold(), clean_value)
+        if key not in seen:
+            seen.add(key)
+            found.append((clean_label, clean_value))
+
+    for rule in (template.credential_patterns if template else []) or []:
+        try:
+            pattern = str(rule.get("regex") or "")
+            label = str(rule.get("label_en") if lang == "EN" and rule.get("label_en") else rule.get("label") or "Credential")
+            for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
+                value = match.groupdict().get("value") if match.groupdict() else None
+                if value is None and match.lastindex:
+                    value = match.group(1)
+                if value:
+                    add(label, value)
+        except re.error:
+            continue
+
+    generic_patterns = [
+        ("Password" if lang == "EN" else "Hasło", r"(?:web\s+)?(?:admin\s+)?password\s*(?:is|:|=|->)\s*(?P<value>[^\s]+)"),
+        ("Username" if lang == "EN" else "Login", r"(?:user(?:name)?|login)\s*(?:is|:|=|->)\s*(?P<value>[^\s]+)"),
+        ("Token", r"(?:access\s+)?token\s*(?:is|:|=|->)\s*(?P<value>[A-Za-z0-9._~+/-]{8,})"),
+    ]
+    for label, pattern in generic_patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
+            add(label, match.group("value"))
+    return found[:8]
 
 
 def normalize_deployment_repository_source(source: str) -> str:
@@ -1518,6 +1769,55 @@ def load_cached_deployment_catalog() -> List[ImageTemplate]:
     return [item for item in parsed if item is not None]
 
 
+def load_bundled_deployment_catalog() -> List[ImageTemplate]:
+    if not BUNDLED_DEPLOYMENT_CATALOG_FILE.is_file():
+        return []
+    try:
+        payload = json.loads(BUNDLED_DEPLOYMENT_CATALOG_FILE.read_text(encoding="utf-8"))
+        apps = payload.get("apps", []) if isinstance(payload, dict) else []
+        parsed = [image_template_from_dict(item, DEFAULT_DEPLOYMENT_REPOSITORY) for item in apps if isinstance(item, dict)]
+        return [item for item in parsed if item is not None]
+    except Exception:
+        return []
+
+
+STORE_METADATA_FIELDS = (
+    "store_description",
+    "store_description_en",
+    "features",
+    "features_en",
+    "icon_url",
+    "hero_image_url",
+    "gallery",
+    "credential_patterns",
+    "post_install_hints",
+    "post_install_hints_en",
+    "build_context",
+    "build_dockerfile",
+)
+
+
+def merge_catalog_template(base: ImageTemplate, override: ImageTemplate) -> ImageTemplate:
+    data = asdict(override)
+    for field_name in STORE_METADATA_FIELDS:
+        value = data.get(field_name)
+        if value in (None, "", []):
+            data[field_name] = getattr(base, field_name, value)
+    return ImageTemplate(**data)
+
+
+def merge_catalog_lists(*catalogs: List[ImageTemplate]) -> List[ImageTemplate]:
+    merged: Dict[tuple[str, str], ImageTemplate] = {}
+    for catalog in catalogs:
+        for item in catalog:
+            key = (item.name.lower(), item.image.lower())
+            if key in merged:
+                merged[key] = merge_catalog_template(merged[key], item)
+            else:
+                merged[key] = item
+    return list(merged.values())
+
+
 def save_cached_deployment_catalog(items: List[ImageTemplate]) -> None:
     DEPLOYMENT_CATALOG_CACHE_FILE.write_text(
         json.dumps({"apps": [asdict(item) for item in items]}, indent=2, ensure_ascii=False),
@@ -1539,6 +1839,39 @@ def _catalog_source_candidates(source: str) -> List[str]:
         f"https://raw.githubusercontent.com/{owner}/{repo}/master/dcc-catalog.json",
         f"https://raw.githubusercontent.com/{owner}/{repo}/master/catalog.json",
     ]
+
+
+def resolve_catalog_media_source(template: Optional[ImageTemplate], value: str) -> str:
+    value = str(value or "").strip().replace("\\", "/")
+    if not value:
+        return ""
+    if re.match(r"^https?://", value, re.IGNORECASE):
+        return value
+    # Prefer bundled/local store assets before falling back to repository raw
+    # URLs.  This keeps official app icons available in packaged builds even
+    # before catalog media is published remotely.
+    for root in (RESOURCE_DIR, Path(__file__).resolve().parent):
+        try:
+            local_candidate = (root / value).resolve()
+            if local_candidate.is_file():
+                return local_candidate.as_uri()
+        except Exception:
+            pass
+    source = str(getattr(template, "repository_source", "") or DEFAULT_DEPLOYMENT_REPOSITORY).strip()
+    github = re.match(r"^https?://github\.com/([^/]+)/([^/#?]+?)(?:\.git)?/?(?:[?#].*)?$", source, re.IGNORECASE)
+    if github:
+        owner, repo = github.group(1), github.group(2)
+        return f"https://raw.githubusercontent.com/{owner}/{repo}/main/{value.lstrip('/')}"
+    try:
+        source_path = Path(source).expanduser()
+        if source_path.is_file():
+            source_path = source_path.parent
+        candidate = (source_path / value).resolve()
+        if candidate.is_file():
+            return candidate.as_uri()
+    except Exception:
+        pass
+    return value
 
 
 def fetch_deployment_repository(source: str, timeout: int = 10) -> List[ImageTemplate]:
@@ -1586,6 +1919,20 @@ class CatalogRefreshWorker(QObject):
 
 
 def deployment_catalog_icon(template: ImageTemplate) -> QIcon:
+    if template.icon_url:
+        source = resolve_catalog_media_source(template, template.icon_url)
+        try:
+            qurl = QUrl(source)
+            if qurl.isLocalFile():
+                pixmap = QPixmap(qurl.toLocalFile())
+                if not pixmap.isNull():
+                    return QIcon(pixmap)
+            elif source and not re.match(r"^https?://", source, re.IGNORECASE):
+                pixmap = QPixmap(source)
+                if not pixmap.isNull():
+                    return QIcon(pixmap)
+        except Exception:
+            pass
     pixmap = QPixmap(44, 44)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
@@ -2678,7 +3025,7 @@ def call_ollama_model(base_url: str, model: str, system_prompt: str, user_prompt
             "prompt": f"{system_prompt}\n\n{user_prompt}",
             "stream": False,
         },
-        timeout=45,
+        timeout=120,
     )
     return str(payload.get("response") or "").strip()
 
@@ -3006,6 +3353,18 @@ def merge_imported_profiles(existing: List[RemoteProfile], imported: List[Remote
     return result
 def palette_for_theme(theme: str) -> Dict[str, str]:
     palettes = {
+        "day": {
+            "bg0": "rgba(248,248,245,0.82)",
+            "bg1": "rgba(232,236,232,0.74)",
+            "bg2": "rgba(255,255,252,0.88)",
+            "solid0": "#f5f5ef",
+            "solid1": "#e2e5dc",
+            "solid2": "#fbfbf7",
+            "fg": "#101820",
+            "muted": "#45505a",
+            "border": "#9aa6a0",
+            "glow_text": "#202020",
+        },
         "light": {
             "bg0": "rgba(242,247,255,0.78)",
             "bg1": "rgba(223,235,255,0.72)",
@@ -3042,6 +3401,18 @@ def palette_for_theme(theme: str) -> Dict[str, str]:
             "border": "#676f7d",
             "glow_text": "#ffc4c4",
         },
+        "night": {
+            "bg0": "rgba(8,10,14,0.80)",
+            "bg1": "rgba(18,15,19,0.74)",
+            "bg2": "rgba(14,9,12,0.86)",
+            "solid0": "#090b0f",
+            "solid1": "#171216",
+            "solid2": "#100b0e",
+            "fg": "#fff3f4",
+            "muted": "#d9b8bd",
+            "border": "#6f3038",
+            "glow_text": "#ff7a84",
+        },
     }
     return palettes.get(theme, palettes["black"])
 
@@ -3056,20 +3427,94 @@ def normalize_accent_color(value: str, fallback: str = "#33f0ff") -> str:
     return QColor(fallback).name()
 
 
+DEFAULT_ACCENT_COLOR = "#33f0ff"
+NIGHT_ACCENT_COLOR = "#ff4a55"
+
+
+def effective_accent_color(theme: str, accent_color: str) -> str:
+    """Use a red Night default without overwriting a user's explicit accent choice."""
+    normalized = normalize_accent_color(accent_color, DEFAULT_ACCENT_COLOR)
+    if str(theme or "").lower() == "night" and normalized == normalize_accent_color(DEFAULT_ACCENT_COLOR):
+        return normalize_accent_color(NIGHT_ACCENT_COLOR)
+    return normalized
+
+
 def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transparency_level: int, neon_animate: bool = True, accent_color: str = "#33f0ff") -> str:
     palette = palette_for_theme(theme)
+    is_day = theme == "day"
+    is_light_theme = theme in {"day", "light"}
+    base = QColor(effective_accent_color(theme, accent_color))
     if neon_animate:
-        accent = QColor.fromHsvF(glow_phase, 0.72, 1.0).name()
-        accent_soft = QColor.fromHsvF(glow_phase, 0.46, 0.78).name()
+        hue, saturation, value, _alpha = base.getHsvF()
+        pulse = 0.78 + 0.22 * (0.5 + 0.5 * math.sin(float(glow_phase) * math.tau))
+        animated = QColor.fromHsvF(hue if hue >= 0 else 0.0, max(0.18, saturation), max(0.35, min(1.0, value * pulse)))
+        accent = animated.name()
+        soft = QColor(animated)
+        soft.setAlpha(150)
+        accent_soft = soft.name(QColor.NameFormat.HexArgb)
     else:
-        base = QColor(normalize_accent_color(accent_color))
         accent = base.name()
         soft = QColor(base)
         soft.setAlpha(160)
         accent_soft = soft.name(QColor.NameFormat.HexArgb)
-    input_bg = "rgba(255,255,255,0.92)" if theme == "light" else "rgba(255,255,255,0.06)"
+    accent_text = accent
+    if is_light_theme:
+        readable_accent = QColor(accent)
+        hue, saturation, value, alpha = readable_accent.getHsvF()
+        if hue >= 0 and value > 0.58:
+            readable_accent = QColor.fromHsvF(hue, max(0.60, saturation), 0.50, alpha)
+        accent_text = readable_accent.name()
+    if is_day:
+        input_bg = "rgba(255,255,255,0.56)"
+        combo_bg = "rgba(251,251,247,0.94)"
+        table_bg = "rgba(255,255,255,0.24)"
+        table_alt_bg = "rgba(230,239,244,0.18)"
+        status_bg = "rgba(255,255,255,0.54)"
+        menu_bg = palette["solid2"]
+        popup_bg = "rgba(251,251,247,0.96)"
+        panel_bg = "rgba(255,255,255,0.46)"
+        control_bg = "rgba(255,255,255,0.34)"
+        button_bg = "rgba(255,255,255,0.54)"
+        button_hover_bg = "rgba(255,255,255,0.82)"
+        link_bg = "rgba(255,255,255,0.44)"
+        header_bg = "rgba(241,247,250,0.58)"
+    elif theme == "light":
+        input_bg = "rgba(255,255,255,0.92)"
+        combo_bg = "rgba(249,251,255,0.94)"
+        table_bg = input_bg
+        table_alt_bg = "rgba(232,241,255,0.86)"
+        status_bg = "rgba(255,255,255,0.72)" if transparent else palette["solid1"]
+        menu_bg = palette["solid2"]
+        popup_bg = "rgba(249,251,255,0.96)"
+        panel_bg = "rgba(250,252,255,0.88)"
+        control_bg = "rgba(244,248,255,0.86)"
+        button_bg = "rgba(255,255,255,0.82)"
+        button_hover_bg = "rgba(224,236,255,0.96)"
+        link_bg = "rgba(248,251,255,0.90)"
+        header_bg = "rgba(218,231,250,0.92)"
+    else:
+        input_bg = "rgba(255,255,255,0.06)"
+        combo_bg = {
+            "dark": "rgba(29,42,67,0.94)",
+            "black": "rgba(24,29,36,0.94)",
+            "night": "rgba(23,18,22,0.94)",
+        }.get(theme, "rgba(24,29,36,0.94)")
+        table_bg = input_bg
+        table_alt_bg = "rgba(255,255,255,0.035)"
+        status_bg = "rgba(5,12,20,0.72)" if transparent else palette["solid1"]
+        menu_bg = palette["solid1"]
+        popup_bg = {
+            "dark": "rgba(29,42,67,0.96)",
+            "black": "rgba(24,29,36,0.96)",
+            "night": "rgba(23,18,22,0.96)",
+        }.get(theme, "rgba(24,29,36,0.96)")
+        panel_bg = "rgba(255,255,255,0.06)"
+        control_bg = "rgba(255,255,255,0.035)"
+        button_bg = "rgba(255,255,255,0.05)"
+        button_hover_bg = "rgba(255,255,255,0.10)"
+        link_bg = "rgba(255,255,255,0.05)"
+        header_bg = "rgba(255,255,255,0.04)"
     surface = palette["bg0"] if transparent else palette["solid0"]
-    status_bg = "rgba(255,255,255,0.03)" if transparent else palette["solid1"]
     return f"""
     QWidget {{
         color: {palette['fg']};
@@ -3080,6 +3525,47 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
     }}
     QMainWindow {{
         background: transparent;
+    }}
+    QMenuBar {{
+        background: {menu_bg};
+        color: {palette['fg']};
+        border-bottom: 1px solid {palette['border']};
+    }}
+    QMenuBar::item {{
+        background: transparent;
+        color: {palette['fg']};
+        padding: 6px 11px;
+        margin: 2px 1px;
+    }}
+    QMenuBar::item:selected {{
+        background: {accent_soft};
+        color: {palette['fg']};
+    }}
+    QMenu {{
+        background: {menu_bg};
+        color: {palette['fg']};
+        border: 1px solid {palette['border']};
+        padding: 5px;
+    }}
+    QMenu::item {{
+        background: transparent;
+        color: {palette['fg']};
+        /* Keep a dedicated right gutter for the native submenu arrow. */
+        padding: 7px 34px 7px 12px;
+        margin: 2px 3px;
+        border-radius: 7px;
+    }}
+    QMenu::item:selected {{
+        background: {accent_soft};
+        color: {palette['fg']};
+    }}
+    QMenu::separator {{
+        height: 1px;
+        background: {palette['border']};
+        margin: 5px 9px;
+    }}
+    QMenu::right-arrow {{
+        margin-right: 9px;
     }}
     QScrollArea#mainScrollArea {{
         background: transparent;
@@ -3094,32 +3580,32 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         border: 1px solid {palette['border']};
     }}
     QFrame#heroPanel {{
-        background: rgba(255,255,255,0.06);
+        background: {panel_bg};
         border: 1px solid {accent};
         border-radius: 22px;
     }}
     QFrame#controlPanel {{
-        background: rgba(255,255,255,0.035);
+        background: {control_bg};
         border: 1px solid {palette['border']};
         border-radius: 16px;
     }}
     QLabel#sectionTitle {{
-        color: {accent};
+        color: {accent_text};
         font-size: 8.5pt;
         font-weight: 800;
         letter-spacing: 1px;
         padding: 0px 3px;
     }}
-    QLabel#heroTitle {{ font-size: 18pt; font-weight: 700; color: {accent}; }}
+    QLabel#heroTitle {{ font-size: 18pt; font-weight: 700; color: {accent_text}; }}
     QLabel#heroSubtitle {{ color: {palette['muted']}; }}
     QPushButton {{
-        background: rgba(255,255,255,0.05);
+        background: {button_bg};
         color: {palette['fg']};
         border: 1px solid {palette['border']};
         border-radius: 14px;
         padding: 6px 10px;
     }}
-    QPushButton:hover {{ border: 1px solid {accent}; background: rgba(255,255,255,0.10); }}
+    QPushButton:hover {{ border: 1px solid {accent}; background: {button_hover_bg}; }}
     QPushButton#primaryAction {{
         border: 1px solid {accent};
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent_soft}, stop:1 {accent});
@@ -3140,11 +3626,38 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         border-radius: 10px;
         min-height: 20px;
     }}
+    QPushButton#shopButton {{
+        border: 1px solid {accent};
+        background: {accent_soft};
+        color: {palette['fg']};
+        font-weight: 800;
+        padding: 5px 11px;
+        border-radius: 10px;
+        min-height: 20px;
+    }}
+    QPushButton#shopButton:hover {{
+        border: 1px solid {accent};
+        background: {accent};
+        color: #08172c;
+    }}
+    QPushButton#containerGroupButton {{
+        border: 0;
+        background: transparent;
+        text-align: left;
+        font-weight: 600;
+        color: {accent_text};
+        padding: 0;
+    }}
+    QPushButton#containerGroupButton:hover {{
+        border: 0;
+        background: transparent;
+        color: {accent_text};
+    }}
     QWidget#linkPanel {{
         background: transparent;
     }}
     QFrame#linkRow {{
-        background: rgba(255,255,255,0.05);
+        background: {link_bg};
         border: 1px solid {palette['border']};
         border-radius: 8px;
     }}
@@ -3185,15 +3698,27 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         border-radius: 14px;
         padding: 5px;
     }}
+    QComboBox {{
+        background: {combo_bg};
+    }}
+    QTableWidget {{
+        background: {table_bg};
+        alternate-background-color: {table_alt_bg};
+        color: {palette['fg']};
+    }}
+    QTableWidget::item {{
+        color: {palette['fg']};
+        background: transparent;
+    }}
     QComboBox QAbstractItemView {{
-        background: {input_bg};
+        background: {popup_bg};
         color: {palette['fg']};
         border: 1px solid {palette['border']};
         selection-background-color: {accent_soft};
         selection-color: #08172c;
     }}
     QHeaderView::section {{
-        background: rgba(255,255,255,0.04);
+        background: {header_bg};
         border: 0;
         border-bottom: 1px solid {palette['border']};
         padding: 5px 10px 5px 6px;
@@ -3201,7 +3726,7 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         font-weight: 700;
     }}
     QTableWidget::item:selected {{ background: {accent}; color: #08172c; }}
-    QStatusBar {{ background: {status_bg}; color: {accent}; border-top: 1px solid {palette['border']}; }}
+    QStatusBar {{ background: {status_bg}; color: {palette['fg']}; border-top: 1px solid {accent}; font-weight: 600; }}
     QMessageBox QLabel {{ color: {palette['fg']}; }}
     """
 
@@ -3215,6 +3740,141 @@ def make_colored_icon(color: QColor, size: int = 14) -> QIcon:
     painter.setPen(Qt.GlobalColor.black)
     radius = size // 2 - 1
     painter.drawEllipse(1, 1, radius * 2, radius * 2)
+    painter.end()
+    return QIcon(pix)
+
+
+def make_terminal_icon(color: QColor, size: int = 16) -> QIcon:
+    """Draw a small terminal glyph without relying on font/emoji support."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    pen = QPen(color)
+    pen.setWidthF(max(1.2, size / 10.0))
+    painter.setPen(pen)
+    inset = max(1.5, size * 0.12)
+    painter.drawRoundedRect(
+        QRectF(inset, inset, size - (inset * 2), size - (inset * 2)),
+        size * 0.14,
+        size * 0.14,
+    )
+    painter.drawLine(
+        int(size * 0.28),
+        int(size * 0.38),
+        int(size * 0.43),
+        int(size * 0.50),
+    )
+    painter.drawLine(
+        int(size * 0.43),
+        int(size * 0.50),
+        int(size * 0.28),
+        int(size * 0.62),
+    )
+    painter.drawLine(
+        int(size * 0.52),
+        int(size * 0.64),
+        int(size * 0.72),
+        int(size * 0.64),
+    )
+    painter.end()
+    return QIcon(pix)
+
+
+def make_category_icon(kind: str, color: QColor, size: int = 18) -> QIcon:
+    """Draw small category glyphs without relying on emoji/font support."""
+    pix = QPixmap(size, size)
+    pix.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    pen = QPen(color)
+    pen.setWidthF(max(1.2, size / 11.0))
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    k = (kind or "generic").lower()
+    s = float(size)
+    if k == "all":
+        box = s * 0.26
+        gap = s * 0.12
+        start = s * 0.17
+        for row in range(2):
+            for col in range(2):
+                x = start + col * (box + gap)
+                y = start + row * (box + gap)
+                painter.drawRoundedRect(QRectF(x, y, box, box), s * 0.05, s * 0.05)
+    elif k == "installed":
+        painter.drawRoundedRect(QRectF(s * 0.16, s * 0.16, s * 0.68, s * 0.68), s * 0.10, s * 0.10)
+        painter.drawLine(int(s * 0.30), int(s * 0.50), int(s * 0.43), int(s * 0.63))
+        painter.drawLine(int(s * 0.43), int(s * 0.63), int(s * 0.70), int(s * 0.34))
+    elif k in {"ai", "automation"}:
+        painter.drawEllipse(QRectF(s * 0.34, s * 0.34, s * 0.32, s * 0.32))
+        for x1, y1, x2, y2 in (
+            (0.50, 0.10, 0.50, 0.26), (0.50, 0.74, 0.50, 0.90),
+            (0.10, 0.50, 0.26, 0.50), (0.74, 0.50, 0.90, 0.50),
+            (0.22, 0.22, 0.33, 0.33), (0.67, 0.67, 0.78, 0.78),
+        ):
+            painter.drawLine(int(s * x1), int(s * y1), int(s * x2), int(s * y2))
+    elif k in {"monitor", "analytics", "finance"}:
+        painter.drawRoundedRect(QRectF(s * 0.12, s * 0.18, s * 0.76, s * 0.62), s * 0.08, s * 0.08)
+        painter.drawLine(int(s * 0.24), int(s * 0.64), int(s * 0.40), int(s * 0.48))
+        painter.drawLine(int(s * 0.40), int(s * 0.48), int(s * 0.56), int(s * 0.58))
+        painter.drawLine(int(s * 0.56), int(s * 0.58), int(s * 0.76), int(s * 0.34))
+    elif k == "network":
+        nodes = [(0.22, 0.28), (0.76, 0.24), (0.50, 0.74)]
+        painter.drawLine(int(s * 0.26), int(s * 0.31), int(s * 0.70), int(s * 0.27))
+        painter.drawLine(int(s * 0.27), int(s * 0.34), int(s * 0.47), int(s * 0.68))
+        painter.drawLine(int(s * 0.72), int(s * 0.31), int(s * 0.54), int(s * 0.68))
+        for x, y in nodes:
+            painter.drawEllipse(QRectF(s * (x - 0.09), s * (y - 0.09), s * 0.18, s * 0.18))
+    elif k in {"security", "backup"}:
+        path = QPainterPath()
+        path.moveTo(s * 0.50, s * 0.10)
+        path.lineTo(s * 0.80, s * 0.22)
+        path.lineTo(s * 0.73, s * 0.65)
+        path.quadTo(s * 0.50, s * 0.88, s * 0.27, s * 0.65)
+        path.lineTo(s * 0.20, s * 0.22)
+        path.closeSubpath()
+        painter.drawPath(path)
+    elif k in {"database", "cache"}:
+        painter.drawEllipse(QRectF(s * 0.18, s * 0.14, s * 0.64, s * 0.24))
+        painter.drawLine(int(s * 0.18), int(s * 0.26), int(s * 0.18), int(s * 0.70))
+        painter.drawLine(int(s * 0.82), int(s * 0.26), int(s * 0.82), int(s * 0.70))
+        painter.drawArc(QRectF(s * 0.18, s * 0.58, s * 0.64, s * 0.24), 180 * 16, 180 * 16)
+        painter.drawArc(QRectF(s * 0.18, s * 0.36, s * 0.64, s * 0.24), 180 * 16, 180 * 16)
+    elif k in {"web", "system", "container"}:
+        painter.drawRoundedRect(QRectF(s * 0.12, s * 0.16, s * 0.76, s * 0.68), s * 0.08, s * 0.08)
+        painter.drawLine(int(s * 0.12), int(s * 0.34), int(s * 0.88), int(s * 0.34))
+        painter.drawEllipse(QRectF(s * 0.20, s * 0.22, s * 0.06, s * 0.06))
+        painter.drawEllipse(QRectF(s * 0.31, s * 0.22, s * 0.06, s * 0.06))
+    elif k == "home":
+        path = QPainterPath()
+        path.moveTo(s * 0.16, s * 0.46)
+        path.lineTo(s * 0.50, s * 0.16)
+        path.lineTo(s * 0.84, s * 0.46)
+        path.moveTo(s * 0.24, s * 0.40)
+        path.lineTo(s * 0.24, s * 0.82)
+        path.lineTo(s * 0.76, s * 0.82)
+        path.lineTo(s * 0.76, s * 0.40)
+        painter.drawPath(path)
+    elif k == "media":
+        painter.drawRoundedRect(QRectF(s * 0.14, s * 0.18, s * 0.72, s * 0.64), s * 0.08, s * 0.08)
+        path = QPainterPath()
+        path.moveTo(s * 0.42, s * 0.35)
+        path.lineTo(s * 0.68, s * 0.50)
+        path.lineTo(s * 0.42, s * 0.65)
+        path.closeSubpath()
+        painter.drawPath(path)
+    elif k in {"devops", "tools", "productivity", "messaging"}:
+        painter.drawRoundedRect(QRectF(s * 0.16, s * 0.22, s * 0.68, s * 0.56), s * 0.10, s * 0.10)
+        painter.drawLine(int(s * 0.28), int(s * 0.39), int(s * 0.72), int(s * 0.39))
+        painter.drawLine(int(s * 0.28), int(s * 0.54), int(s * 0.64), int(s * 0.54))
+    else:
+        painter.drawRoundedRect(QRectF(s * 0.16, s * 0.20, s * 0.68, s * 0.60), s * 0.10, s * 0.10)
+        painter.drawLine(int(s * 0.28), int(s * 0.38), int(s * 0.72), int(s * 0.38))
+        painter.drawLine(int(s * 0.28), int(s * 0.55), int(s * 0.60), int(s * 0.55))
     painter.end()
     return QIcon(pix)
 
@@ -3281,10 +3941,15 @@ class BackgroundSurface(QWidget):
     def _overlay_color(self) -> QColor:
         palette = palette_for_theme(self._theme)
         overlay = QColor(palette["solid0"])
-        if self._transparent:
-            alpha = max(42, 120 - int(self._transparency_level * 0.7))
+        if self._theme == "day":
+            alpha = max(24, 78 - int(self._transparency_level * 0.42)) if self._transparent else 72
+        elif self._transparent:
+            if self._theme == "light":
+                alpha = max(92, 172 - int(self._transparency_level * 0.55))
+            else:
+                alpha = max(42, 120 - int(self._transparency_level * 0.7))
         else:
-            alpha = max(122, 210 - self._transparency_level)
+            alpha = 182 if self._theme == "light" else max(122, 210 - self._transparency_level)
         overlay.setAlpha(alpha)
         return overlay
 
@@ -3324,13 +3989,21 @@ class BackgroundSurface(QWidget):
         painter.fillRect(rectf, self._overlay_color())
 
         glow = QLinearGradient(rectf.left(), rectf.top(), rectf.right(), rectf.bottom())
-        if self._theme == "light":
+        if self._theme == "day":
+            glow.setColorAt(0.0, QColor(255, 255, 255, 42))
+            glow.setColorAt(0.42, QColor(205, 228, 241, 18))
+            glow.setColorAt(1.0, QColor(255, 255, 255, 0))
+        elif self._theme == "light":
             glow.setColorAt(0.0, QColor(255, 255, 255, 86))
             glow.setColorAt(0.35, QColor(210, 234, 255, 28))
             glow.setColorAt(1.0, QColor(255, 255, 255, 0))
         elif self._theme == "black":
             glow.setColorAt(0.0, QColor(255, 120, 120, 28))
             glow.setColorAt(0.48, QColor(90, 150, 255, 22))
+            glow.setColorAt(1.0, QColor(0, 0, 0, 0))
+        elif self._theme == "night":
+            glow.setColorAt(0.0, QColor(255, 52, 66, 54))
+            glow.setColorAt(0.42, QColor(128, 20, 34, 24))
             glow.setColorAt(1.0, QColor(0, 0, 0, 0))
         else:
             glow.setColorAt(0.0, QColor(120, 190, 255, 36))
@@ -3619,9 +4292,11 @@ class AppSettingsDialog(QDialog):
 
         form = QFormLayout()
         self.theme_combo = QComboBox()
+        self.theme_combo.addItem(self.texts["theme_day"], "day")
         self.theme_combo.addItem(self.texts["theme_light"], "light")
         self.theme_combo.addItem(self.texts["theme_dark"], "dark")
         self.theme_combo.addItem(self.texts["theme_black"], "black")
+        self.theme_combo.addItem(self.texts["theme_night"], "night")
         current_theme = str(self.settings.value("theme", "black"))
         theme_index = self.theme_combo.findData(current_theme)
         if theme_index >= 0:
@@ -3643,8 +4318,7 @@ class AppSettingsDialog(QDialog):
             self.neon_color_combo.setItemData(self.neon_color_combo.count() - 1, QColor(saved_color), Qt.ItemDataRole.DecorationRole)
             color_index = self.neon_color_combo.count() - 1
         self.neon_color_combo.setCurrentIndex(color_index)
-        self.neon_color_combo.setEnabled(not neon_enabled)
-        self.neon_checkbox.toggled.connect(lambda checked: self.neon_color_combo.setEnabled(not checked))
+        self.neon_color_combo.setEnabled(True)
 
         form.addRow(self.texts["app_settings_theme"], self.theme_combo)
         form.addRow(self.neon_checkbox)
@@ -3748,19 +4422,132 @@ class CatalogRepositoryDialog(QDialog):
         super().accept()
 
 
+class TwoLineElideLabel(QLabel):
+    """A wrapping label that shows at most two lines and adds an ellipsis on overflow."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(parent)
+        self._full_text = ""
+        self.setWordWrap(False)
+        self.setText(text)
+
+    def setText(self, text: str) -> None:  # type: ignore[override]
+        self._full_text = str(text or "")
+        self._refresh_elided_text()
+
+    def fullText(self) -> str:
+        return self._full_text
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._refresh_elided_text()
+
+    def _refresh_elided_text(self) -> None:
+        text = re.sub(r"\s+", " ", self._full_text).strip()
+        if not text:
+            super().setText("")
+            return
+        width = max(40, self.contentsRect().width())
+        metrics = QFontMetrics(self.font())
+        words = text.split(" ")
+        lines: List[str] = []
+        current = ""
+        for word in words:
+            candidate = word if not current else f"{current} {word}"
+            if metrics.horizontalAdvance(candidate) <= width:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+                current = word
+            else:
+                lines.append(self._elide_with_dots(word, metrics, width))
+                current = ""
+        if current:
+            lines.append(current)
+        if len(lines) <= 2:
+            super().setText("\n".join(lines))
+            return
+        second_line = self._elide_with_dots(" ".join(lines[1:]), metrics, width)
+        super().setText(f"{lines[0]}\n{second_line}")
+
+    @staticmethod
+    def _elide_with_dots(text: str, metrics: QFontMetrics, width: int) -> str:
+        value = str(text or "")
+        if metrics.horizontalAdvance(value) <= width:
+            return value
+        suffix = "..."
+        if metrics.horizontalAdvance(suffix) >= width:
+            return suffix
+        while value and metrics.horizontalAdvance(value.rstrip() + suffix) > width:
+            value = value[:-1]
+        return value.rstrip() + suffix
+
+
+class AspectRatioPixmapLabel(QLabel):
+    """Keep a source pixmap fully visible and fit the label height to it."""
+
+    def __init__(self, text: str = "", parent=None, max_content_height: int = 210):
+        super().__init__(text, parent)
+        self._source_pixmap = QPixmap()
+        self._max_content_height = max(1, int(max_content_height))
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def setSourcePixmap(self, pixmap: QPixmap) -> None:
+        self._source_pixmap = QPixmap(pixmap)
+        self._refresh_scaled_pixmap()
+
+    def clear(self) -> None:  # type: ignore[override]
+        self._source_pixmap = QPixmap()
+        super().clear()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._refresh_scaled_pixmap()
+
+    def _refresh_scaled_pixmap(self) -> None:
+        if self._source_pixmap.isNull():
+            return
+        margins = self.contentsMargins()
+        available_width = max(1, self.width() - margins.left() - margins.right())
+        scaled = self._source_pixmap.scaled(
+            QSize(available_width, self._max_content_height),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        super().setPixmap(scaled)
+        desired_height = scaled.height() + margins.top() + margins.bottom()
+        if self.height() != desired_height:
+            self.setFixedHeight(desired_height)
+
+
+class ContentFittingTabWidget(QTabWidget):
+    """Keep store tabs responsive instead of inheriting the widest page minimum."""
+
+    def minimumSizeHint(self) -> QSize:  # type: ignore[override]
+        hint = super().minimumSizeHint()
+        return QSize(min(hint.width(), max(360, self.minimumWidth())), min(hint.height(), 220))
+
+    def sizeHint(self) -> QSize:  # type: ignore[override]
+        hint = super().sizeHint()
+        current = self.currentWidget()
+        if current is not None:
+            current_hint = current.sizeHint()
+            tab_height = self.tabBar().sizeHint().height()
+            hint.setHeight(max(260, current_hint.height() + tab_height + 16))
+        return hint
+
+
 class NewContainerDialog(QDialog):
-    def __init__(self, client, texts: Dict[str, str], run_command_callback=None, parent=None, initial_args: Optional[List[str]] = None, edit_mode: bool = False, existing_name: str = "", llm_settings_getter=None, ai_command_callback=None, lang: str = "EN", cli_command: str = "docker", cli_choices: Optional[List[str]] = None, remote_arch: str = "", target_host_label: str = ""):
+    def __init__(self, client, texts: Dict[str, str], run_command_callback=None, parent=None, initial_args: Optional[List[str]] = None, edit_mode: bool = False, existing_name: str = "", llm_settings_getter=None, ai_command_callback=None, build_image_callback=None, lang: str = "EN", cli_command: str = "docker", cli_choices: Optional[List[str]] = None, remote_arch: str = "", target_host_label: str = ""):
         super().__init__(parent)
         self.client = client
         self.texts = texts
         self.run_command_callback = run_command_callback
-        self.base_catalog = default_image_catalog()
+        self.base_catalog = merge_catalog_lists(default_image_catalog(), load_bundled_deployment_catalog())
         self.repository_sources = load_deployment_repository_sources()
         self.external_catalog = load_cached_deployment_catalog()
-        merged_catalog = {}
-        for item in self.base_catalog + self.external_catalog:
-            merged_catalog[(item.name.lower(), item.image.lower())] = item
-        self.catalog = list(merged_catalog.values())
+        self.catalog = merge_catalog_lists(self.base_catalog, self.external_catalog)
         self.filtered_catalog = list(self.catalog)
         self._syncing = False
         self.manual_configuration_mode = True
@@ -3772,15 +4559,21 @@ class NewContainerDialog(QDialog):
         self.existing_name = existing_name.strip()
         self.llm_settings_getter = llm_settings_getter or (lambda: {})
         self.ai_command_callback = ai_command_callback
+        self.build_image_callback = build_image_callback
         self.lang = (lang or "EN").upper()
         self.cli_command = (cli_command or "docker").lower()
         self.cli_choices = [str(item).lower() for item in (cli_choices or [self.cli_command]) if str(item).strip()]
         self.remote_arch = str(remote_arch or "").strip().lower()
         self.target_host_label = target_host_label.strip() or "Docker"
         self.catalog_theme = str(getattr(parent, "current_theme", "dark") or "dark").lower()
-        if self.catalog_theme not in {"light", "dark", "black"}:
+        if self.catalog_theme not in {"light", "day", "dark", "black", "night"}:
             self.catalog_theme = "dark"
-        self.catalog_accent = normalize_accent_color(str(getattr(parent, "accent_color", "#33f0ff")))
+        self.catalog_accent = effective_accent_color(
+            self.catalog_theme,
+            str(getattr(parent, "accent_color", DEFAULT_ACCENT_COLOR)),
+        )
+        self.store_network = QNetworkAccessManager(self)
+        self._store_media_generation = 0
 
         self.setWindowTitle(self.texts["wizard_edit_title"] if self.edit_mode else self.texts["wizard_title"])
         self.setWindowFlags(
@@ -3795,11 +4588,11 @@ class NewContainerDialog(QDialog):
         # area once Windows display scaling was applied.
         screen = parent.screen() if parent is not None and parent.screen() is not None else QApplication.primaryScreen()
         available = screen.availableGeometry() if screen is not None else None
-        default_width = 860
-        default_height = 600
+        default_width = 1160
+        default_height = 720
         if available is not None and available.isValid():
-            default_width = min(default_width, max(520, int(available.width() * 0.84)))
-            default_height = min(default_height, max(400, int(available.height() * 0.80)))
+            default_width = min(default_width, max(520, int(available.width() * 0.92)))
+            default_height = min(default_height, max(400, int(available.height() * 0.86)))
         self.setMinimumSize(480, 360)
         self.resize(default_width, default_height)
 
@@ -3820,55 +4613,253 @@ class NewContainerDialog(QDialog):
         self.dialog_scroll_area.setWidget(self.dialog_scroll_content)
         outer_layout.addWidget(self.dialog_scroll_area, 1)
 
-        store_header = QHBoxLayout()
+        store_header = QVBoxLayout()
+        store_header.setSpacing(6)
         store_text = QVBoxLayout()
         subtitle = QLabel(self.texts["wizard_store_subtitle"])
         subtitle_font = subtitle.font()
         subtitle_font.setBold(True)
         subtitle.setFont(subtitle_font)
+        subtitle.setWordWrap(True)
+        subtitle.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Maximum)
         self.target_label = QLabel(self.texts["wizard_target_host"].format(host=self.target_host_label))
+        target_font = self.target_label.font()
+        target_font.setBold(True)
+        target_font.setPointSize(max(10, target_font.pointSize() + 1))
+        self.target_label.setFont(target_font)
+        self.target_label.setWordWrap(True)
+        self.target_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Maximum)
         store_text.addWidget(subtitle)
-        store_text.addWidget(self.target_label)
-        store_header.addLayout(store_text, 1)
+        self.target_host_frame = QFrame()
+        self.target_host_frame.setObjectName("storeTargetHostFrame")
+        target_host_layout = QHBoxLayout(self.target_host_frame)
+        target_host_layout.setContentsMargins(10, 7, 10, 7)
+        target_host_layout.setSpacing(8)
+        self.target_host_icon = QLabel()
+        self.target_host_icon.setFixedSize(24, 24)
+        self.target_host_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        target_host_layout.addWidget(self.target_host_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        target_host_layout.addWidget(self.target_label, 1)
+        store_text.addWidget(self.target_host_frame)
+        store_header.addLayout(store_text)
+        store_header_actions = QHBoxLayout()
+        store_header_actions.setSpacing(8)
+        self.store_header_actions = store_header_actions
         self.btn_repositories = QPushButton(self.texts["wizard_repositories"])
         self.btn_repo_refresh = QPushButton(self.texts["wizard_repo_refresh"])
         self.repo_status_label = QLabel(self.texts["wizard_repo_status_cached"])
         self.repo_status_label.setWordWrap(True)
-        store_header.addWidget(self.btn_repositories)
-        store_header.addWidget(self.btn_repo_refresh)
-        store_header.addWidget(self.repo_status_label, 1)
+        self.repo_status_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Maximum)
+        store_header_actions.addWidget(self.btn_repositories)
+        store_header_actions.addWidget(self.btn_repo_refresh)
+        store_header_actions.addWidget(self.repo_status_label, 1)
+        store_header.addLayout(store_header_actions)
         layout.addLayout(store_header)
 
-        toolbar = QHBoxLayout()
+        self.store_toolbar_frame = QFrame()
+        self.store_toolbar_frame.setObjectName("storeToolbarFrame")
+        toolbar = QHBoxLayout(self.store_toolbar_frame)
+        toolbar.setContentsMargins(12, 9, 12, 9)
+        toolbar.setSpacing(6)
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText(self.texts["wizard_search"])
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.setMinimumHeight(32)
+        self.search_edit.setMinimumWidth(180)
+        self.search_edit.setMaximumWidth(320)
+        self.search_edit.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.category_combo = QComboBox()
         self.category_combo.addItem(self.texts["wizard_all_categories"])
-        for category in sorted({item.category_for(self.lang) for item in self.catalog}, key=catalog_category_sort_key):
+        self.category_combo.addItem(self.texts["wizard_installed_category"])
+        for category in self.catalog_category_names():
             self.category_combo.addItem(category)
+        self.category_combo.setVisible(False)
         self.catalog_count_label = QLabel()
         self.catalog_count_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.catalog_count_label.setMinimumWidth(90)
+        self.catalog_count_label.setMaximumWidth(110)
         self.btn_manual_config = QPushButton(self.texts["wizard_manual"])
+        self.btn_manual_config.setMinimumWidth(145)
+        self.btn_manual_config.setMaximumWidth(170)
         self.btn_online_refresh = QPushButton(self.texts["wizard_online_refresh"])
-        toolbar.addWidget(QLabel(self.texts["wizard_category"]))
-        toolbar.addWidget(self.category_combo)
-        toolbar.addWidget(self.search_edit, 1)
-        toolbar.addWidget(self.catalog_count_label)
-        toolbar.addWidget(self.btn_manual_config)
-        toolbar.addWidget(self.btn_online_refresh)
-        layout.addLayout(toolbar)
+        self.btn_online_refresh.setMinimumWidth(160)
+        self.btn_online_refresh.setMaximumWidth(190)
+        toolbar.addWidget(self.search_edit, 0)
+        toolbar.addWidget(self.catalog_count_label, 0)
+        toolbar.addStretch(1)
+        toolbar.addWidget(self.btn_manual_config, 0)
+        toolbar.addWidget(self.btn_online_refresh, 0)
+        layout.addWidget(self.store_toolbar_frame)
 
-        catalog_row = QHBoxLayout()
+        # Categories are a full-width, wrapping chip bar.  Keeping them above
+        # the app list gives long translated names enough room and avoids the
+        # cramped single-column sidebar on smaller displays.
+        self.store_categories_title = QLabel(self.texts["wizard_store_categories"])
+        self.store_categories_title.setObjectName("storeColumnTitle")
+        layout.addWidget(self.store_categories_title)
+        self.store_categories_frame = QFrame()
+        self.store_categories_frame.setObjectName("storeCategoriesFrame")
+        categories_layout = QVBoxLayout(self.store_categories_frame)
+        categories_layout.setContentsMargins(8, 6, 8, 10)
+        categories_layout.setSpacing(0)
+        self.category_nav = StaticCategoryListWidget()
+        self.category_nav.setObjectName("storeCategoryNav")
+        # ListMode keeps the icon on the left and the full category label on
+        # the right.  Combined with LeftToRight + wrapping this behaves like a
+        # real responsive chip/flow layout instead of IconMode's fixed cells.
+        self.category_nav.setViewMode(QListView.ViewMode.ListMode)
+        self.category_nav.setFlow(QListView.Flow.LeftToRight)
+        self.category_nav.setResizeMode(QListView.ResizeMode.Adjust)
+        self.category_nav.setMovement(QListView.Movement.Static)
+        self.category_nav.setWrapping(True)
+        self.category_nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.category_nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.category_nav.setSpacing(4)
+        self.category_nav.setWordWrap(False)
+        self.category_nav.setUniformItemSizes(False)
+        self.category_nav.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.category_nav.setIconSize(QSize(16, 16))
+        self.category_nav.setItemDelegate(CategoryTileDelegate(self.category_nav))
+        self.category_nav.setFixedHeight(120)
+        categories_layout.addWidget(self.category_nav)
+        layout.addWidget(self.store_categories_frame)
+
+        self.catalog_row = QHBoxLayout()
+        self.catalog_row.setSpacing(10)
+        self.store_browser_frame = QFrame()
+        self.store_browser_frame.setObjectName("storeBrowserFrame")
+        browser_layout = QVBoxLayout(self.store_browser_frame)
+        browser_layout.setContentsMargins(10, 10, 10, 10)
+        browser_layout.setSpacing(6)
+
+        apps_column = QVBoxLayout()
+        apps_column.setSpacing(6)
+        self.store_apps_title = QLabel(self.texts["wizard_store_apps"])
+        self.store_apps_title.setObjectName("storeColumnTitle")
+        apps_column.addWidget(self.store_apps_title)
         self.catalog_list = QListWidget()
-        self.catalog_list.setMinimumWidth(220)
+        self.catalog_list.setObjectName("storeCatalogList")
+        self.catalog_list.setMinimumWidth(270)
         self.catalog_list.setIconSize(QSize(44, 44))
-        self.catalog_list.setSpacing(4)
-        self.catalog_list.setWordWrap(True)
-        catalog_row.addWidget(self.catalog_list, 1)
+        self.catalog_list.setSpacing(1)
+        self.catalog_list.setWordWrap(False)
+        self.catalog_list.setUniformItemSizes(False)
+        apps_column.addWidget(self.catalog_list, 1)
+        browser_layout.addLayout(apps_column, 1)
+        self.catalog_row.addWidget(self.store_browser_frame, 2)
 
-        self.editor_tabs = QTabWidget()
+        self.editor_tabs = ContentFittingTabWidget()
+        self.editor_tabs.setObjectName("storeEditorTabs")
+        self.editor_tabs.setMinimumWidth(360)
+        self.editor_tabs.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Maximum)
+
+        self.store_tab = QWidget()
+        self.store_tab.setObjectName("storeDescriptionPage")
+        store_page_layout = QVBoxLayout(self.store_tab)
+        store_page_layout.setContentsMargins(10, 9, 10, 9)
+        store_page_layout.setSpacing(8)
+        store_page_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self.store_hero_card = QFrame()
+        self.store_hero_card.setObjectName("storeHeroCard")
+        hero_layout = QHBoxLayout(self.store_hero_card)
+        hero_layout.setContentsMargins(12, 10, 12, 10)
+        hero_layout.setSpacing(11)
+        self.store_icon_label = QLabel()
+        self.store_icon_label.setFixedSize(72, 72)
+        self.store_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_layout.addWidget(self.store_icon_label, 0, Qt.AlignmentFlag.AlignTop)
+        hero_text = QVBoxLayout()
+        hero_text.setSpacing(4)
+        self.store_title_label = QLabel()
+        self.store_title_label.setObjectName("storeTitle")
+        store_title_font = self.store_title_label.font()
+        store_title_font.setBold(True)
+        store_title_font.setPointSize(max(14, store_title_font.pointSize() + 5))
+        self.store_title_label.setFont(store_title_font)
+        self.store_category_label = QLabel()
+        self.store_category_label.setObjectName("storeCategory")
+        self.store_install_state_label = QLabel()
+        self.store_install_state_label.setObjectName("storeInstallState")
+        hero_text.addWidget(self.store_title_label)
+        hero_text.addWidget(self.store_category_label)
+        hero_text.addWidget(self.store_install_state_label)
+        hero_text.addStretch()
+        hero_layout.addLayout(hero_text, 1)
+        self.btn_store_primary = QPushButton(self.texts["wizard_store_install"])
+        self.btn_store_primary.setObjectName("primaryAction")
+        self.btn_store_primary.setMinimumWidth(130)
+        hero_layout.addWidget(self.btn_store_primary, 0, Qt.AlignmentFlag.AlignTop)
+        store_page_layout.addWidget(self.store_hero_card)
+
+        self.store_hero_image = AspectRatioPixmapLabel(
+            self.texts["wizard_store_no_media"],
+            max_content_height=210,
+        )
+        self.store_hero_image.setObjectName("storeHeroImage")
+        self.store_hero_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.store_hero_image.setContentsMargins(8, 8, 8, 8)
+        self.store_hero_image.setMinimumHeight(160)
+        self.store_hero_image.setWordWrap(True)
+        self.store_hero_image.setVisible(False)
+        store_page_layout.addWidget(self.store_hero_image)
+
+        self.store_description_label = QLabel()
+        self.store_description_label.setObjectName("storeDescription")
+        self.store_description_label.setWordWrap(True)
+        self.store_description_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.store_description_label.setMinimumHeight(56)
+        self.store_description_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        store_page_layout.addWidget(self.store_description_label)
+
+        self.store_features_title = QLabel(self.texts["wizard_store_features"])
+        self.store_features_title.setObjectName("storeSectionTitle")
+        store_page_layout.addWidget(self.store_features_title)
+        self.store_features_label = QLabel()
+        self.store_features_label.setWordWrap(True)
+        self.store_features_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.store_features_label.setMinimumHeight(80)
+        self.store_features_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        store_page_layout.addWidget(self.store_features_label)
+
+        self.store_metadata_label = QLabel()
+        self.store_metadata_label.setObjectName("storeMetadata")
+        self.store_metadata_label.setWordWrap(True)
+        self.store_metadata_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.store_metadata_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        store_page_layout.addWidget(self.store_metadata_label)
+
+        store_links = QHBoxLayout()
+        self.btn_store_source = QPushButton(self.texts["wizard_source"])
+        self.btn_store_docs = QPushButton(self.texts["wizard_docs"])
+        self.btn_store_homepage = QPushButton(self.texts["wizard_homepage"])
+        store_links.addWidget(self.btn_store_source)
+        store_links.addWidget(self.btn_store_docs)
+        store_links.addWidget(self.btn_store_homepage)
+        store_links.addStretch()
+        store_page_layout.addLayout(store_links)
+
+        self.store_gallery_title = QLabel(self.texts["wizard_store_gallery"])
+        self.store_gallery_title.setObjectName("storeSectionTitle")
+        self.store_gallery_title.setVisible(False)
+        store_page_layout.addWidget(self.store_gallery_title)
+        gallery_layout = QHBoxLayout()
+        gallery_layout.setSpacing(8)
+        self.store_gallery_labels = []
+        for _index in range(3):
+            label = QLabel()
+            label.setObjectName("storeGalleryImage")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setMinimumSize(110, 74)
+            label.setMaximumHeight(112)
+            label.setVisible(False)
+            gallery_layout.addWidget(label, 1)
+            self.store_gallery_labels.append(label)
+        store_page_layout.addLayout(gallery_layout)
+        self.editor_tabs.addTab(self.store_tab, self.texts["wizard_store_tab"])
 
         self.setup_tab = QWidget()
+        self.setup_tab.setObjectName("storeSetupPage")
         setup_layout = QVBoxLayout(self.setup_tab)
         self.app_card = QFrame()
         self.app_card.setObjectName("catalogAppCard")
@@ -3910,6 +4901,17 @@ class NewContainerDialog(QDialog):
         self.extra_edit = QLineEdit()
         self.command_edit = QLineEdit()
         self.cli_combo = QComboBox()
+        configuration_field_height = max(30, self.fontMetrics().lineSpacing() + 12)
+        for configuration_field in (
+            self.name_edit,
+            self.image_edit,
+            self.cport_edit,
+            self.hport_edit,
+            self.extra_edit,
+            self.command_edit,
+            self.cli_combo,
+        ):
+            configuration_field.setMinimumHeight(configuration_field_height)
         for cli in self.cli_choices:
             self.cli_combo.addItem(cli, cli)
         if self.cli_command in self.cli_choices:
@@ -3966,6 +4968,7 @@ class NewContainerDialog(QDialog):
         self.editor_tabs.addTab(self.setup_tab, self.texts["wizard_setup_tab"])
 
         self.ai_tab = QWidget()
+        self.ai_tab.setObjectName("storeAiPage")
         ai_layout = QVBoxLayout(self.ai_tab)
         self.ai_hint_label = QLabel(self.texts["llm_use_saved"])
         self.ai_hint_label.setWordWrap(True)
@@ -4020,19 +5023,14 @@ class NewContainerDialog(QDialog):
         ai_layout.addLayout(ai_buttons)
         self.editor_tabs.addTab(self.ai_tab, self.texts["wizard_ai_tab"])
 
-        catalog_row.addWidget(self.editor_tabs, 2)
-        layout.addLayout(catalog_row)
-
-        buttons = QHBoxLayout()
-        self.btn_run = QPushButton(self.texts["wizard_apply"] if self.edit_mode else self.texts["wizard_run"])
-        self.btn_cancel = QPushButton(self.texts["wizard_cancel"])
-        buttons.addStretch()
-        buttons.addWidget(self.btn_run)
-        buttons.addWidget(self.btn_cancel)
-        layout.addLayout(buttons)
+        self.catalog_row.addWidget(self.editor_tabs, 3, Qt.AlignmentFlag.AlignTop)
+        self.editor_tabs.currentChanged.connect(lambda _index: self._fit_editor_tabs_height())
+        layout.addLayout(self.catalog_row)
 
         self.search_edit.textChanged.connect(self.filter_catalog)
         self.category_combo.currentIndexChanged.connect(self.filter_catalog)
+        self.category_combo.currentIndexChanged.connect(self._sync_category_sidebar_from_combo)
+        self.category_nav.currentRowChanged.connect(self._on_category_sidebar_changed)
         self.catalog_list.currentRowChanged.connect(self.apply_selected_template)
         self.cli_combo.currentIndexChanged.connect(self.on_cli_changed)
         for widget in [self.name_edit, self.image_edit, self.cport_edit, self.hport_edit, self.extra_edit, self.command_edit]:
@@ -4052,35 +5050,245 @@ class NewContainerDialog(QDialog):
         self.btn_app_docs.clicked.connect(lambda: self.open_selected_app_url("docs"))
         self.btn_app_homepage.clicked.connect(lambda: self.open_selected_app_url("homepage"))
         self.btn_quick_deploy.clicked.connect(self.on_run_clicked)
-        self.btn_run.clicked.connect(self.on_run_clicked)
-        self.btn_cancel.clicked.connect(self.reject)
+        self.btn_store_source.clicked.connect(lambda: self.open_selected_app_url("source"))
+        self.btn_store_docs.clicked.connect(lambda: self.open_selected_app_url("docs"))
+        self.btn_store_homepage.clicked.connect(lambda: self.open_selected_app_url("homepage"))
+        self.btn_store_primary.clicked.connect(self.on_store_primary_action)
 
+        self._populate_category_sidebar()
         self.filter_catalog()
         self.update_cli_labels()
         if self.initial_args:
             self.load_run_args(self.initial_args)
-        self.select_manual_configuration()
+            self.select_manual_configuration()
+        elif self.edit_mode:
+            self.select_manual_configuration()
+        elif self.catalog_list.count() > 0:
+            # Normal deployment opens as an application store.  Manual mode is
+            # still one click away and edit mode keeps the current container
+            # parameters visible instead of silently replacing them.
+            self.manual_configuration_mode = False
+            self.catalog_list.setCurrentRow(0)
+        else:
+            self.select_manual_configuration()
         self.load_ai_models(fetch=False)
         self.update_summary()
         QTimer.singleShot(250, lambda: self.refresh_external_catalogs(silent=True))
 
     def _catalog_visual_colors(self) -> Dict[str, str]:
-        if self.catalog_theme == "light":
+        palette = palette_for_theme(self.catalog_theme)
+        if self.catalog_theme in {"day", "light"}:
+            accent = QColor(self.catalog_accent)
+            hue, saturation, value, alpha = accent.getHsvF()
+            if hue >= 0 and value > 0.58:
+                accent = QColor.fromHsvF(hue, max(0.60, saturation), 0.50, alpha)
+            if self.catalog_theme == "day":
+                return {
+                    "accent": self.catalog_accent,
+                    "accent_text": accent.name(),
+                    "title": palette["fg"],
+                    "description": palette["muted"],
+                    "card_bg": "rgba(255, 255, 255, 142)",
+                    "surface": "rgba(255, 255, 255, 112)",
+                    "surface_alt": "rgba(235, 244, 248, 158)",
+                    "border": "rgba(74, 96, 108, 118)",
+                }
             return {
                 "accent": self.catalog_accent,
-                "title": "#14253d",
-                "description": "#4c6075",
-                "card_bg": "rgba(248, 252, 255, 238)",
+                "accent_text": accent.name(),
+                "title": palette["fg"],
+                "description": palette["muted"],
+                "card_bg": "rgba(248, 248, 249, 246)",
+                "surface": "rgba(232, 233, 236, 246)",
+                "surface_alt": "rgba(218, 220, 224, 242)",
+                "border": "rgba(110, 114, 122, 110)",
+            }
+        if self.catalog_theme == "dark":
+            return {
+                "accent": self.catalog_accent,
+                "accent_text": self.catalog_accent,
+                "title": palette["fg"],
+                "description": palette["muted"],
+                "card_bg": "rgba(39, 41, 46, 238)",
+                "surface": "rgba(29, 31, 35, 244)",
+                "surface_alt": "rgba(52, 54, 60, 238)",
+                "border": "rgba(118, 122, 132, 92)",
+            }
+        if self.catalog_theme == "night":
+            return {
+                "accent": self.catalog_accent,
+                "accent_text": self.catalog_accent,
+                "title": palette["fg"],
+                "description": palette["muted"],
+                "card_bg": "rgba(24, 18, 21, 244)",
+                "surface": "rgba(13, 10, 13, 248)",
+                "surface_alt": "rgba(38, 22, 27, 242)",
+                "border": "rgba(136, 55, 66, 120)",
             }
         return {
             "accent": self.catalog_accent,
-            "title": "#f4fbff",
-            "description": "#aebfce",
-            "card_bg": "rgba(9, 18, 30, 178)",
+            "accent_text": self.catalog_accent,
+            "title": palette["fg"],
+            "description": palette["muted"],
+            "card_bg": "rgba(24, 25, 28, 242)",
+            "surface": "rgba(14, 15, 17, 246)",
+            "surface_alt": "rgba(35, 37, 41, 240)",
+            "border": "rgba(112, 116, 124, 88)",
         }
 
     def _apply_catalog_card_style(self):
         colors = self._catalog_visual_colors()
+        if hasattr(self, "target_host_icon"):
+            self.target_host_icon.setPixmap(
+                make_category_icon("container", QColor(colors["accent"]), 18).pixmap(18, 18)
+            )
+        if hasattr(self, "target_host_frame"):
+            self.target_host_frame.setStyleSheet(
+                f"""
+                QFrame#storeTargetHostFrame {{
+                    border: 1px solid {colors['accent']};
+                    border-radius: 10px;
+                    background: {colors['surface_alt']};
+                }}
+                QLabel {{
+                    color: {colors['title']};
+                    background: transparent;
+                }}
+                """
+            )
+        self.store_toolbar_frame.setStyleSheet(
+            f"""
+            QFrame#storeToolbarFrame {{
+                border: 1px solid {colors['border']};
+                border-radius: 14px;
+                background: {colors['surface']};
+            }}
+            QLineEdit {{
+                border: 1px solid {colors['border']};
+                border-radius: 10px;
+                padding: 7px 11px;
+                background: {colors['card_bg']};
+                color: {colors['title']};
+            }}
+            QLabel {{ color: {colors['description']}; background: transparent; }}
+            """
+        )
+        self.store_browser_frame.setStyleSheet(
+            f"""
+            QFrame#storeBrowserFrame {{
+                border: 1px solid {colors['border']};
+                border-radius: 16px;
+                background: {colors['surface']};
+            }}
+            QLabel#storeColumnTitle {{
+                color: {colors['title']};
+                background: transparent;
+                font-weight: 800;
+                font-size: 12pt;
+                padding: 3px 4px 7px 4px;
+            }}
+            """
+        )
+        self.store_categories_frame.setStyleSheet(
+            f"""
+            QFrame#storeCategoriesFrame {{
+                border: 1px solid {colors['border']};
+                border-radius: 14px;
+                background: {colors['surface']};
+            }}
+            """
+        )
+        self.store_categories_title.setStyleSheet(
+            f"""
+            QLabel#storeColumnTitle {{
+                color: {colors['title']};
+                background: transparent;
+                font-weight: 800;
+                font-size: 10pt;
+                padding: 2px 10px 0px 10px;
+            }}
+            """
+        )
+        self.category_nav.setStyleSheet(
+            f"""
+            QListWidget#storeCategoryNav {{
+                border: none;
+                background: transparent;
+                outline: 0;
+            }}
+            QListWidget#storeCategoryNav::item {{
+                color: {colors['description']};
+                border: 1px solid {colors['border']};
+                border-radius: 9px;
+                background: {colors['card_bg']};
+                padding: 3px 8px;
+                margin: 1px;
+            }}
+            QListWidget#storeCategoryNav::item:hover {{
+                color: {colors['title']};
+                background: {colors['surface_alt']};
+            }}
+            QListWidget#storeCategoryNav::item:selected {{
+                color: {colors['title']};
+                border: 1px solid {colors['accent']};
+                background: {colors['surface_alt']};
+                font-weight: 700;
+            }}
+            """
+        )
+        self.editor_tabs.setStyleSheet(
+            f"""
+            QTabWidget#storeEditorTabs::pane {{
+                border: 1px solid {colors['border']};
+                border-radius: 12px;
+                background: {colors['surface']};
+                top: -1px;
+            }}
+            QTabWidget#storeEditorTabs QTabBar::tab {{
+                color: {colors['description']};
+                background: {colors['card_bg']};
+                border: 1px solid {colors['border']};
+                border-bottom: none;
+                padding: 6px 12px;
+                margin-right: 2px;
+            }}
+            QTabWidget#storeEditorTabs QTabBar::tab:selected {{
+                color: {colors['title']};
+                background: {colors['surface_alt']};
+                border-color: {colors['accent']};
+                font-weight: 700;
+            }}
+            QWidget#storeDescriptionPage,
+            QWidget#storeSetupPage,
+            QWidget#storeAiPage {{
+                background: {colors['surface']};
+            }}
+            """
+        )
+        self.catalog_list.setStyleSheet(
+            f"""
+            QListWidget#storeCatalogList {{
+                border: none;
+                background: transparent;
+                outline: 0;
+            }}
+            QListWidget#storeCatalogList::item {{
+                border: 1px solid {colors['border']};
+                border-radius: 12px;
+                background: {colors['card_bg']};
+                margin: 2px 1px;
+                padding: 2px;
+            }}
+            QListWidget#storeCatalogList::item:hover {{
+                border: 1px solid {colors['accent']};
+                background: {colors['surface_alt']};
+            }}
+            QListWidget#storeCatalogList::item:selected {{
+                border: 2px solid {colors['accent']};
+                background: {colors['surface_alt']};
+            }}
+            """
+        )
         self.app_card.setStyleSheet(
             f"""
             QFrame#catalogAppCard {{
@@ -4095,7 +5303,7 @@ class NewContainerDialog(QDialog):
                 font-weight: 700;
             }}
             QLabel#catalogAppCategory {{
-                color: {colors['accent']};
+                color: {colors['accent_text']};
                 border: none;
                 background: transparent;
                 font-weight: 600;
@@ -4107,13 +5315,261 @@ class NewContainerDialog(QDialog):
             }}
             """
         )
+        self.store_hero_card.setStyleSheet(
+            f"""
+            QFrame#storeHeroCard {{
+                border: 1px solid {colors['accent']};
+                border-radius: 14px;
+                background: {colors['card_bg']};
+            }}
+            QLabel#storeTitle {{ color: {colors['title']}; background: transparent; }}
+            QLabel#storeCategory {{ color: {colors['accent_text']}; background: transparent; font-weight: 700; }}
+            QLabel#storeInstallState {{ color: {colors['description']}; background: transparent; }}
+            """
+        )
+        self.store_hero_image.setStyleSheet(
+            f"border: 1px solid {colors['accent']}; border-radius: 12px; "
+            f"background: {colors['card_bg']}; color: {colors['description']};"
+        )
+        for label in self.store_gallery_labels:
+            label.setStyleSheet(
+                f"border: 1px solid {colors['accent']}; border-radius: 10px; "
+                f"background: {colors['card_bg']}; color: {colors['description']}; padding: 4px;"
+            )
+        self.store_description_label.setStyleSheet(f"color: {colors['title']}; background: transparent;")
+        self.store_features_title.setStyleSheet(f"color: {colors['accent']}; background: transparent; font-weight: 700;")
+        self.store_gallery_title.setStyleSheet(f"color: {colors['accent']}; background: transparent; font-weight: 700;")
+        self.store_features_label.setStyleSheet(f"color: {colors['description']}; background: transparent;")
+        self.store_metadata_label.setStyleSheet(f"color: {colors['description']}; background: transparent;")
+
+    def _catalog_category_group(self, category: str) -> str:
+        raw = str(category or "")
+        if raw == self.texts["wizard_all_categories"]:
+            return raw
+        if raw == self.texts["wizard_installed_category"]:
+            return raw
+        if raw == self.texts["wizard_balena_category"]:
+            return raw
+        head = re.split(r"\s*[›/]\s*", raw, maxsplit=1)[0].strip()
+        # Repository categories may contain emoji.  Keep them in catalog data,
+        # but do not render them in the navigation because some Qt/font stacks
+        # display them as tofu squares instead of glyphs.
+        while head and not head[-1].isalnum():
+            head = head[:-1].rstrip()
+        return head or raw
+
+    def _category_icon_kind(self, category: str) -> str:
+        value = str(category or "").casefold()
+        if category == self.texts["wizard_all_categories"]:
+            return "all"
+        if category == self.texts["wizard_installed_category"]:
+            return "installed"
+        if category == self.texts["wizard_balena_category"]:
+            return "container"
+        if value.startswith("ai"):
+            return "ai"
+        if "automat" in value:
+            return "automation"
+        if "monitor" in value:
+            return "monitor"
+        if "anality" in value or "analytics" in value or "finan" in value:
+            return "analytics"
+        if "sie" in value or "network" in value:
+            return "network"
+        if "bezpie" in value or "security" in value:
+            return "security"
+        if "backup" in value or "kopi" in value:
+            return "backup"
+        if "bazy" in value or "database" in value or "cache" in value:
+            return "database"
+        if "www" in value or "web" in value:
+            return "web"
+        if "smart home" in value or "iot" in value:
+            return "home"
+        if "media" in value:
+            return "media"
+        if "devops" in value:
+            return "devops"
+        if "runtime" in value or "system" in value or "baza" in value:
+            return "system"
+        if "powiad" in value or "messag" in value:
+            return "messaging"
+        if "produkt" in value:
+            return "productivity"
+        if "narz" in value or "tools" in value or "admin" in value:
+            return "tools"
+        return "generic"
+
+    def _populate_category_sidebar(self):
+        if not hasattr(self, "category_nav"):
+            return
+        current = self.category_combo.currentText()
+        previous_block = self.category_nav.blockSignals(True)
+        self.category_nav.clear()
+        colors = self._catalog_visual_colors()
+        accent = QColor(colors["accent"])
+        accent_text = QColor(colors["accent_text"])
+        special_bg = QColor(accent)
+        special_bg.setAlpha(34)
+        for index in range(self.category_combo.count()):
+            category = self.category_combo.itemText(index)
+            item = QListWidgetItem(category)
+            item.setData(Qt.ItemDataRole.UserRole, category)
+            item.setToolTip(category)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            item.setIcon(make_category_icon(self._category_icon_kind(category), accent, 16))
+            if category in {self.texts["wizard_all_categories"], self.texts["wizard_installed_category"]}:
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
+                item.setForeground(QBrush(accent_text))
+                item.setBackground(QBrush(special_bg))
+            self.category_nav.addItem(item)
+        self.category_nav.blockSignals(previous_block)
+        row = self.category_combo.findText(current)
+        self.category_nav.setCurrentRow(max(0, row))
+        QTimer.singleShot(0, self._update_category_nav_height)
+
+    def _update_category_nav_height(self):
+        if not hasattr(self, "category_nav") or self.category_nav.count() <= 0:
+            return
+        viewport_width = self.category_nav.viewport().width()
+        available = max(260, viewport_width if viewport_width > 80 else self.width() - 40)
+        count = self.category_nav.count()
+        spacing = self.category_nav.spacing()
+        tile_height = 34
+        icon_and_gap = self.category_nav.iconSize().width() + 6
+        # Account for the stylesheet's padding, border and item margins in
+        # addition to the icon/text gap.  The former 20 px allowance was too
+        # small for longer translated labels and clipped their final letters.
+        horizontal_chrome = 40
+
+        # Every chip follows the full label width with breathing room around
+        # it.  Only a label wider than the whole viewport is constrained.
+        self.category_nav.setGridSize(QSize())
+        tile_widths: List[int] = []
+        for index in range(count):
+            item = self.category_nav.item(index)
+            metrics = QFontMetrics(item.font())
+            text_width = metrics.horizontalAdvance(item.text())
+            tile_height = max(tile_height, metrics.lineSpacing() + 14)
+            tile_width = max(88, text_width + icon_and_gap + horizontal_chrome)
+            tile_width = max(88, min(tile_width, max(88, available - spacing * 2)))
+            tile_widths.append(tile_width)
+            item.setSizeHint(QSize(tile_width, tile_height))
+
+        # Calculate the wrapped rows ourselves so the viewport is already tall
+        # enough before Qt lays out the items.  This prevents an invisible
+        # scroll range and guarantees that every category remains on screen.
+        rows = 1
+        used_width = 0
+        row_limit = max(88, available - spacing)
+        for tile_width in tile_widths:
+            needed = tile_width if used_width == 0 else spacing + tile_width
+            if used_width and used_width + needed > row_limit:
+                rows += 1
+                used_width = tile_width
+            else:
+                used_width += needed
+        bottom_breathing_room = 12
+        nav_height = rows * tile_height + (rows + 1) * spacing + bottom_breathing_room
+        self.category_nav.setFixedHeight(nav_height)
+        self.category_nav.doItemsLayout()
+
+        # Keep a final safety margin when the platform style adds extra pixels.
+        bottom = 0
+        for index in range(count):
+            rect = self.category_nav.visualItemRect(self.category_nav.item(index))
+            if rect.isValid():
+                bottom = max(bottom, rect.bottom() + 1)
+        nav_height = max(nav_height, bottom + bottom_breathing_room)
+        if self.category_nav.height() != nav_height:
+            self.category_nav.setFixedHeight(nav_height)
+        self.category_nav.lock_scroll_position()
+
+        if hasattr(self, "store_categories_frame") and hasattr(self, "store_categories_title"):
+            frame_layout = self.store_categories_frame.layout()
+            margins = frame_layout.contentsMargins()
+            frame_height = (
+                margins.top()
+                + nav_height
+                + margins.bottom()
+            )
+            if self.store_categories_frame.height() != frame_height:
+                self.store_categories_frame.setFixedHeight(frame_height)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "category_nav"):
+            QTimer.singleShot(0, self._update_category_nav_height)
+        if hasattr(self, "catalog_row"):
+            QTimer.singleShot(0, self._update_store_responsive_layout)
+
+    def _update_store_responsive_layout(self):
+        if not hasattr(self, "catalog_row"):
+            return
+        viewport_width = self.dialog_scroll_area.viewport().width() if hasattr(self, "dialog_scroll_area") else self.width()
+        compact = viewport_width < 1020
+        direction = QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+        if self.catalog_row.direction() != direction:
+            self.catalog_row.setDirection(direction)
+        narrow_direction = QBoxLayout.Direction.TopToBottom if viewport_width < 650 else QBoxLayout.Direction.LeftToRight
+        if hasattr(self, "store_header_actions") and self.store_header_actions.direction() != narrow_direction:
+            self.store_header_actions.setDirection(narrow_direction)
+        if compact:
+            self.store_browser_frame.setMinimumHeight(300)
+            self.store_browser_frame.setMaximumHeight(360)
+        else:
+            self.store_browser_frame.setMinimumHeight(0)
+            self.store_browser_frame.setMaximumHeight(16777215)
+        self._fit_editor_tabs_height()
+
+    def _fit_editor_tabs_height(self):
+        if not hasattr(self, "editor_tabs"):
+            return
+        current = self.editor_tabs.currentWidget()
+        if current is None:
+            return
+        current_layout = current.layout()
+        if current_layout is not None:
+            current_layout.activate()
+        desired = current.sizeHint().height() + self.editor_tabs.tabBar().sizeHint().height() + 12
+        if current is self.store_tab:
+            # The outer dialog already scrolls.  Let the description page use
+            # its full natural height so hero media, description and feature
+            # text cannot be compressed into overlapping rectangles.
+            desired = max(230, desired)
+        else:
+            desired = max(360, min(desired, 760))
+        self.editor_tabs.setMaximumHeight(desired)
+        self.editor_tabs.updateGeometry()
+
+    def _on_category_sidebar_changed(self, row: int):
+        if row < 0 or row >= self.category_nav.count():
+            return
+        category = str(self.category_nav.item(row).data(Qt.ItemDataRole.UserRole) or "")
+        index = self.category_combo.findText(category)
+        if index >= 0 and index != self.category_combo.currentIndex():
+            self.category_combo.setCurrentIndex(index)
+
+    def _sync_category_sidebar_from_combo(self):
+        if not hasattr(self, "category_nav"):
+            return
+        category = self.category_combo.currentText()
+        for row in range(self.category_nav.count()):
+            if self.category_nav.item(row).data(Qt.ItemDataRole.UserRole) == category:
+                if self.category_nav.currentRow() != row:
+                    previous_block = self.category_nav.blockSignals(True)
+                    self.category_nav.setCurrentRow(row)
+                    self.category_nav.blockSignals(previous_block)
+                break
 
     def _catalog_list_item_widget(self, template: ImageTemplate, badges: str, description: str) -> QWidget:
         colors = self._catalog_visual_colors()
         card = QWidget()
         card.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         row = QHBoxLayout(card)
-        row.setContentsMargins(5, 4, 8, 4)
+        row.setContentsMargins(5, 6, 8, 6)
         row.setSpacing(10)
 
         icon_label = QLabel()
@@ -4139,8 +5595,10 @@ class NewContainerDialog(QDialog):
             f"color: {colors['accent']}; background: transparent; font-weight: 600;"
         )
 
-        description_label = QLabel(description)
-        description_label.setWordWrap(True)
+        description_label = TwoLineElideLabel(description)
+        description_height = QFontMetrics(description_label.font()).lineSpacing() * 2 + 6
+        description_label.setMinimumHeight(description_height)
+        description_label.setMaximumHeight(description_height)
         description_label.setStyleSheet(
             f"color: {colors['description']}; background: transparent;"
         )
@@ -4152,6 +5610,16 @@ class NewContainerDialog(QDialog):
         row.addLayout(text_column, 1)
         return card
 
+    def catalog_category_names(self) -> List[str]:
+        categories = {
+            self._catalog_category_group(item.category_for(self.lang))
+            for item in self.catalog
+            if item.category_for(self.lang)
+        }
+        if any(item.supports_engine("balena") for item in self.catalog):
+            categories.add(self.texts["wizard_balena_category"])
+        return sorted(categories, key=catalog_category_sort_key)
+
     def filter_catalog(self):
         selected = self.selected_catalog_template()
         selected_key = (selected.name.lower(), selected.image.lower()) if selected else None
@@ -4159,23 +5627,40 @@ class NewContainerDialog(QDialog):
         category = self.category_combo.currentText().strip()
         self.filtered_catalog = []
         engine = self.current_cli()
+        balena_view = category == self.texts["wizard_balena_category"]
+        installed_view = category == self.texts["wizard_installed_category"]
+        installed_containers = []
+        if installed_view:
+            try:
+                installed_containers = list(self.client.containers.list(all=True))
+            except Exception:
+                installed_containers = []
         previous_block = self.catalog_list.blockSignals(True)
         self.catalog_list.clear()
         for item in self.catalog:
-            if not item.supports_engine(engine):
+            if balena_view:
+                if not item.supports_engine("balena"):
+                    continue
+            elif not item.supports_engine(engine):
                 continue
             if self.remote_arch and not item.supports_arch(self.remote_arch):
                 continue
-            if category and category != self.texts["wizard_all_categories"] and item.category_for(self.lang) != category:
+            if installed_view and not any(template_matches_container(item, container) for container in installed_containers):
+                continue
+            if (
+                not balena_view
+                and not installed_view
+                and category
+                and category != self.texts["wizard_all_categories"]
+                and self._catalog_category_group(item.category_for(self.lang)) != category
+            ):
                 continue
             haystack = f"{item.name} {item.image} {item.description_for(self.lang)} {item.notes_for(self.lang)}"
             if query and query not in haystack.lower():
                 continue
             self.filtered_catalog.append(item)
             description = re.sub(r"\s+", " ", item.description_for(self.lang)).strip()
-            if len(description) > 86:
-                description = description[:83].rstrip() + "..."
-            badges = item.category_for(self.lang)
+            badges = self._catalog_category_group(item.category_for(self.lang))
             if item.lightweight:
                 badges += " \u00b7 light"
             if "balena" in [str(engine).lower() for engine in (item.engines or [])]:
@@ -4186,8 +5671,10 @@ class NewContainerDialog(QDialog):
             if description:
                 label += f"\n{description}"
             list_item = QListWidgetItem()
-            list_item.setText(label)
-            list_item.setSizeHint(QSize(330, 86 if description else 64))
+            list_item.setData(Qt.ItemDataRole.AccessibleTextRole, label)
+            # Roughly 10% more height than the old 86/64 px rows.  This also
+            # leaves enough room for descenders on the second description line.
+            list_item.setSizeHint(QSize(320, 95 if description else 70))
             tooltip = f"{item.name}\n{item.image}"
             if item.source_url:
                 tooltip += f"\n{item.source_url}"
@@ -4233,9 +5720,13 @@ class NewContainerDialog(QDialog):
             self.app_description_label.setText("")
             for button in (self.btn_app_source, self.btn_app_docs, self.btn_app_homepage, self.btn_quick_deploy):
                 button.setEnabled(False)
+            self.btn_quick_deploy.setText(
+                self.texts["wizard_apply"] if self.edit_mode else self.texts["wizard_quick_deploy"]
+            )
+            self.update_store_description(None)
             return
         self.app_title_label.setText(template.name)
-        self.app_category_label.setText(template.category_for(self.lang))
+        self.app_category_label.setText(self._catalog_category_group(template.category_for(self.lang)))
         self.app_category_label.setVisible(True)
         description = template.description_for(self.lang) or template.image
         if template.latest_release:
@@ -4244,7 +5735,11 @@ class NewContainerDialog(QDialog):
         self.btn_app_source.setEnabled(bool(template.source_url))
         self.btn_app_docs.setEnabled(bool(template.docs_url))
         self.btn_app_homepage.setEnabled(bool(template.homepage_url))
-        self.btn_quick_deploy.setEnabled(not self.edit_mode)
+        self.btn_quick_deploy.setText(
+            self.texts["wizard_apply"] if self.edit_mode else self.texts["wizard_quick_deploy"]
+        )
+        self.btn_quick_deploy.setEnabled(True)
+        self.update_store_description(template)
 
     def update_manual_store_card(self):
         image = self.image_edit.text().strip()
@@ -4262,7 +5757,195 @@ class NewContainerDialog(QDialog):
             self.app_description_label.setText(self.texts["wizard_manual_description"])
         for button in (self.btn_app_source, self.btn_app_docs, self.btn_app_homepage):
             button.setEnabled(False)
-        self.btn_quick_deploy.setEnabled(not self.edit_mode)
+        self.btn_quick_deploy.setText(
+            self.texts["wizard_apply"] if self.edit_mode else self.texts["wizard_run"]
+        )
+        self.btn_quick_deploy.setEnabled(True)
+        self.update_store_description(None)
+
+    def matching_installed_containers(self, template: Optional[ImageTemplate]) -> List[object]:
+        if template is None:
+            return []
+        try:
+            containers = self.client.containers.list(all=True)
+        except Exception:
+            return []
+        return [container for container in containers if template_matches_container(template, container)]
+
+    def _store_media_cache_path(self, url: str) -> Path:
+        suffix = Path(QUrl(url).path()).suffix.lower()
+        if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+            suffix = ".img"
+        return STORE_MEDIA_CACHE_DIR / (hashlib.sha256(url.encode("utf-8")).hexdigest() + suffix)
+
+    def _set_store_pixmap(self, label: QLabel, data: bytes, hero: bool = False) -> bool:
+        pixmap = QPixmap()
+        if not data or not pixmap.loadFromData(data):
+            return False
+        label.setText("")
+        if isinstance(label, AspectRatioPixmapLabel):
+            label.setSourcePixmap(pixmap)
+        else:
+            target = QSize(230, 125)
+            scaled = pixmap.scaled(
+                target,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            label.setPixmap(scaled)
+        label.setVisible(True)
+        if hasattr(self, "store_gallery_labels") and label in self.store_gallery_labels:
+            self.store_gallery_title.setVisible(True)
+        if hasattr(self, "editor_tabs"):
+            QTimer.singleShot(0, self._fit_editor_tabs_height)
+        return True
+
+    def load_store_image(self, url: str, label: QLabel, hero: bool = False, generation: Optional[int] = None):
+        url = str(url or "").strip()
+        if not url:
+            return
+        qurl = QUrl(url)
+        if qurl.isLocalFile():
+            try:
+                self._set_store_pixmap(label, Path(qurl.toLocalFile()).read_bytes(), hero=hero)
+            except Exception:
+                pass
+            return
+        if not re.match(r"^https?://", url, re.IGNORECASE):
+            return
+        cache_path = self._store_media_cache_path(url)
+        try:
+            if cache_path.exists() and cache_path.stat().st_size > 0:
+                self._set_store_pixmap(label, cache_path.read_bytes(), hero=hero)
+                return
+        except Exception:
+            pass
+        request = QNetworkRequest(qurl)
+        request.setRawHeader(b"User-Agent", f"DCC/{APP_VERSION}".encode("ascii", errors="ignore"))
+        reply = self.store_network.get(request)
+        expected_generation = self._store_media_generation if generation is None else generation
+
+        def finished():
+            try:
+                if expected_generation != self._store_media_generation:
+                    return
+                data = bytes(reply.readAll())
+                if data:
+                    try:
+                        cache_path.write_bytes(data)
+                    except Exception:
+                        pass
+                    self._set_store_pixmap(label, data, hero=hero)
+            finally:
+                reply.deleteLater()
+
+        reply.finished.connect(finished)
+
+    def update_store_description(self, template: Optional[ImageTemplate]):
+        self._store_media_generation += 1
+        generation = self._store_media_generation
+        self.store_hero_image.clear()
+        self.store_hero_image.setVisible(False)
+        self.store_gallery_title.setVisible(False)
+        for label in self.store_gallery_labels:
+            label.clear()
+            label.setVisible(False)
+        if template is None:
+            title = self.texts["wizard_current_container_title"].format(name=self.existing_name) if self.edit_mode and self.existing_name else self.texts["wizard_manual_title"]
+            self.store_title_label.setText(title)
+            self.store_category_label.setText("")
+            self.store_description_label.setText(self.texts["wizard_manual_description"])
+            self.store_features_label.setText("")
+            self.store_features_title.setVisible(False)
+            self.store_features_label.setVisible(False)
+            self.store_metadata_label.setText("")
+            self.store_install_state_label.setText("")
+            self.store_icon_label.clear()
+            self.btn_store_primary.setEnabled(False)
+            for button in (self.btn_store_source, self.btn_store_docs, self.btn_store_homepage):
+                button.setEnabled(False)
+            return
+
+        self.store_title_label.setText(template.name)
+        self.store_category_label.setText(self._catalog_category_group(template.category_for(self.lang)))
+        self.store_description_label.setText(template.store_description_for(self.lang) or template.description_for(self.lang) or template.image)
+        features = template.features_for(self.lang)
+        features_text = "\n".join(f"- {item}" for item in features) if features else (template.notes_for(self.lang) or "")
+        self.store_features_label.setText(features_text)
+        self.store_features_title.setVisible(bool(features_text))
+        self.store_features_label.setVisible(bool(features_text))
+        requirements = []
+        if template.latest_release:
+            requirements.append(self.texts["wizard_latest_release"].format(version=template.latest_release))
+        if template.ram_min_mb:
+            requirements.append(f"RAM ≥ {template.ram_min_mb} MB")
+        if template.gpu:
+            requirements.append("GPU")
+        if template.compose_required:
+            requirements.append("Docker Compose")
+        if template.archs:
+            requirements.append("Arch: " + ", ".join(template.archs))
+        if template.requires:
+            requirements.append("Requires: " + ", ".join(template.requires))
+        engines = ", ".join(template.engines or ["docker"])
+        requirements.append("Engine: " + engines)
+        self.store_metadata_label.setText("  ·  ".join(requirements))
+
+        self.store_icon_label.setPixmap(deployment_catalog_icon(template).pixmap(78, 78))
+        if template.icon_url:
+            self.load_store_image(resolve_catalog_media_source(template, template.icon_url), self.store_icon_label, hero=False, generation=generation)
+        gallery = list(template.gallery or [])
+        hero_url = template.hero_image_url or (gallery[0].get("url", "") if gallery else "")
+        if hero_url:
+            self.load_store_image(resolve_catalog_media_source(template, hero_url), self.store_hero_image, hero=True, generation=generation)
+        for label, entry in zip(self.store_gallery_labels, gallery[:3]):
+            url = str(entry.get("url") or "")
+            if url:
+                caption = str(entry.get("caption_en") if self.lang == "EN" and entry.get("caption_en") else entry.get("caption") or "")
+                label.setToolTip(caption)
+                self.load_store_image(resolve_catalog_media_source(template, url), label, hero=False, generation=generation)
+
+        self.btn_store_source.setEnabled(bool(template.source_url))
+        self.btn_store_docs.setEnabled(bool(template.docs_url))
+        self.btn_store_homepage.setEnabled(bool(template.homepage_url))
+        installed = self.matching_installed_containers(template)
+        if installed:
+            self.store_install_state_label.setText(self.texts["wizard_store_installed"] + f" · {len(installed)}")
+            self.btn_store_primary.setText(self.texts["wizard_store_uninstall"])
+        else:
+            self.store_install_state_label.setText(self.texts["wizard_store_not_installed"])
+            self.btn_store_primary.setText(self.texts["wizard_store_install"])
+        self.btn_store_primary.setEnabled(not self.edit_mode)
+        self._fit_editor_tabs_height()
+
+    def on_store_primary_action(self):
+        template = self.selected_catalog_template()
+        if template is None:
+            return
+        installed = self.matching_installed_containers(template)
+        if not installed:
+            self.on_run_clicked()
+            return
+        names = [str(getattr(container, "name", "") or "?") for container in installed]
+        reply = QMessageBox.question(
+            self,
+            self.texts["wizard_store_uninstall_title"],
+            self.texts["wizard_store_uninstall_confirm"].format(count=len(installed), names="\n".join(names)),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            for container in installed:
+                container.remove(force=True)
+        except Exception as exc:
+            QMessageBox.critical(self, self.texts["msg_error"], str(exc))
+            return
+        QMessageBox.information(self, self.texts["msg_info"], self.texts["wizard_store_uninstall_done"])
+        if self.category_combo.currentText().strip() == self.texts["wizard_installed_category"]:
+            self.filter_catalog()
+        else:
+            self.update_store_description(template)
 
     def select_manual_configuration(self):
         self.manual_configuration_mode = True
@@ -4290,16 +5973,15 @@ class NewContainerDialog(QDialog):
         self.category_combo.blockSignals(True)
         self.category_combo.clear()
         self.category_combo.addItem(self.texts["wizard_all_categories"])
-        for category in sorted(
-            {item.category_for(self.lang) for item in self.catalog if item.category_for(self.lang)},
-            key=catalog_category_sort_key,
-        ):
+        self.category_combo.addItem(self.texts["wizard_installed_category"])
+        for category in self.catalog_category_names():
             self.category_combo.addItem(category)
         if current:
             index = self.category_combo.findText(current)
             if index >= 0:
                 self.category_combo.setCurrentIndex(index)
         self.category_combo.blockSignals(False)
+        self._populate_category_sidebar()
 
     def manage_catalog_repositories(self):
         dialog = CatalogRepositoryDialog(self.repository_sources, self.texts, self)
@@ -4337,10 +6019,7 @@ class NewContainerDialog(QDialog):
     def on_external_catalog_refresh_finished(self, refreshed: List[ImageTemplate], errors: List[str]):
         self.external_catalog = list(refreshed)
         save_cached_deployment_catalog(self.external_catalog)
-        merged = {}
-        for item in self.base_catalog + self.external_catalog:
-            merged[(item.name.lower(), item.image.lower())] = item
-        self.catalog = list(merged.values())
+        self.catalog = merge_catalog_lists(self.base_catalog, self.external_catalog)
         self.rebuild_catalog_categories()
         self.filter_catalog()
 
@@ -4415,8 +6094,17 @@ class NewContainerDialog(QDialog):
         extra = self.extra_edit.text().strip()
         command = self.command_edit.text().strip()
         args = ["run", "-d"]
-        if self.selected_catalog_template() is not None and self.current_cli() == "docker":
-            args.extend(["--pull", "always"])
+        selected_template = self.selected_catalog_template()
+        if selected_template is not None and self.current_cli() == "docker":
+            # Catalog images normally refresh before deployment. Source-built
+            # applications are different: the image was just built locally on
+            # the selected host and may not exist in any registry at all.
+            # Explicitly prevent Docker from trying Docker Hub after a
+            # successful source build (e.g. SmartWAN Manager).
+            if selected_template.build_context:
+                args.extend(["--pull", "never"])
+            else:
+                args.extend(["--pull", "always"])
         if name:
             args.extend(["--name", name])
         if cport:
@@ -4791,11 +6479,46 @@ class NewContainerDialog(QDialog):
             "Current containers:\n" + ("\n".join(lines) if lines else "- none")
         )
 
+    def collect_post_install_access_details(self, args: List[str], template: Optional[ImageTemplate]) -> List[tuple[str, str]]:
+        name = container_name_from_run_args(args)
+        if not name:
+            return []
+        for attempt in range(8):
+            try:
+                container = self.client.containers.get(name)
+                raw = container.logs(tail=300)
+                if isinstance(raw, bytes):
+                    log_text = raw.decode("utf-8", errors="ignore")
+                else:
+                    log_text = str(raw or "")
+                detected = parse_credentials_from_logs(log_text, template, self.lang)
+                if detected:
+                    return detected
+            except Exception:
+                pass
+            if attempt < 7:
+                QApplication.processEvents()
+                time.sleep(0.25)
+        return []
+
     def on_run_clicked(self):
+        selected_template = self.selected_catalog_template()
         image = self.image_edit.text().strip()
         if not image:
             QMessageBox.warning(self, self.texts["msg_error"], self.texts["wizard_image"])
             return
+        if (
+            selected_template is not None
+            and selected_template.build_context
+            and not self.edit_mode
+            and self.build_image_callback is not None
+        ):
+            try:
+                if self.build_image_callback(selected_template) is False:
+                    return
+            except Exception as exc:
+                QMessageBox.critical(self, self.texts["msg_error"], str(exc))
+                return
         args = self.build_run_args()
         usage = self.get_port_usage(self.existing_name if self.edit_mode else "")
         try:
@@ -4850,7 +6573,23 @@ class NewContainerDialog(QDialog):
             QMessageBox.critical(self, self.texts["msg_error"], str(exc))
             return
         done_text = self.texts["wizard_recreate_done"] if self.edit_mode else self.texts["wizard_done"]
-        QMessageBox.information(self, self.texts["msg_info"], done_text)
+        access_details_shown = False
+        if not self.edit_mode:
+            credentials = self.collect_post_install_access_details(args, selected_template)
+            hints = selected_template.post_install_hints_for(self.lang) if selected_template else []
+            if credentials or hints:
+                access_details_shown = True
+                details = [done_text, "", self.texts["wizard_credentials_intro"]]
+                details.extend(f"{label}: {value}" for label, value in credentials)
+                if hints:
+                    details.append("")
+                    details.extend(f"• {hint}" for hint in hints)
+                done_text = "\n".join(details)
+        QMessageBox.information(
+            self,
+            self.texts["wizard_credentials_title"] if access_details_shown else self.texts["msg_info"],
+            done_text,
+        )
         self.accept()
 
 class SimpleImageRef:
@@ -6382,7 +8121,7 @@ class MainWindow(QMainWindow):
         self.migrate_legacy_secret_settings()
         self.remote_profiles = self.profile_store.load()
         self.current_theme = self.settings.value("theme", "black")
-        if self.current_theme not in {"light", "dark", "black"}:
+        if self.current_theme not in {"light", "day", "dark", "black", "night"}:
             self.current_theme = "black"
         self.transparent_mode = str(self.settings.value("transparent_mode", "false")).lower() in {"1", "true", "yes"}
         self.transparency_level = int(self.settings.value("transparency_level", 72))
@@ -6411,6 +8150,9 @@ class MainWindow(QMainWindow):
         self.status_icon_stopped = make_colored_icon(QColor("red"))
         self.host_status_icon_running = make_colored_icon(QColor("lime"), size=12)
         self.host_status_icon_off = make_colored_icon(QColor("red"), size=12)
+        self._container_metrics_text = ""
+        self._host_metrics_tooltip_text = self.texts["host_metrics_unknown"]
+        self._infra_activity_text = ""
         self.client: Optional[docker.DockerClient] = None
         self.last_containers: List[object] = []
         self.container_by_name: Dict[str, object] = {}
@@ -6932,7 +8674,7 @@ class MainWindow(QMainWindow):
             (self.btn_start, "\u25b6", 38),
             (self.btn_stop, "\u25a0", 38),
             (self.btn_restart, "\u21ba", 38),
-            (self.btn_new, "+", 38),
+            (self.btn_new, self.texts["btn_shop_short"], 88),
             (self.btn_autostart_on, "A\u2713", 42),
             (self.btn_autostart_off, "A\u00d7", 42),
             (self.btn_pause, "\u2161", 38),
@@ -6949,6 +8691,7 @@ class MainWindow(QMainWindow):
             button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
             button.setObjectName("containerAction")
             button.setMaximumHeight(30)
+        self.btn_new.setObjectName("shopButton")
         top_layout.addWidget(self.container_section_title)
         for button in primary_container_buttons:
             top_layout.addWidget(button)
@@ -6978,6 +8721,8 @@ class MainWindow(QMainWindow):
         self.infra_info_button.setMinimumWidth(300)
         self.infra_info_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.infra_info_button.setToolTip(self.texts["infra_unknown"])
+        self.infra_info_button.setIcon(make_terminal_icon(QColor(effective_accent_color(self.current_theme, self.accent_color)), 16))
+        self.infra_info_button.setIconSize(QSize(16, 16))
 
         self.btn_host_restart = QPushButton(self.texts["btn_host_restart"])
         self.btn_host_restart.setObjectName("profileAction")
@@ -6985,10 +8730,6 @@ class MainWindow(QMainWindow):
         self.btn_host_restart.setIconSize(QPixmap(12, 12).size())
         self.btn_host_restart.setMinimumWidth(170)
         self.btn_host_restart.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.host_metrics_label = QLabel(self.texts["host_metrics_unknown"])
-        self.host_metrics_label.setWordWrap(False)
-        self.host_metrics_label.setMaximumWidth(420)
-        self.host_metrics_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.column_magnet_checkbox = QCheckBox(self.texts["column_magnet"])
         self.column_magnet_checkbox.setChecked(self.container_column_magnet)
         self.column_magnet_checkbox.setToolTip(self.texts["column_magnet_tooltip"])
@@ -7009,7 +8750,7 @@ class MainWindow(QMainWindow):
         infra_layout.addWidget(self.container_search)
         infra_layout.addWidget(self.group_by_label)
         infra_layout.addWidget(self.group_by_combo)
-        infra_layout.addWidget(self.host_metrics_label, 1)
+        infra_layout.addStretch(1)
         infra_layout.addWidget(self.column_magnet_checkbox, 0)
         view_panel_layout.addLayout(infra_layout)
 
@@ -7143,6 +8884,13 @@ class MainWindow(QMainWindow):
         menubar.clear()
         self.file_menu = QMenu(self.texts["menu_file"], self)
         menubar.addMenu(self.file_menu)
+        self.action_store = self.file_menu.addAction(self.texts["menu_store"])
+        store_action_font = self.action_store.font()
+        store_action_font.setBold(True)
+        self.action_store.setFont(store_action_font)
+        self.action_store.setIcon(make_category_icon("all", QColor(effective_accent_color(self.current_theme, self.accent_color)), 16))
+        self.action_store.triggered.connect(self.open_new_container_wizard)
+        self.file_menu.addSeparator()
         self.action_profiles_import = self.file_menu.addAction(self.texts["menu_profiles_import"])
         self.action_profiles_import.triggered.connect(self.import_profiles_from_file)
         self.action_profiles_export = self.file_menu.addAction(self.texts["menu_profiles_export"])
@@ -7160,12 +8908,16 @@ class MainWindow(QMainWindow):
 
         self.theme_menu = QMenu(self.texts["menu_theme"], self)
         self.view_menu.addMenu(self.theme_menu)
+        self.action_theme_day = self.theme_menu.addAction(self.texts["theme_day"])
+        self.action_theme_day.triggered.connect(lambda: self.set_theme("day"))
         self.action_theme_light = self.theme_menu.addAction(self.texts["theme_light"])
         self.action_theme_light.triggered.connect(lambda: self.set_theme("light"))
         self.action_theme_dark = self.theme_menu.addAction(self.texts["theme_dark"])
         self.action_theme_dark.triggered.connect(lambda: self.set_theme("dark"))
         self.action_theme_black = self.theme_menu.addAction(self.texts["theme_black"])
         self.action_theme_black.triggered.connect(lambda: self.set_theme("black"))
+        self.action_theme_night = self.theme_menu.addAction(self.texts["theme_night"])
+        self.action_theme_night.triggered.connect(lambda: self.set_theme("night"))
 
         self.lang_menu = QMenu(self.texts["menu_lang"], self)
         self.view_menu.addMenu(self.lang_menu)
@@ -7180,6 +8932,8 @@ class MainWindow(QMainWindow):
         self.action_llm.triggered.connect(self.open_llm_settings_dialog)
         self.action_app_settings = self.config_menu.addAction(self.texts["menu_app"])
         self.action_app_settings.triggered.connect(self.open_app_settings_dialog)
+        self.action_repo_builder = self.config_menu.addAction(self.texts["menu_repo_builder"])
+        self.action_repo_builder.triggered.connect(self.open_repo_builder)
         self.action_dependencies = self.config_menu.addAction(self.texts["menu_dependencies"])
         self.action_dependencies.triggered.connect(self.open_dependencies_dialog)
         self.action_first_run_wizard = None
@@ -7209,21 +8963,26 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "file_menu"):
             return
         self.file_menu.setTitle(self.texts["menu_file"])
+        self.action_store.setText(self.texts["menu_store"])
+        self.action_store.setIcon(make_category_icon("all", QColor(effective_accent_color(self.current_theme, self.accent_color)), 16))
         self.action_profiles_import.setText(self.texts["menu_profiles_import"])
         self.action_profiles_export.setText(self.texts["menu_profiles_export"])
         self.action_quit.setText(self.texts["menu_quit"])
         self.view_menu.setTitle(self.texts["menu_view"])
         self.action_fullscreen.setText(self.texts["menu_fullscreen"])
         self.theme_menu.setTitle(self.texts["menu_theme"])
+        self.action_theme_day.setText(self.texts["theme_day"])
         self.action_theme_light.setText(self.texts["theme_light"])
         self.action_theme_dark.setText(self.texts["theme_dark"])
         self.action_theme_black.setText(self.texts["theme_black"])
+        self.action_theme_night.setText(self.texts["theme_night"])
         self.lang_menu.setTitle(self.texts["menu_lang"])
         self.action_lang_en.setText(self.texts["lang_en"])
         self.action_lang_pl.setText(self.texts["lang_pl"])
         self.config_menu.setTitle(self.texts["menu_config"])
         self.action_llm.setText(self.texts["menu_llm"])
         self.action_app_settings.setText(self.texts["menu_app"])
+        self.action_repo_builder.setText(self.texts["menu_repo_builder"])
         self.action_dependencies.setText(self.texts["menu_dependencies"])
         if self.action_first_run_wizard is not None:
             self.action_first_run_wizard.setText(self.texts["menu_first_run_wizard"])
@@ -7330,7 +9089,7 @@ class MainWindow(QMainWindow):
         self.render_container_table(self.last_containers)
 
     def _load_theme(self):
-        base_theme = "light" if self.current_theme == "light" else "dark"
+        base_theme = "light" if self.current_theme in {"day", "light"} else "dark"
         extra_qss = gaming_stylesheet(self.current_theme, self.glow_phase, self.transparent_mode, self.transparency_level, self.neon_animate, self.accent_color)
         if hasattr(qdarktheme, "setup_theme"):
             qdarktheme.setup_theme(base_theme, additional_qss=extra_qss)
@@ -7340,13 +9099,45 @@ class MainWindow(QMainWindow):
                 app.setStyleSheet(extra_qss)
         if self.root_surface is not None:
             self.root_surface.set_visual_state(self.current_theme, self.transparent_mode, self.transparency_level)
+        self.refresh_dynamic_theme_elements()
         self.apply_window_surface()
         self.update_transparency_button()
         self.update_music_button()
 
+    def refresh_dynamic_theme_elements(self):
+        """Refresh widgets/items whose colors are stored outside the global QSS."""
+        effective_accent = effective_accent_color(self.current_theme, self.accent_color)
+        if hasattr(self, "infra_info_button"):
+            self.infra_info_button.setIcon(make_terminal_icon(QColor(effective_accent), 16))
+            self.infra_info_button.setIconSize(QSize(16, 16))
+        table = getattr(self, "table", None)
+        if table is None:
+            return
+        accent = QColor(effective_accent)
+        background = QColor(accent)
+        background.setAlpha(26 if self.current_theme in {"day", "light"} else 38)
+        for row in range(table.rowCount()):
+            item = table.item(row, 0)
+            if item is None:
+                continue
+            metadata = item.data(Qt.ItemDataRole.UserRole)
+            if not isinstance(metadata, dict) or metadata.get("row_type") != "group":
+                continue
+            item.setBackground(QBrush(background))
+            item.setForeground(QBrush(accent))
+            header_widget = table.cellWidget(row, 0)
+            if header_widget is None:
+                continue
+            group_button = header_widget.findChild(QPushButton, "containerGroupButton")
+            if group_button is not None:
+                group_button.style().unpolish(group_button)
+                group_button.style().polish(group_button)
+                group_button.update()
+        table.viewport().update()
+
     def apply_window_surface(self):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, self.transparent_mode)
-        opacity = max(0.85, self.transparency_level / 100.0) if self.current_theme == "light" else max(0.80, self.transparency_level / 100.0)
+        opacity = max(0.85, self.transparency_level / 100.0) if self.current_theme in {"day", "light"} else max(0.80, self.transparency_level / 100.0)
         self.setWindowOpacity(opacity if self.transparent_mode else 1.0)
 
     def update_transparency_button(self):
@@ -7428,6 +9219,8 @@ class MainWindow(QMainWindow):
         return
 
     def set_theme(self, theme: str):
+        if theme not in {"light", "day", "dark", "black", "night"}:
+            theme = "black"
         self.current_theme = theme
         self.settings.setValue("theme", theme)
         self._load_theme()
@@ -7483,11 +9276,13 @@ class MainWindow(QMainWindow):
             (self.btn_remove, "btn_remove", "\u00d7"),
             (self.btn_logs, "btn_logs", "\u2261"),
             (self.btn_edit_start, "btn_edit_start", "\u270e"),
-            (self.btn_new, "btn_new", "+"),
+            (self.btn_new, "btn_new", self.texts["btn_shop_short"]),
         ]
         for button, text_key, compact in actions:
             button.setText(compact)
             button.setToolTip(self.texts[text_key])
+        self.btn_new.setToolTip(self.texts["menu_store"])
+        self.btn_new.setFixedWidth(88)
 
     def apply_language(self):
         self.setWindowTitle(self.texts["app_title"])
@@ -7513,10 +9308,10 @@ class MainWindow(QMainWindow):
         self.container_search.setPlaceholderText(self.texts["container_search_placeholder"])
         self.group_by_label.setText(self.texts["group_by_label"])
         self.populate_group_mode_combo()
-        self.infra_info_button.setText(self.texts["infra_unknown"])
+        self._host_metrics_tooltip_text = self.texts["host_metrics_unknown"]
+        self._container_metrics_text = ""
+        self._infra_activity_text = ""
         self.btn_host_restart.setText(self.texts["btn_host_restart"])
-        if hasattr(self, "host_metrics_label") and not self.client:
-            self.host_metrics_label.setText(self.texts["host_metrics_unknown"])
         self.update_infrastructure_ui()
         self._set_table_headers()
         self.update_transparency_button()
@@ -7671,6 +9466,31 @@ class MainWindow(QMainWindow):
                 if self.try_start_docker_desktop():
                     self.statusBar().showMessage(self.texts["docker_desktop_starting"])
                     QTimer.singleShot(1800, self.reconnect_local_docker_after_desktop_start)
+
+    def open_repo_builder(self):
+        commands: List[List[str]] = []
+        executable_dir = Path(sys.executable).resolve().parent
+        if os.name == "nt":
+            commands.append([str(executable_dir / "DCCRepoBuilder.exe")])
+        else:
+            commands.append(["/usr/bin/dcc-repo-builder"])
+            commands.append([str(executable_dir / "dcc-repo-builder")])
+        for path in (
+            Path(__file__).resolve().parent / "RepoBuilder.py",
+            RESOURCE_DIR / "RepoBuilder.py",
+        ):
+            if path.is_file():
+                commands.append([sys.executable, str(path)])
+        for command in commands:
+            executable = Path(command[0]) if os.path.isabs(command[0]) else None
+            if executable is not None and not executable.exists():
+                continue
+            try:
+                subprocess.Popen(command, cwd=str(Path(__file__).resolve().parent), creationflags=CREATE_NO_WINDOW)
+                return
+            except Exception:
+                continue
+        QMessageBox.warning(self, self.texts["menu_repo_builder"], self.texts["repo_builder_missing"])
 
     def open_dependencies_dialog(self):
         DependencyManagerDialog(self, self).exec()
@@ -8813,6 +10633,22 @@ class MainWindow(QMainWindow):
         dialog.exec()
         return dialog.success is True
 
+    def build_catalog_image_with_progress(self, template: ImageTemplate) -> bool:
+        context = str(template.build_context or "").strip()
+        image = str(template.image or "").strip()
+        if not context or not image:
+            return True
+        args = ["build", "-t", image]
+        dockerfile = str(template.build_dockerfile or "").strip()
+        if dockerfile:
+            args.extend(["-f", dockerfile])
+        args.append(context)
+        return self.execute_backend_command_with_progress(
+            args,
+            self.texts["progress_title_create"],
+            self.texts["progress_status_build_source"].format(name=template.name),
+        )
+
     def execute_smart_container_command_with_progress(self, args: List[str], title: str, status_text: str, auto_fix: bool = True, allow_ai: bool = False) -> bool:
         worker = lambda payload, emit_line: self.run_container_with_repair_stream(payload, emit_line, auto_fix=auto_fix, allow_ai=allow_ai)
         dialog = CommandProgressDialog(title, status_text, worker, args, self.texts, self)
@@ -9616,8 +11452,7 @@ class MainWindow(QMainWindow):
             if restart_mode and self.restart_watch_active:
                 waiting = self.texts["host_restart_waiting_retry"]
                 self.statusBar().showMessage(waiting)
-                if hasattr(self, "host_metrics_label"):
-                    self.host_metrics_label.setText(waiting)
+                self.set_infrastructure_activity(waiting)
                 self.update_restart_notification(waiting)
                 if not self.restart_watch_timer.isActive():
                     self.restart_watch_timer.start()
@@ -9645,8 +11480,7 @@ class MainWindow(QMainWindow):
             self.restart_recovery_pending_refresh = True
             ready = self.texts["host_restart_engine_ready"]
             self.statusBar().showMessage(ready)
-            if hasattr(self, "host_metrics_label"):
-                self.host_metrics_label.setText(ready)
+            self.set_infrastructure_activity(ready)
             self.update_restart_notification(ready)
             self.refresh_containers()
             return
@@ -9787,11 +11621,25 @@ class MainWindow(QMainWindow):
     def update_infrastructure_ui(self, available: Optional[bool] = None):
         if hasattr(self, "infra_info_button"):
             label = self.infrastructure_label()
-            self.infra_info_button.setText(label)
-            self.infra_info_button.setToolTip(label.replace("\n", " "))
+            metrics = str(getattr(self, "_container_metrics_text", "") or "").strip()
+            activity = str(getattr(self, "_infra_activity_text", "") or "").strip()
+            suffix = activity or metrics
+            button_text = f"{label}  |  {suffix}" if suffix else label
+            self.infra_info_button.setText(button_text)
+            tooltip_parts = [
+                label.replace("\n", " "),
+                activity,
+                str(getattr(self, "_host_metrics_tooltip_text", "") or "").strip(),
+                self.texts["infra_terminal_tooltip"],
+            ]
+            self.infra_info_button.setToolTip("\n".join(part for part in tooltip_parts if part))
         if available is None:
             available = self.client is not None
         self.set_host_status_indicator(bool(available))
+
+    def set_infrastructure_activity(self, text: str = ""):
+        self._infra_activity_text = str(text or "").strip()
+        self.update_infrastructure_ui()
 
     def close_client_safely(self, client):
         if client is None:
@@ -9850,8 +11698,7 @@ class MainWindow(QMainWindow):
         if self.restart_notification is notice:
             self.restart_notification = None
         self.statusBar().showMessage(cancelled, 12000)
-        if hasattr(self, "host_metrics_label"):
-            self.host_metrics_label.setText(cancelled)
+        self.set_infrastructure_activity(cancelled)
         self.set_host_status_indicator(False)
 
     def start_restart_watch(self, profile: RemoteProfile, text: str):
@@ -9868,8 +11715,7 @@ class MainWindow(QMainWindow):
         self.restart_recovery_pending_refresh = False
         self.set_host_status_indicator(False)
         self.statusBar().showMessage(text)
-        if hasattr(self, "host_metrics_label"):
-            self.host_metrics_label.setText(text)
+        self.set_infrastructure_activity(text)
         self.show_restart_notification(text)
         self.restart_watch_timer.start()
         QTimer.singleShot(2000, self.retry_restart_connection)
@@ -9885,8 +11731,7 @@ class MainWindow(QMainWindow):
             self.restart_watch_active = False
             self.restart_grace_until = 0.0
             self.statusBar().showMessage(timeout_text)
-            if hasattr(self, "host_metrics_label"):
-                self.host_metrics_label.setText(timeout_text)
+            self.set_infrastructure_activity(timeout_text)
             self.update_restart_notification(timeout_text)
             return
         if self.remote_connect_thread is not None and self.remote_connect_thread.isRunning():
@@ -9897,8 +11742,7 @@ class MainWindow(QMainWindow):
             attempt=self.restart_watch_attempt,
         )
         self.statusBar().showMessage(checking)
-        if hasattr(self, "host_metrics_label"):
-            self.host_metrics_label.setText(checking)
+        self.set_infrastructure_activity(checking)
         self.update_restart_notification(checking)
         self.connect_remote_docker(self.restart_watch_profile, restart_mode=True, timeout=5)
 
@@ -10154,9 +11998,9 @@ class MainWindow(QMainWindow):
         font = QFont(item.font())
         font.setBold(True)
         item.setFont(font)
-        accent = QColor(normalize_accent_color(self.accent_color))
+        accent = QColor(effective_accent_color(self.current_theme, self.accent_color))
         background = QColor(accent)
-        background.setAlpha(38 if self.current_theme != "light" else 26)
+        background.setAlpha(26 if self.current_theme in {"day", "light"} else 38)
         item.setBackground(QBrush(background))
         item.setForeground(QBrush(accent))
         item.setToolTip(self.texts["group_summary"].format(count=len(containers), running=running, networks=networks))
@@ -10172,14 +12016,11 @@ class MainWindow(QMainWindow):
             lambda state, group=storage_key: self.on_group_checkbox_changed(group, state)
         )
         group_button = QPushButton(f"{arrow}  {self.group_display_name(key)}     {summary}")
+        group_button.setObjectName("containerGroupButton")
         group_button.setFlat(True)
         group_button.setCursor(Qt.CursorShape.PointingHandCursor)
         group_button.setToolTip(
             self.texts["group_display_expand"] if collapsed else self.texts["group_display_collapse"]
-        )
-        group_button.setStyleSheet(
-            f"QPushButton {{ border: 0; background: transparent; text-align: left; "
-            f"font-weight: 600; color: {accent.name()}; padding: 0; }}"
         )
         group_button.clicked.connect(lambda _checked=False, group=storage_key: self.toggle_container_group(group))
         header_layout.addWidget(group_checkbox, 0)
@@ -10890,8 +12731,7 @@ class MainWindow(QMainWindow):
                 self.restart_recovery_pending_refresh = False
                 waiting = self.texts["host_restart_waiting_retry"]
                 self.statusBar().showMessage(waiting)
-                if hasattr(self, "host_metrics_label"):
-                    self.host_metrics_label.setText(waiting)
+                self.set_infrastructure_activity(waiting)
                 self.update_restart_notification(waiting)
                 if not self.restart_watch_timer.isActive():
                     self.restart_watch_timer.start()
@@ -10899,8 +12739,7 @@ class MainWindow(QMainWindow):
             if self.current_backend == "remote" and time.time() < float(getattr(self, "restart_grace_until", 0.0) or 0.0):
                 restart_text = self.texts["host_restart_waiting_retry"]
                 self.statusBar().showMessage(restart_text)
-                if hasattr(self, "host_metrics_label"):
-                    self.host_metrics_label.setText(restart_text)
+                self.set_infrastructure_activity(restart_text)
                 if self.restart_watch_active and not self.restart_watch_timer.isActive():
                     self.restart_watch_timer.start()
                 return
@@ -10919,6 +12758,10 @@ class MainWindow(QMainWindow):
         host_metrics = getattr(self.worker, "host_metrics", {}) if self.worker is not None else {}
         container_cpu = float(summary.get("cpu_percent", 0.0) or 0.0)
         container_memory = int(summary.get("memory_usage", 0) or 0)
+        container_metrics_text = self.texts["container_metrics_format"].format(
+            container_cpu=container_cpu,
+            container_mem=format_bytes(container_memory),
+        )
         if host_metrics:
             host_cpu = float(host_metrics.get("cpu_percent", 0.0) or 0.0)
             host_mem = int(host_metrics.get("memory_usage", 0) or 0)
@@ -10933,12 +12776,11 @@ class MainWindow(QMainWindow):
                 container_mem=format_bytes(container_memory),
             )
         else:
-            metrics_text = self.texts["container_metrics_format"].format(
-                container_cpu=container_cpu,
-                container_mem=format_bytes(container_memory),
-            )
-        if hasattr(self, "host_metrics_label"):
-            self.host_metrics_label.setText(metrics_text)
+            metrics_text = container_metrics_text
+        self._infra_activity_text = ""
+        self._container_metrics_text = container_metrics_text
+        self._host_metrics_tooltip_text = metrics_text
+        self.update_infrastructure_ui(True)
         self.last_containers = list(containers)
         self.render_container_table(self.last_containers)
         message = self.texts["status_ready"]
@@ -11013,6 +12855,7 @@ class MainWindow(QMainWindow):
             existing_name=target_name,
             llm_settings_getter=self.get_llm_settings,
             ai_command_callback=self.generate_ai_docker_command,
+            build_image_callback=self.build_catalog_image_with_progress,
             lang=self.lang,
             cli_command=cli_command,
             cli_choices=cli_choices,
@@ -11034,6 +12877,7 @@ class MainWindow(QMainWindow):
             self,
             llm_settings_getter=self.get_llm_settings,
             ai_command_callback=self.generate_ai_docker_command,
+            build_image_callback=self.build_catalog_image_with_progress,
             lang=self.lang,
             cli_command=cli_command,
             cli_choices=cli_choices,
@@ -11063,6 +12907,8 @@ def main():
     app = QApplication(sys.argv)
     app.setOrganizationName(APP_SETTINGS_ORG)
     app.setApplicationName(APP_SETTINGS_NAME)
+    if sys.platform.startswith("linux") and hasattr(app, "setDesktopFileName"):
+        app.setDesktopFileName("docker-control-center")
     if ICON_FILE.exists():
         app.setWindowIcon(QIcon(str(ICON_FILE)))
     settings = QSettings(APP_SETTINGS_ORG, APP_SETTINGS_NAME)

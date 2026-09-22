@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=DCC Repo Builder
+Comment=Edit and validate Docker Control Center application catalogs
+Exec=/usr/bin/dcc-repo-builder
+Icon=docker-control-center
+StartupWMClass=DCCRepoBuilder
+Terminal=false
+Categories=Development;Utility;
+Keywords=DCC;Docker;Catalog;Repository;Builder;
+StartupNotify=true

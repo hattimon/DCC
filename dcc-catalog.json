@@ -29,7 +29,8 @@
       "icon_text": "🤖",
       "upstream_repo": "agent0ai/agent-zero",
       "latest_release": "v2.12",
-      "latest_release_url": "https://github.com/agent0ai/agent-zero/releases/tag/v2.12"
+      "latest_release_url": "https://github.com/agent0ai/agent-zero/releases/tag/v2.12",
+      "icon_url": "catalog/media/icons/agent-zero.png"
     },
     {
       "name": "Ollama",
@@ -56,7 +57,8 @@
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
       "latest_release": "v0.34.2",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.34.2"
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.34.2",
+      "icon_url": "catalog/media/icons/ollama.png"
     },
     {
       "name": "NocoDB",
@@ -83,7 +85,8 @@
       "icon_text": "⚙",
       "upstream_repo": "nocodb/nocodb",
       "latest_release": "2026.09.0",
-      "latest_release_url": "https://github.com/nocodb/nocodb/releases/tag/2026.09.0"
+      "latest_release_url": "https://github.com/nocodb/nocodb/releases/tag/2026.09.0",
+      "icon_url": "catalog/media/icons/nocodb.png"
     },
     {
       "name": "Stirling PDF",
@@ -110,7 +113,8 @@
       "icon_text": "🧰",
       "upstream_repo": "Stirling-Tools/Stirling-PDF",
       "latest_release": "v2.14.3",
-      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v2.14.3"
+      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v2.14.3",
+      "icon_url": "catalog/media/icons/stirling-pdf.png"
     },
     {
       "name": "IT-Tools",
@@ -143,7 +147,8 @@
       "icon_text": "🧰",
       "upstream_repo": "CorentinTh/it-tools",
       "latest_release": "v2024.10.22-7ca5933",
-      "latest_release_url": "https://github.com/CorentinTh/it-tools/releases/tag/v2024.10.22-7ca5933"
+      "latest_release_url": "https://github.com/CorentinTh/it-tools/releases/tag/v2024.10.22-7ca5933",
+      "icon_url": "catalog/media/icons/it-tools.png"
     },
     {
       "name": "Dozzle",
@@ -170,7 +175,8 @@
       "icon_text": "🛠",
       "upstream_repo": "amir20/dozzle",
       "latest_release": "v11.1.1",
-      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.1.1"
+      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.1.1",
+      "icon_url": "catalog/media/icons/dozzle.png"
     },
     {
       "name": "Beszel Hub",
@@ -197,7 +203,8 @@
       "icon_text": "📊",
       "upstream_repo": "henrygd/beszel",
       "latest_release": "v0.20.0",
-      "latest_release_url": "https://github.com/henrygd/beszel/releases/tag/v0.20.0"
+      "latest_release_url": "https://github.com/henrygd/beszel/releases/tag/v0.20.0",
+      "icon_url": "catalog/media/icons/beszel-hub.png"
     },
     {
       "name": "ChangeDetection.io",
@@ -224,7 +231,8 @@
       "icon_text": "📊",
       "upstream_repo": "dgtlmoon/changedetection.io",
       "latest_release": "0.60.7",
-      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.7"
+      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.7",
+      "icon_url": "catalog/media/icons/changedetection-io.png"
     },
     {
       "name": "Alpine Linux",
@@ -246,7 +254,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🐧"
+      "icon_text": "🐧",
+      "icon_url": "catalog/media/icons/alpine-linux.png"
     },
     {
       "name": "Debian",
@@ -268,7 +277,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🐧"
+      "icon_text": "🐧",
+      "icon_url": "catalog/media/icons/debian.png"
     },
     {
       "name": "Ubuntu",
@@ -290,7 +300,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🐧"
+      "icon_text": "🐧",
+      "icon_url": "catalog/media/icons/ubuntu.png"
     },
     {
       "name": "BusyBox",
@@ -312,7 +323,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🐧"
+      "icon_text": "🐧",
+      "icon_url": "catalog/media/icons/busybox.png"
     },
     {
       "name": "Node.js",
@@ -337,7 +349,8 @@
       "icon_text": "💻",
       "upstream_repo": "nodejs/node",
       "latest_release": "v26.9.0",
-      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.9.0"
+      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.9.0",
+      "icon_url": "catalog/media/icons/nodejs.png"
     },
     {
       "name": "Python",
@@ -359,7 +372,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "💻"
+      "icon_text": "💻",
+      "icon_url": "catalog/media/icons/python.png"
     },
     {
       "name": "Golang",
@@ -384,7 +398,8 @@
       "icon_text": "💻",
       "upstream_repo": "golang/go",
       "latest_release": "weekly.2012-03-27",
-      "latest_release_url": "https://github.com/golang/go/releases/tag/weekly.2012-03-27"
+      "latest_release_url": "https://github.com/golang/go/releases/tag/weekly.2012-03-27",
+      "icon_url": "catalog/media/icons/golang.png"
     },
     {
       "name": "Apache HTTPD",
@@ -406,7 +421,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🌐"
+      "icon_text": "🌐",
+      "icon_url": "catalog/media/icons/apache-httpd.png"
     },
     {
       "name": "PostgreSQL",
@@ -428,7 +444,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🗄"
+      "icon_text": "🗄",
+      "icon_url": "catalog/media/icons/postgresql.png"
     },
     {
       "name": "MySQL",
@@ -450,7 +467,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🗄"
+      "icon_text": "🗄",
+      "icon_url": "catalog/media/icons/mysql.png"
     },
     {
       "name": "MongoDB",
@@ -472,7 +490,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🗄"
+      "icon_text": "🗄",
+      "icon_url": "catalog/media/icons/mongodb.png"
     },
     {
       "name": "RabbitMQ",
@@ -494,7 +513,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "💬"
+      "icon_text": "💬",
+      "icon_url": "catalog/media/icons/rabbitmq.png"
     },
     {
       "name": "NATS",
@@ -516,7 +536,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "💬"
+      "icon_text": "💬",
+      "icon_url": "catalog/media/icons/nats.png"
     },
     {
       "name": "Memcached",
@@ -538,7 +559,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "⚡"
+      "icon_text": "⚡",
+      "icon_url": "catalog/media/icons/memcached.png"
     },
     {
       "name": "WordPress",
@@ -560,7 +582,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🌍"
+      "icon_text": "🌍",
+      "icon_url": "catalog/media/icons/wordpress.png"
     },
     {
       "name": "Nextcloud",
@@ -582,7 +605,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🌍"
+      "icon_text": "🌍",
+      "icon_url": "catalog/media/icons/nextcloud.png"
     },
     {
       "name": "Open WebUI",
@@ -607,7 +631,8 @@
       "icon_text": "💬",
       "upstream_repo": "open-webui/open-webui",
       "latest_release": "v0.11.4",
-      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.11.4"
+      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.11.4",
+      "icon_url": "catalog/media/icons/open-webui.png"
     },
     {
       "name": "Vane (dawniej Perplexica)",
@@ -632,7 +657,8 @@
       "icon_text": "🔎",
       "upstream_repo": "ItzCrazyKns/Vane",
       "latest_release": "v1.12.2",
-      "latest_release_url": "https://github.com/ItzCrazyKns/Vane/releases/tag/v1.12.2"
+      "latest_release_url": "https://github.com/ItzCrazyKns/Vane/releases/tag/v1.12.2",
+      "icon_url": "catalog/media/icons/vane-dawniej-perplexica.png"
     },
     {
       "name": "SearXNG",
@@ -655,7 +681,8 @@
       "docs_url": "https://docs.searxng.org/",
       "homepage_url": "https://searxng.org/",
       "icon_text": "🔎",
-      "upstream_repo": "searxng/searxng"
+      "upstream_repo": "searxng/searxng",
+      "icon_url": "catalog/media/icons/searxng.png"
     },
     {
       "name": "Portainer CE",
@@ -680,7 +707,8 @@
       "icon_text": "🛠",
       "upstream_repo": "portainer/portainer",
       "latest_release": "2.45.1",
-      "latest_release_url": "https://github.com/portainer/portainer/releases/tag/2.45.1"
+      "latest_release_url": "https://github.com/portainer/portainer/releases/tag/2.45.1",
+      "icon_url": "catalog/media/icons/portainer-ce.png"
     },
     {
       "name": "Nginx",
@@ -702,7 +730,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🌐"
+      "icon_text": "🌐",
+      "icon_url": "catalog/media/icons/nginx.png"
     },
     {
       "name": "Caddy",
@@ -724,7 +753,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🌐"
+      "icon_text": "🌐",
+      "icon_url": "catalog/media/icons/caddy.png"
     },
     {
       "name": "Redis",
@@ -746,7 +776,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🗄"
+      "icon_text": "🗄",
+      "icon_url": "catalog/media/icons/redis.png"
     },
     {
       "name": "MariaDB",
@@ -768,7 +799,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🗄"
+      "icon_text": "🗄",
+      "icon_url": "catalog/media/icons/mariadb.png"
     },
     {
       "name": "Adminer",
@@ -790,7 +822,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🗄"
+      "icon_text": "🗄",
+      "icon_url": "catalog/media/icons/adminer.png"
     },
     {
       "name": "Eclipse Mosquitto",
@@ -824,7 +857,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🏠"
+      "icon_text": "🏠",
+      "icon_url": "catalog/media/icons/eclipse-mosquitto.png"
     },
     {
       "name": "Node-RED",
@@ -858,7 +892,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🏠"
+      "icon_text": "🏠",
+      "icon_url": "catalog/media/icons/node-red.png"
     },
     {
       "name": "Gitea",
@@ -883,7 +918,8 @@
       "icon_text": "🛠",
       "upstream_repo": "go-gitea/gitea",
       "latest_release": "v1.27.3",
-      "latest_release_url": "https://github.com/go-gitea/gitea/releases/tag/v1.27.3"
+      "latest_release_url": "https://github.com/go-gitea/gitea/releases/tag/v1.27.3",
+      "icon_url": "catalog/media/icons/gitea.png"
     },
     {
       "name": "Jellyfin",
@@ -908,7 +944,8 @@
       "icon_text": "🎬",
       "upstream_repo": "jellyfin/jellyfin",
       "latest_release": "v12.1",
-      "latest_release_url": "https://github.com/jellyfin/jellyfin/releases/tag/v12.1"
+      "latest_release_url": "https://github.com/jellyfin/jellyfin/releases/tag/v12.1",
+      "icon_url": "catalog/media/icons/jellyfin.png"
     },
     {
       "name": "Uptime Kuma",
@@ -933,7 +970,8 @@
       "icon_text": "📊",
       "upstream_repo": "louislam/uptime-kuma",
       "latest_release": "2.5.5",
-      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.5"
+      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.5",
+      "icon_url": "catalog/media/icons/uptime-kuma.png"
     },
     {
       "name": "Uptime Kuma",
@@ -957,7 +995,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "📊"
+      "icon_text": "📊",
+      "icon_url": "catalog/media/icons/uptime-kuma.png"
     },
     {
       "name": "Pi-hole",
@@ -976,10 +1015,40 @@
       "notes_en": "Lightweight and very popular. Great for Raspberry Pi.",
       "engines": null,
       "archs": null,
-      "source_url": "",
-      "docs_url": "",
-      "homepage_url": "",
-      "icon_text": "🌐"
+      "source_url": "https://github.com/pi-hole/docker-pi-hole",
+      "docs_url": "https://docs.pi-hole.net/docker/",
+      "homepage_url": "https://pi-hole.net/",
+      "icon_text": "🌐",
+      "store_description": "Pi-hole to lokalny filtr DNS blokujący reklamy, trackery i niechciane domeny dla całej sieci. Po wdrożeniu panelem WWW zarządzasz listami blokad, klientami, DNS i statystykami zapytań.",
+      "store_description_en": "Pi-hole is a local DNS filter that blocks ads, trackers and unwanted domains for the whole network. Its web dashboard manages blocklists, clients, DNS settings and query statistics.",
+      "features": [
+        "Blokowanie reklam i trackerów dla całej sieci",
+        "Panel WWW ze statystykami DNS",
+        "Własne listy blokad i reguły lokalne",
+        "Trwałe dane w wolumenach Docker"
+      ],
+      "features_en": [
+        "Network-wide ad and tracker blocking",
+        "Web dashboard with DNS statistics",
+        "Custom blocklists and local rules",
+        "Persistent data in Docker volumes"
+      ],
+      "credential_patterns": [
+        {
+          "label": "Hasło panelu WWW",
+          "label_en": "Web dashboard password",
+          "regex": "(?:assigning\\s+(?:random\\s+)?password|web\\s+password|password)\\s*(?:is|:|=|->)\\s*(?P<value>[^\\s]+)"
+        }
+      ],
+      "post_install_hints": [
+        "Po starcie otwórz panel WWW na wystawionym porcie HTTP.",
+        "Jeżeli Pi-hole wygeneruje hasło startowe, DCC spróbuje odczytać je z logów kontenera i pokaże je po instalacji."
+      ],
+      "post_install_hints_en": [
+        "After startup, open the web dashboard on the published HTTP port.",
+        "If Pi-hole generates a startup password, DCC will try to read it from the container logs and show it after deployment."
+      ],
+      "icon_url": "catalog/media/icons/pi-hole.png"
     },
     {
       "name": "Home Assistant",
@@ -1001,7 +1070,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🏠"
+      "icon_text": "🏠",
+      "icon_url": "catalog/media/icons/home-assistant.png"
     },
     {
       "name": "Grafana",
@@ -1023,7 +1093,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "📊"
+      "icon_text": "📊",
+      "icon_url": "catalog/media/icons/grafana.png"
     },
     {
       "name": "Prometheus",
@@ -1045,7 +1116,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "📊"
+      "icon_text": "📊",
+      "icon_url": "catalog/media/icons/prometheus.png"
     },
     {
       "name": "InfluxDB",
@@ -1067,7 +1139,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🗄"
+      "icon_text": "🗄",
+      "icon_url": "catalog/media/icons/influxdb.png"
     },
     {
       "name": "Plex Media Server",
@@ -1089,7 +1162,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🎬"
+      "icon_text": "🎬",
+      "icon_url": "catalog/media/icons/plex-media-server.png"
     },
     {
       "name": "SFTPGo Community",
@@ -1126,7 +1200,8 @@
       "icon_text": "🧰",
       "upstream_repo": "drakkan/sftpgo",
       "latest_release": "v2.7.6",
-      "latest_release_url": "https://github.com/drakkan/sftpgo/releases/tag/v2.7.6"
+      "latest_release_url": "https://github.com/drakkan/sftpgo/releases/tag/v2.7.6",
+      "icon_url": "catalog/media/icons/sftpgo-community.png"
     },
     {
       "name": "File Browser",
@@ -1150,7 +1225,8 @@
       "source_url": "",
       "docs_url": "",
       "homepage_url": "",
-      "icon_text": "🗑"
+      "icon_text": "🗑",
+      "icon_url": "catalog/media/icons/file-browser.png"
     },
     {
       "name": "ntfy",
@@ -1188,7 +1264,8 @@
       "icon_text": "🔔",
       "upstream_repo": "binwiederhier/ntfy",
       "latest_release": "v2.28.0",
-      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.28.0"
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.28.0",
+      "icon_url": "catalog/media/icons/ntfy.png"
     },
     {
       "name": "Gotify",
@@ -1225,7 +1302,8 @@
       "icon_text": "🔔",
       "upstream_repo": "gotify/server",
       "latest_release": "v3.1.1",
-      "latest_release_url": "https://github.com/gotify/server/releases/tag/v3.1.1"
+      "latest_release_url": "https://github.com/gotify/server/releases/tag/v3.1.1",
+      "icon_url": "catalog/media/icons/gotify.png"
     },
     {
       "name": "Vaultwarden",
@@ -1263,7 +1341,8 @@
       "icon_text": "🔐",
       "upstream_repo": "dani-garcia/vaultwarden",
       "latest_release": "1.37.3",
-      "latest_release_url": "https://github.com/dani-garcia/vaultwarden/releases/tag/1.37.3"
+      "latest_release_url": "https://github.com/dani-garcia/vaultwarden/releases/tag/1.37.3",
+      "icon_url": "catalog/media/icons/vaultwarden.png"
     },
     {
       "name": "Memos",
@@ -1296,7 +1375,8 @@
       "icon_text": "✍",
       "upstream_repo": "usememos/memos",
       "latest_release": "v0.31.0",
-      "latest_release_url": "https://github.com/usememos/memos/releases/tag/v0.31.0"
+      "latest_release_url": "https://github.com/usememos/memos/releases/tag/v0.31.0",
+      "icon_url": "catalog/media/icons/memos.png"
     },
     {
       "name": "Vikunja",
@@ -1323,7 +1403,8 @@
       "icon_text": "✅",
       "upstream_repo": "go-vikunja/vikunja",
       "latest_release": "v2.6.0",
-      "latest_release_url": "https://github.com/go-vikunja/vikunja/releases/tag/v2.6.0"
+      "latest_release_url": "https://github.com/go-vikunja/vikunja/releases/tag/v2.6.0",
+      "icon_url": "catalog/media/icons/vikunja.png"
     },
     {
       "name": "Linkding",
@@ -1350,7 +1431,8 @@
       "icon_text": "🔖",
       "upstream_repo": "sissbruecker/linkding",
       "latest_release": "v1.47.0",
-      "latest_release_url": "https://github.com/sissbruecker/linkding/releases/tag/v1.47.0"
+      "latest_release_url": "https://github.com/sissbruecker/linkding/releases/tag/v1.47.0",
+      "icon_url": "catalog/media/icons/linkding.png"
     },
     {
       "name": "Actual Budget",
@@ -1377,7 +1459,8 @@
       "icon_text": "💰",
       "upstream_repo": "actualbudget/actual",
       "latest_release": "v26.9.0",
-      "latest_release_url": "https://github.com/actualbudget/actual/releases/tag/v26.9.0"
+      "latest_release_url": "https://github.com/actualbudget/actual/releases/tag/v26.9.0",
+      "icon_url": "catalog/media/icons/actual-budget.png"
     },
     {
       "name": "CyberChef",
@@ -1404,7 +1487,8 @@
       "icon_text": "🔐",
       "upstream_repo": "gchq/CyberChef",
       "latest_release": "v11.5.0",
-      "latest_release_url": "https://github.com/gchq/CyberChef/releases/tag/v11.5.0"
+      "latest_release_url": "https://github.com/gchq/CyberChef/releases/tag/v11.5.0",
+      "icon_url": "catalog/media/icons/cyberchef.png"
     },
     {
       "name": "OpenSpeedTest",
@@ -1429,7 +1513,8 @@
       "docs_url": "https://github.com/openspeedtest/Speed-Test",
       "homepage_url": "https://openspeedtest.com/",
       "icon_text": "🌐",
-      "upstream_repo": "openspeedtest/Speed-Test"
+      "upstream_repo": "openspeedtest/Speed-Test",
+      "icon_url": "catalog/media/icons/openspeedtest.png"
     },
     {
       "name": "AdGuard Home",
@@ -1469,7 +1554,8 @@
       "icon_text": "🌐",
       "upstream_repo": "AdguardTeam/AdGuardHome",
       "latest_release": "v0.107.79",
-      "latest_release_url": "https://github.com/AdguardTeam/AdGuardHome/releases/tag/v0.107.79"
+      "latest_release_url": "https://github.com/AdguardTeam/AdGuardHome/releases/tag/v0.107.79",
+      "icon_url": "catalog/media/icons/adguard-home.png"
     },
     {
       "name": "Qdrant",
@@ -1509,7 +1595,8 @@
       "compose_required": false,
       "balena_verified": false,
       "latest_release": "v1.19.1",
-      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.19.1"
+      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.19.1",
+      "icon_url": "catalog/media/icons/qdrant.png"
     },
     {
       "name": "AnythingLLM",
@@ -1552,7 +1639,8 @@
       "compose_required": false,
       "balena_verified": false,
       "latest_release": "v1.16.1",
-      "latest_release_url": "https://github.com/Mintplex-Labs/anything-llm/releases/tag/v1.16.1"
+      "latest_release_url": "https://github.com/Mintplex-Labs/anything-llm/releases/tag/v1.16.1",
+      "icon_url": "catalog/media/icons/anythingllm.png"
     },
     {
       "name": "Duplicati",
@@ -1595,7 +1683,8 @@
       "compose_required": false,
       "balena_verified": false,
       "latest_release": "v2.4.0.0_stable_2026-09-03",
-      "latest_release_url": "https://github.com/duplicati/duplicati/releases/tag/v2.4.0.0_stable_2026-09-03"
+      "latest_release_url": "https://github.com/duplicati/duplicati/releases/tag/v2.4.0.0_stable_2026-09-03",
+      "icon_url": "catalog/media/icons/duplicati.png"
     },
     {
       "name": "Forgejo",
@@ -1634,7 +1723,8 @@
       "backup_priority": "high",
       "security_exposure": "reverse_proxy_required",
       "compose_required": false,
-      "balena_verified": false
+      "balena_verified": false,
+      "icon_url": "catalog/media/icons/forgejo.png"
     },
     {
       "name": "Glances",
@@ -1674,7 +1764,8 @@
       "compose_required": false,
       "balena_verified": false,
       "latest_release": "v4.5.6",
-      "latest_release_url": "https://github.com/nicolargo/glances/releases/tag/v4.5.6"
+      "latest_release_url": "https://github.com/nicolargo/glances/releases/tag/v4.5.6",
+      "icon_url": "catalog/media/icons/glances.png"
     },
     {
       "name": "VictoriaMetrics",
@@ -1719,7 +1810,8 @@
       "compose_required": false,
       "balena_verified": false,
       "latest_release": "v1.152.0",
-      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.152.0"
+      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.152.0",
+      "icon_url": "catalog/media/icons/victoriametrics.png"
     },
     {
       "name": "Audiobookshelf",
@@ -1759,7 +1851,99 @@
       "compose_required": false,
       "balena_verified": false,
       "latest_release": "v2.36.1",
-      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.36.1"
+      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.36.1",
+      "icon_url": "catalog/media/icons/audiobookshelf.png"
+    },
+    {
+      "name": "SmartWAN Manager",
+      "image": "smartwan-manager:latest",
+      "category": "Sieć 🌐 › Router / WAN",
+      "description": "Lokalny panel do zarządzania SmartWAN i Dual WAN na routerze ASUS przez SSH, z monitoringiem, regułami routingu i automatycznym failoverem.",
+      "default_name": "smartwan-manager",
+      "container_port": "8080",
+      "host_port": "8888",
+      "extra": "--init --restart unless-stopped -e PORT=8080 -e SMARTWAN_DATA_DIR=/data -e SMARTWAN_TRUSTED_SUBNETS=192.168.0.0/16,10.8.0.0/24,10.16.0.0/24,100.64.0.0/10 -v smartwan-data:/data",
+      "command": "",
+      "notes": "DCC buduje obraz bezpośrednio z repozytorium GitHub. Przed konfiguracją routera zapoznaj się z wymaganiami firmware i włącz SSH oraz skrypty JFFS. Panel powinien pozostać dostępny tylko w zaufanej sieci LAN/VPN.",
+      "lightweight": false,
+      "category_en": "Network 🌐 › Router / WAN",
+      "description_en": "Local SmartWAN and Dual WAN management panel for an ASUS router over SSH, with monitoring, routing rules and automatic failover.",
+      "notes_en": "DCC builds the image directly from the GitHub repository. Review the firmware requirements and enable SSH plus JFFS custom scripts before configuring the router. Keep the panel on a trusted LAN/VPN.",
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "aarch64",
+        "arm64",
+        "armv8l",
+        "armv7l",
+        "armv7",
+        "armhf",
+        "arm"
+      ],
+      "source_url": "https://github.com/hattimon/SmartWAN-Manager",
+      "docs_url": "https://github.com/hattimon/SmartWAN-Manager#readme",
+      "homepage_url": "https://github.com/hattimon/SmartWAN-Manager",
+      "icon_text": "WAN",
+      "upstream_repo": "hattimon/SmartWAN-Manager",
+      "verified": false,
+      "requires": [
+        "ASUS RT-N18U firmware 386.3_3",
+        "Router SSH and JFFS custom scripts"
+      ],
+      "gpu": false,
+      "ram_min_mb": 1024,
+      "storage_type": "persistent",
+      "backup_priority": "high",
+      "security_exposure": "lan_only",
+      "compose_required": false,
+      "build_context": "https://github.com/hattimon/SmartWAN-Manager.git#main",
+      "build_dockerfile": "Dockerfile",
+      "balena_verified": false,
+      "store_description": "SmartWAN Manager rozszerza router ASUS o czytelny panel administracyjny dla Dual WAN i SmartWAN. Umożliwia podgląd kondycji obu łączy, reguły routingu per urządzenie/sieć/usługę, watchdog z failoverem i powrotem do normalnej trasy, konfigurację OpenVPN oraz bezpieczne wdrażanie skryptów Merlin przez SSH.",
+      "store_description_en": "SmartWAN Manager adds a readable administration layer for ASUS Dual WAN and SmartWAN. It provides dual-link health monitoring, per-device/subnet/service routing, watchdog-based failover and recovery, OpenVPN policy controls, and safer Merlin script deployment over SSH.",
+      "features": [
+        "Monitoring WAN0/WAN1, stanu routera, tras, logów i klientów LAN",
+        "SmartWAN watchdog z potwierdzaniem awarii, automatycznym failoverem i recovery",
+        "Reguły routingu per urządzenie, podsieć, CIDR, domenę i usługę",
+        "Obsługa ASUS Dual WAN, OpenVPN, opcjonalnego Tailscale i Cloudflare DDNS",
+        "Backup/restore oraz bezpieczne wdrażanie skryptów Merlin przez SSH",
+        "Interfejs PL/EN i tryby Safe, Basic, Advanced oraz Expert"
+      ],
+      "features_en": [
+        "WAN0/WAN1, router, routes, logs and LAN-client monitoring",
+        "SmartWAN watchdog with failure confirmation, automatic failover and recovery",
+        "Per-device, subnet, CIDR, domain and service routing rules",
+        "ASUS Dual WAN, OpenVPN, optional Tailscale and Cloudflare DDNS support",
+        "Backup/restore and safer Merlin script deployment over SSH",
+        "Polish/English UI with Safe, Basic, Advanced and Expert modes"
+      ],
+      "icon_url": "catalog/media/icons/smartwan-manager.png",
+      "hero_image_url": "catalog/media/heroes/smartwan-manager.png",
+      "gallery": [
+        {
+          "url": "catalog/media/gallery/smartwan-manager-panel.png",
+          "caption": "Podgląd panelu SmartWAN Manager",
+          "caption_en": "SmartWAN Manager panel preview"
+        },
+        {
+          "url": "catalog/media/gallery/smartwan-manager-dual-wan.png",
+          "caption": "Przykładowa konfiguracja ASUS Dual WAN",
+          "caption_en": "Example ASUS Dual WAN configuration"
+        }
+      ],
+      "post_install_hints": [
+        "Po pierwszym uruchomieniu ustaw hasło panelu: docker exec smartwan-manager node server/setPanelPassword.js admin 'silne-haslo'",
+        "Otwórz panel pod adresem http://<adres-hosta>:8888 i skonfiguruj połączenie SSH z routerem.",
+        "Przed zastosowaniem zmian na routerze wykonaj backup i sprawdź zgodność firmware opisaną w repozytorium."
+      ],
+      "post_install_hints_en": [
+        "After first start set the panel password: docker exec smartwan-manager node server/setPanelPassword.js admin 'strong-password'",
+        "Open http://<host-address>:8888 and configure the router SSH connection.",
+        "Back up the router and review the documented firmware compatibility before applying managed routing changes."
+      ]
     }
   ]
 }

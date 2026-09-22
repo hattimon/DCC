@@ -53,13 +53,25 @@ DCC_ROOT="$ROOT_DIR" "$BUILD_VENV/bin/python" -m PyInstaller \
   --distpath "$BUILD_DIST" \
   "$ROOT_DIR/packaging/linux/DockerControlCenter-linux.spec"
 
+DCC_ROOT="$ROOT_DIR" "$BUILD_VENV/bin/python" -m PyInstaller \
+  --noconfirm \
+  --workpath "$BUILD_WORK/repo-builder" \
+  --distpath "$BUILD_DIST" \
+  "$ROOT_DIR/packaging/linux/RepoBuilder-linux.spec"
+
 APP_BINARY="$BUILD_DIST/DockerControlCenter"
+REPO_BUILDER_BINARY="$BUILD_DIST/DCCRepoBuilder"
 if [[ ! -x "$APP_BINARY" ]]; then
   echo "Linux executable was not produced: $APP_BINARY" >&2
   exit 2
 fi
+if [[ ! -x "$REPO_BUILDER_BINARY" ]]; then
+  echo "Linux Repo Builder executable was not produced: $REPO_BUILDER_BINARY" >&2
+  exit 3
+fi
 
 "$APP_BINARY" --self-check
+QT_QPA_PLATFORM=offscreen "$REPO_BUILDER_BINARY" --self-check
 
 PKG_ROOT="$BUILD_WORK/deb-root"
 rm -rf "$PKG_ROOT"
@@ -67,11 +79,35 @@ install -d \
   "$PKG_ROOT/DEBIAN" \
   "$PKG_ROOT/usr/bin" \
   "$PKG_ROOT/usr/share/applications" \
-  "$PKG_ROOT/usr/share/icons/hicolor/256x256/apps"
+  "$PKG_ROOT/usr/share/icons/hicolor/256x256/apps" \
+  "$PKG_ROOT/usr/share/pixmaps"
 
 install -m 0755 "$APP_BINARY" "$PKG_ROOT/usr/bin/docker-control-center"
+install -m 0755 "$REPO_BUILDER_BINARY" "$PKG_ROOT/usr/bin/dcc-repo-builder"
 install -m 0644 "$ROOT_DIR/packaging/linux/docker-control-center.desktop" "$PKG_ROOT/usr/share/applications/docker-control-center.desktop"
+install -m 0644 "$ROOT_DIR/packaging/linux/dcc-repo-builder.desktop" "$PKG_ROOT/usr/share/applications/dcc-repo-builder.desktop"
 install -m 0644 "$ROOT_DIR/upstream_assets/icon.png" "$PKG_ROOT/usr/share/icons/hicolor/256x256/apps/docker-control-center.png"
+install -m 0644 "$ROOT_DIR/upstream_assets/icon.png" "$PKG_ROOT/usr/share/pixmaps/docker-control-center.png"
+
+cat > "$PKG_ROOT/DEBIAN/postinst" <<'EOF'
+#!/bin/sh
+set -e
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+fi
+exit 0
+EOF
+chmod 0755 "$PKG_ROOT/DEBIAN/postinst"
+
+cat > "$PKG_ROOT/DEBIAN/postrm" <<'EOF'
+#!/bin/sh
+set -e
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+fi
+exit 0
+EOF
+chmod 0755 "$PKG_ROOT/DEBIAN/postrm"
 
 cat > "$PKG_ROOT/DEBIAN/control" <<EOF
 Package: docker-control-center

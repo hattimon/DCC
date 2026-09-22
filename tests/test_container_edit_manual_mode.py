@@ -76,18 +76,19 @@ class ContainerEditManualModeTests(unittest.TestCase):
             self.assertIn("hqtrader-api", dialog.app_title_label.text())
             dialog.close()
 
-    def test_new_container_starts_in_manual_mode_until_user_selects_preset(self):
+    def test_new_container_starts_in_store_and_can_switch_to_manual_mode(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(
             dcc, "load_cached_deployment_catalog", return_value=[]
         ):
             dialog = dcc.NewContainerDialog(_FakeClient(), dcc.TEXTS["EN"], lang="EN")
+            self.assertFalse(dialog.manual_configuration_mode)
+            self.assertEqual(dialog.catalog_list.currentRow(), 0)
+            self.assertTrue(dialog.image_edit.text())
+
+            dialog.select_manual_configuration()
             self.assertTrue(dialog.manual_configuration_mode)
             self.assertEqual(dialog.catalog_list.currentRow(), -1)
             self.assertIn("Custom container", dialog.app_title_label.text())
-
-            dialog.catalog_list.setCurrentRow(0)
-            self.assertFalse(dialog.manual_configuration_mode)
-            self.assertTrue(dialog.image_edit.text())
             dialog.close()
 
     def test_reconstructed_run_args_preserve_runtime_configuration(self):
