@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.34.2",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.34.2",
+      "latest_release": "v0.34.3",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.34.3",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -348,8 +348,8 @@
       "homepage_url": "https://nodejs.org/",
       "icon_text": "💻",
       "upstream_repo": "nodejs/node",
-      "latest_release": "v26.9.0",
-      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.9.0",
+      "latest_release": "v26.10.0",
+      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.10.0",
       "icon_url": "catalog/media/icons/nodejs.png"
     },
     {
@@ -1048,7 +1048,10 @@
         "After startup, open the web dashboard on the published HTTP port.",
         "If Pi-hole generates a startup password, DCC will try to read it from the container logs and show it after deployment."
       ],
-      "icon_url": "catalog/media/icons/pi-hole.png"
+      "icon_url": "catalog/media/icons/pi-hole.png",
+      "upstream_repo": "pi-hole/docker-pi-hole",
+      "latest_release": "2026.09.0",
+      "latest_release_url": "https://github.com/pi-hole/docker-pi-hole/releases/tag/2026.09.0"
     },
     {
       "name": "Home Assistant",
@@ -1638,8 +1641,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.16.1",
-      "latest_release_url": "https://github.com/Mintplex-Labs/anything-llm/releases/tag/v1.16.1",
+      "latest_release": "v1.16.2",
+      "latest_release_url": "https://github.com/Mintplex-Labs/anything-llm/releases/tag/v1.16.2",
       "icon_url": "catalog/media/icons/anythingllm.png"
     },
     {
@@ -1943,7 +1946,9 @@
         "After first start set the panel password: docker exec smartwan-manager node server/setPanelPassword.js admin 'strong-password'",
         "Open http://<host-address>:8888 and configure the router SSH connection.",
         "Back up the router and review the documented firmware compatibility before applying managed routing changes."
-      ]
+      ],
+      "latest_release": "v1.0.0",
+      "latest_release_url": "https://github.com/hattimon/SmartWAN-Manager/releases/tag/v1.0.0"
     }
   ]
 }
