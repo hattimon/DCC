@@ -28,8 +28,8 @@
       "homepage_url": "https://www.agent-zero.ai/",
       "icon_text": "🤖",
       "upstream_repo": "agent0ai/agent-zero",
-      "latest_release": "v2.12",
-      "latest_release_url": "https://github.com/agent0ai/agent-zero/releases/tag/v2.12",
+      "latest_release": "v2.13",
+      "latest_release_url": "https://github.com/agent0ai/agent-zero/releases/tag/v2.13",
       "icon_url": "catalog/media/icons/agent-zero.png"
     },
     {
@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.34.3",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.34.3",
+      "latest_release": "v0.34.4",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.34.4",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
