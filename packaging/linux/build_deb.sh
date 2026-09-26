@@ -75,19 +75,26 @@ QT_QPA_PLATFORM=offscreen "$REPO_BUILDER_BINARY" --self-check
 
 PKG_ROOT="$BUILD_WORK/deb-root"
 rm -rf "$PKG_ROOT"
+ICON_SIZES=(16 24 32 48 64 128 256 512)
 install -d \
   "$PKG_ROOT/DEBIAN" \
   "$PKG_ROOT/usr/bin" \
   "$PKG_ROOT/usr/share/applications" \
-  "$PKG_ROOT/usr/share/icons/hicolor/256x256/apps" \
   "$PKG_ROOT/usr/share/pixmaps"
+for size in "${ICON_SIZES[@]}"; do
+  install -d "$PKG_ROOT/usr/share/icons/hicolor/${size}x${size}/apps"
+done
 
 install -m 0755 "$APP_BINARY" "$PKG_ROOT/usr/bin/docker-control-center"
 install -m 0755 "$REPO_BUILDER_BINARY" "$PKG_ROOT/usr/bin/dcc-repo-builder"
 install -m 0644 "$ROOT_DIR/packaging/linux/docker-control-center.desktop" "$PKG_ROOT/usr/share/applications/docker-control-center.desktop"
 install -m 0644 "$ROOT_DIR/packaging/linux/dcc-repo-builder.desktop" "$PKG_ROOT/usr/share/applications/dcc-repo-builder.desktop"
-install -m 0644 "$ROOT_DIR/upstream_assets/icon.png" "$PKG_ROOT/usr/share/icons/hicolor/256x256/apps/docker-control-center.png"
-install -m 0644 "$ROOT_DIR/upstream_assets/icon.png" "$PKG_ROOT/usr/share/pixmaps/docker-control-center.png"
+for size in "${ICON_SIZES[@]}"; do
+  install -m 0644 \
+    "$ROOT_DIR/assets/icons/hicolor/${size}x${size}/apps/docker-control-center.png" \
+    "$PKG_ROOT/usr/share/icons/hicolor/${size}x${size}/apps/docker-control-center.png"
+done
+install -m 0644 "$ROOT_DIR/assets/icons/hicolor/512x512/apps/docker-control-center.png" "$PKG_ROOT/usr/share/pixmaps/docker-control-center.png"
 
 cat > "$PKG_ROOT/DEBIAN/postinst" <<'EOF'
 #!/bin/sh
