@@ -41,6 +41,11 @@ class StoreCatalogFeatureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+        # UI tests must not start the delayed network refresh thread.
+        # It can still run when the test QApplication is destroyed.
+        refresh_patch = patch.object(dcc.NewContainerDialog, "refresh_external_catalogs")
+        refresh_patch.start()
+        cls.addClassCleanup(refresh_patch.stop)
 
     def test_extended_store_metadata_is_parsed(self):
         template = dcc.image_template_from_dict(

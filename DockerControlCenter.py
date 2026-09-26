@@ -258,6 +258,7 @@ TEXTS = {
         "info_update_cancel": "Cancel",
         "info_update_downloading": "Downloading update {release}...",
         "info_update_download_failed": "Could not download or start the update.",
+        "info_update_windows_handoff": "The update has been downloaded. Docker Control Center will now close, then the installer will start. Finish the installer normally; it will confirm when version {release} has been installed.",
         "info_update_linux_auth_title": "Linux update - password required",
         "info_update_linux_auth": "The update package has been downloaded. Linux will now open a system authorization window. Enter your user/administrator password there to allow the package installation. Docker Control Center will remain open until the installation finishes.",
         "info_update_linux_installing": "Installing the Linux update... Complete the system password prompt if it is still visible.",
@@ -805,6 +806,7 @@ TEXTS = {
         "info_update_cancel": "Anuluj",
         "info_update_downloading": "Pobieranie aktualizacji {release}...",
         "info_update_download_failed": "Nie udało się pobrać lub uruchomić aktualizacji.",
+        "info_update_windows_handoff": "Aktualizacja została pobrana. Docker Control Center zostanie teraz zamknięty, a po jego zamknięciu uruchomi się instalator. Dokończ instalację normalnie; instalator potwierdzi, gdy wersja {release} zostanie zainstalowana.",
         "info_update_linux_auth_title": "Aktualizacja Linux - wymagane hasło",
         "info_update_linux_auth": "Pakiet aktualizacji został pobrany. Linux otworzy teraz systemowe okno uwierzytelnienia. Wpisz w nim hasło swojego konta/użytkownika administratora, aby zezwolić na instalację pakietu. Docker Control Center pozostanie uruchomiony aż do zakończenia instalacji.",
         "info_update_linux_installing": "Instalowanie aktualizacji Linux... Jeśli okno hasła jest nadal widoczne, wpisz hasło i zatwierdź.",
@@ -9723,7 +9725,15 @@ class MainWindow(QMainWindow):
                     self.statusBar().showMessage(self.texts["info_update_linux_installing"])
                     return
             else:
-                subprocess.Popen([path], cwd=str(Path(path).parent))
+                release = Path(path).stem.replace("DockerControlCenter-Setup-", "")
+                self.start_windows_update_installer_after_exit(path)
+                QMessageBox.information(
+                    self,
+                    self.texts["info_update_available_title"],
+                    self.texts["info_update_windows_handoff"].format(release=release),
+                )
+                QTimer.singleShot(0, self._quit_for_windows_update)
+                return
         except Exception as exc:
             QMessageBox.warning(
                 self,
@@ -9732,6 +9742,105 @@ class MainWindow(QMainWindow):
             )
             return
         QTimer.singleShot(500, self.close)
+
+    def start_windows_update_installer_after_exit(self, path: str) -> None:
+        """Start the NSIS installer only after this DCC process has exited.
+
+        Starting the installer while DCC is still alive makes NSIS kill the
+        application while Qt is finishing the download callback.  Besides
+        looking like an updater crash, that races with file replacement.  A
+        tiny PowerShell helper waits for our PID and then starts the
+        installer normally, so the installer can finish and show its result.
+        """
+        installer_path = Path(path).resolve()
+        if not installer_path.is_file():
+            raise FileNotFoundError(installer_path)
+
+        powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+        if not powershell:
+            raise RuntimeError("Windows PowerShell is unavailable; cannot hand off the update safely.")
+
+        helper_path = installer_path.parent / f"dcc-update-handoff-{os.getpid()}.ps1"
+        log_path = installer_path.parent / "dcc-update-handoff.log"
+        helper_path.write_text(
+            """param(
+    [Parameter(Mandatory=$true)][int]$DccProcessId,
+    [Parameter(Mandatory=$true)][string]$InstallerPath,
+    [Parameter(Mandatory=$true)][string]$LogPath
+)
+$ErrorActionPreference = 'Stop'
+function Write-UpdateLog([string]$Message) {
+    $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'
+    Add-Content -LiteralPath $LogPath -Value ("[$stamp] $Message") -Encoding UTF8
+}
+try {
+    Write-UpdateLog "Waiting for DCC PID $DccProcessId to exit."
+    $deadline = (Get-Date).AddMinutes(2)
+    while (Get-Process -Id $DccProcessId -ErrorAction SilentlyContinue) {
+        if ((Get-Date) -ge $deadline) {
+            throw "Timed out waiting for DCC PID $DccProcessId to exit."
+        }
+        Start-Sleep -Milliseconds 200
+    }
+
+    # Give Qt/PyInstaller and antivirus scanners a moment to release the old
+    # executable and its temporary runtime before NSIS replaces files.
+    Start-Sleep -Milliseconds 1200
+    if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) {
+        throw "Installer does not exist: $InstallerPath"
+    }
+
+    $workDir = Split-Path -Parent $InstallerPath
+    Write-UpdateLog "Starting installer: $InstallerPath"
+    $process = Start-Process -FilePath $InstallerPath -WorkingDirectory $workDir -PassThru
+    $process.WaitForExit()
+    Write-UpdateLog "Installer finished with exit code $($process.ExitCode)."
+    exit $process.ExitCode
+} catch {
+    try { Write-UpdateLog ("Updater handoff failed: " + $_.Exception.Message) } catch {}
+    exit 1
+}
+""",
+            encoding="utf-8-sig",
+        )
+
+        creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        subprocess.Popen(
+            [
+                powershell,
+                "-NoProfile",
+                "-NonInteractive",
+                "-WindowStyle",
+                "Hidden",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(helper_path),
+                "-DccProcessId",
+                str(os.getpid()),
+                "-InstallerPath",
+                str(installer_path),
+                "-LogPath",
+                str(log_path),
+            ],
+            cwd=str(installer_path.parent),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            creationflags=creationflags,
+        )
+
+    def _quit_for_windows_update(self) -> None:
+        """Persist window state and end the Qt process before NSIS starts."""
+        download_thread = self.update_download_thread
+        if download_thread is not None and download_thread.isRunning():
+            QTimer.singleShot(100, self._quit_for_windows_update)
+            return
+        self.close()
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
 
     def on_linux_update_install_error(self, error):
         process = self.update_install_process

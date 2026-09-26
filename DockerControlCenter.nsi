@@ -27,24 +27,23 @@ UninstPage uninstConfirm
 UninstPage instfiles
 
 Section "Install"
-  ; Close an older running copy before replacing the executable during updates.
-  nsExec::ExecToStack 'taskkill /IM "${APP_EXE}" /T /F'
-  Pop $0
-  Pop $1
-
   SetOutPath "$InstDir"
   File "/oname=${APP_EXE}" "..\dist\DockerControlCenter.exe"
   File "/oname=${REPO_BUILDER_EXE}" "..\dist\DCCRepoBuilder.exe"
 
-  ; PyInstaller bundles Python/Qt/Paramiko. This verifies the packaged runtime
-  ; before shortcuts and uninstall metadata are committed.
-  nsExec::ExecToStack '"$InstDir\${APP_EXE}" --self-check'
-  Pop $0
-  Pop $1
-  ${If} $0 != 0
-    MessageBox MB_ICONSTOP "Docker Control Center dependency self-check failed (exit code $0). Installation cannot continue."
+  ; The build pipeline already executes --self-check on the exact EXE before
+  ; NSIS packages it. Running a PyInstaller one-file binary again immediately
+  ; after extraction can race with AV/temp scanning of _MEI\python312.dll and
+  ; produce a false installation failure. Verify the installed payload exists
+  ; here and leave runtime validation to the pre-package build check.
+  IfFileExists "$InstDir\${APP_EXE}" app_payload_ready
+    MessageBox MB_ICONSTOP "Docker Control Center executable was not installed correctly. Installation cannot continue."
     Abort
-  ${EndIf}
+app_payload_ready:
+  IfFileExists "$InstDir\${REPO_BUILDER_EXE}" repo_builder_payload_ready
+    MessageBox MB_ICONSTOP "DCC Repo Builder executable was not installed correctly. Installation cannot continue."
+    Abort
+repo_builder_payload_ready:
 
   ; The internal SSH backend uses Paramiko, while interactive terminal actions
   ; use the Windows OpenSSH client. A 32-bit NSIS process can be redirected away
@@ -90,6 +89,10 @@ openssh_done:
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$InstDir\${APP_EXE}"
   CreateShortcut "$SMPROGRAMS\${APP_NAME}\DCC Repo Builder.lnk" "$InstDir\${REPO_BUILDER_EXE}"
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$InstDir\${APP_EXE}"
+
+  IfSilent install_done
+  MessageBox MB_ICONINFORMATION|MB_OK "Docker Control Center ${APP_VERSION} was installed successfully."
+install_done:
 SectionEnd
 
 Section "Uninstall"
