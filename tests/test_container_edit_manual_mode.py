@@ -88,7 +88,13 @@ class ContainerEditManualModeTests(unittest.TestCase):
             dialog.select_manual_configuration()
             self.assertTrue(dialog.manual_configuration_mode)
             self.assertEqual(dialog.catalog_list.currentRow(), -1)
-            self.assertIn("Custom container", dialog.app_title_label.text())
+            self.assertIn("New container", dialog.app_title_label.text())
+            self.assertEqual(dialog.name_edit.text(), "")
+            self.assertEqual(dialog.image_edit.text(), "")
+            self.assertEqual(dialog.cport_edit.text(), "")
+            self.assertEqual(dialog.hport_edit.text(), "")
+            self.assertEqual(dialog.extra_edit.text(), "")
+            self.assertEqual(dialog.command_edit.text(), "")
             dialog.close()
 
     def test_reconstructed_run_args_preserve_runtime_configuration(self):

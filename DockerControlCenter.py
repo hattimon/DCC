@@ -34,7 +34,7 @@ try:
     import paramiko
 except Exception:
     paramiko = None
-from PyQt6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QTextCursor
+from PyQt6.QtGui import QActionGroup, QBrush, QColor, QFont, QFontMetrics, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QShortcut, QTextCursor
 try:
     from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 except Exception:
@@ -146,7 +146,43 @@ NEON_PALETTE = [
     ("Orange", "#ff9955"),
     ("Gold", "#ffd166"),
     ("Red", "#ff5f5f"),
+    ("Dark Green", "#0B6B3A"),
+    ("Teal", "#168C88"),
+    ("Light Teal", "#36CFC9"),
+    ("Bright Green", "#23FF00"),
+    ("Deep Blue", "#2457D6"),
+    ("Steel Blue", "#4878A8"),
+    ("Dark Red", "#A52A35"),
+    ("Burgundy", "#7D1E3A"),
+    ("Deep Purple", "#6F42C1"),
+    ("Amber", "#D89B00"),
+    ("Deep Yellow", "#C7A600"),
+    ("Burnt Orange", "#C65A1E"),
 ]
+MUTED_NEON_START_INDEX = 8
+AUTO_REFRESH_INTERVALS = (5, 10, 15, 30, 60)
+NEON_COLOR_LABELS_PL = {
+    "Cyan": "Cyjan",
+    "Blue": "Niebieski",
+    "Mint": "Miętowy",
+    "Purple": "Fioletowy",
+    "Pink": "Różowy",
+    "Orange": "Pomarańczowy",
+    "Gold": "Złoty",
+    "Red": "Czerwony",
+    "Dark Green": "Ciemnozielony",
+    "Teal": "Morski",
+    "Light Teal": "Jasny morski",
+    "Bright Green": "Jaskrawa zieleń",
+    "Deep Blue": "Głęboki niebieski",
+    "Steel Blue": "Stalowy niebieski",
+    "Dark Red": "Ciemnoczerwony",
+    "Burgundy": "Bordowy",
+    "Deep Purple": "Głęboki fiolet",
+    "Amber": "Bursztynowy",
+    "Deep Yellow": "Głęboki żółty",
+    "Burnt Orange": "Ciemny pomarańczowy",
+}
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 DEFAULT_OPENAI_MODELS = [
     "gpt-4.1-mini",
@@ -216,6 +252,8 @@ TEXTS = {
     "EN": {
         "app_title": "Docker Control Center",
         "menu_file": "File",
+        "menu_refresh": "Refresh",
+        "menu_auto_refresh": "Automatic refresh",
         "menu_store": "Application Store / SHOP",
         "menu_profiles_import": "Import connection profiles...",
         "menu_profiles_export": "Export connection profiles...",
@@ -293,7 +331,10 @@ TEXTS = {
         "app_settings_note": "When enabled, DCC checks local Docker at startup and launches Docker Desktop automatically if needed.",
         "app_settings_theme": "Theme",
         "app_settings_neon_animate": "Animate neon glow",
+        "app_settings_neon_enabled": "Enable neon glow",
         "app_settings_neon_color": "Neon color (static)",
+        "neon_muted_header": "Muted / deep colors",
+        "neon_custom": "Custom ({color})",
         "app_settings_updates_title": "Updates",
         "app_settings_auto_updates": "Automatic updates: check at startup and ask before installing",
         "app_settings_update_notifications": "Show notifications when a new version is available",
@@ -548,6 +589,10 @@ TEXTS = {
         "autostart_disable_confirm": "This will set the Docker restart policy to no. The container will keep its data and settings, but after a system or Docker restart it will not start automatically. Continue?",
         "logs_title": "Logs: {name}",
         "logs_loading": "Loading logs...",
+        "logs_search_placeholder": "Find in logs...",
+        "logs_previous": "Previous result",
+        "logs_next": "Next result",
+        "logs_no_results": "0/0",
         "wizard_title": "Docker deployment catalog",
         "wizard_store_subtitle": "Application store for the currently selected Docker host",
         "wizard_target_host": "Target host: {host}",
@@ -607,9 +652,9 @@ TEXTS = {
         "wizard_category": "Category",
         "wizard_catalog_count": "{count} apps",
         "wizard_pick_image": "Choose a preset image",
-        "wizard_manual": "Manual configuration",
-        "wizard_manual_title": "Custom container configuration",
-        "wizard_manual_description": "Enter the image, ports, parameters and command manually, or paste a docker run command below.",
+        "wizard_manual": "New container",
+        "wizard_manual_title": "New container",
+        "wizard_manual_description": "Start with a blank container configuration, then enter an image or paste a docker run command below.",
         "wizard_current_container_title": "Container: {name}",
         "wizard_current_container_description": "Current image: {image}",
         "wizard_latest_release": "Latest upstream release: {version}",
@@ -764,6 +809,8 @@ TEXTS = {
     "PL": {
         "app_title": "Docker Control Center",
         "menu_file": "Plik",
+        "menu_refresh": "Odświeżanie",
+        "menu_auto_refresh": "Automatyczne odświeżanie",
         "menu_store": "Sklep aplikacji / SKLEP",
         "menu_profiles_import": "Importuj profile połączeń...",
         "menu_profiles_export": "Eksportuj profile połączeń...",
@@ -841,7 +888,10 @@ TEXTS = {
         "app_settings_note": "Po włączeniu DCC sprawdza lokalny Docker przy starcie i automatycznie uruchamia Docker Desktop, jeśli potrzeba.",
         "app_settings_theme": "Motyw",
         "app_settings_neon_animate": "Animuj neon",
+        "app_settings_neon_enabled": "Włącz neon",
         "app_settings_neon_color": "Kolor neonu (stały)",
+        "neon_muted_header": "Kolory stonowane / głębokie",
+        "neon_custom": "Niestandardowy ({color})",
         "app_settings_updates_title": "Aktualizacje",
         "app_settings_auto_updates": "Automatyczne aktualizacje: sprawdzaj przy starcie i pytaj przed instalacją",
         "app_settings_update_notifications": "Pokazuj powiadomienia o dostępnej nowej wersji",
@@ -1097,6 +1147,10 @@ TEXTS = {
         "autostart_disable_confirm": "Zmiana ustawi politykę restartu Docker na no. Kontener nie straci danych ani ustawień, ale po restarcie systemu lub demona Docker nie będzie uruchamiany automatycznie. Kontynuować?",
         "logs_title": "Logi: {name}",
         "logs_loading": "Wczytywanie logow...",
+        "logs_search_placeholder": "Szukaj w logach...",
+        "logs_previous": "Poprzedni wynik",
+        "logs_next": "Następny wynik",
+        "logs_no_results": "0/0",
         "wizard_title": "Katalog wdrożeń Docker",
         "wizard_store_subtitle": "Sklep aplikacji dla aktualnie wybranego hosta Docker",
         "wizard_target_host": "Host docelowy: {host}",
@@ -1156,9 +1210,9 @@ TEXTS = {
         "wizard_category": "Kategoria",
         "wizard_catalog_count": "Aplikacje: {count}",
         "wizard_pick_image": "Wybierz gotowy obraz",
-        "wizard_manual": "Konfiguracja ręczna",
-        "wizard_manual_title": "Własna konfiguracja kontenera",
-        "wizard_manual_description": "Wpisz ręcznie obraz, porty, parametry i komendę albo wklej niżej polecenie docker run.",
+        "wizard_manual": "Nowy kontener",
+        "wizard_manual_title": "Nowy kontener",
+        "wizard_manual_description": "Zacznij od pustej konfiguracji kontenera, następnie wpisz obraz albo wklej niżej polecenie docker run.",
         "wizard_current_container_title": "Kontener: {name}",
         "wizard_current_container_description": "Aktualny obraz: {image}",
         "wizard_latest_release": "Najnowsza wersja upstream: {version}",
@@ -3429,6 +3483,17 @@ def normalize_accent_color(value: str, fallback: str = "#33f0ff") -> str:
     return QColor(fallback).name()
 
 
+def load_auto_refresh_settings(settings: QSettings) -> tuple[bool, int]:
+    enabled = str(settings.value("containers/auto_refresh_enabled", "true")).lower() in {"1", "true", "yes"}
+    try:
+        interval = int(settings.value("containers/auto_refresh_interval_s", 10))
+    except (TypeError, ValueError):
+        interval = 10
+    if interval not in AUTO_REFRESH_INTERVALS:
+        interval = 10
+    return enabled, interval
+
+
 DEFAULT_ACCENT_COLOR = "#33f0ff"
 NIGHT_ACCENT_COLOR = "#ff4a55"
 
@@ -3525,6 +3590,10 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         selection-background-color: {accent_soft};
         selection-color: #08172c;
     }}
+    QDialog, QMessageBox {{
+        background: {surface};
+        color: {palette['fg']};
+    }}
     QMainWindow {{
         background: transparent;
     }}
@@ -3561,6 +3630,7 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         background: {accent_soft};
         color: {palette['fg']};
     }}
+    QMenu::item:disabled {{ color: {palette['muted']}; }}
     QMenu::separator {{
         height: 1px;
         background: {palette['border']};
@@ -3608,6 +3678,19 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         padding: 6px 10px;
     }}
     QPushButton:hover {{ border: 1px solid {accent}; background: {button_hover_bg}; }}
+    QPushButton:disabled, QToolButton:disabled {{
+        color: {palette['muted']};
+        background: {control_bg};
+        border-color: {palette['border']};
+    }}
+    QToolButton {{
+        background: {button_bg};
+        color: {palette['fg']};
+        border: 1px solid {palette['border']};
+        border-radius: 8px;
+        padding: 4px 7px;
+    }}
+    QToolButton:hover {{ border-color: {accent}; background: {button_hover_bg}; }}
     QPushButton#primaryAction {{
         border: 1px solid {accent};
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {accent_soft}, stop:1 {accent});
@@ -3693,7 +3776,7 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
     QPushButton#linkAction[selected="true"]:hover {{
         background: rgba(8,23,44,0.18);
     }}
-    QComboBox, QLineEdit, QTextEdit, QPlainTextEdit, QListWidget, QSpinBox, QTableWidget {{
+    QComboBox, QLineEdit, QTextEdit, QPlainTextEdit, QListWidget, QTreeWidget, QSpinBox, QDoubleSpinBox, QTableWidget {{
         background: {input_bg};
         color: {palette['fg']};
         border: 1px solid {palette['border']};
@@ -3708,6 +3791,22 @@ def gaming_stylesheet(theme: str, glow_phase: float, transparent: bool, transpar
         alternate-background-color: {table_alt_bg};
         color: {palette['fg']};
     }}
+    QTabWidget::pane {{
+        background: {panel_bg};
+        border: 1px solid {palette['border']};
+        border-radius: 10px;
+    }}
+    QTabBar::tab {{
+        background: {control_bg};
+        color: {palette['fg']};
+        border: 1px solid {palette['border']};
+        padding: 7px 12px;
+    }}
+    QTabBar::tab:selected {{ background: {accent_soft}; border-color: {accent}; color: {palette['fg']}; }}
+    QTabBar::tab:hover {{ background: {button_hover_bg}; }}
+    QLabel, QCheckBox, QRadioButton {{ color: {palette['fg']}; background: transparent; }}
+    QCheckBox:disabled, QRadioButton:disabled, QLabel:disabled {{ color: {palette['muted']}; }}
+    QListWidget::item:selected, QTreeWidget::item:selected {{ background: {accent_soft}; color: {palette['fg']}; }}
     QTableWidget::item {{
         color: {palette['fg']};
         background: transparent;
@@ -3915,24 +4014,27 @@ def resolve_background_path(theme: str) -> Path:
 
 
 class BackgroundSurface(QWidget):
-    def __init__(self, theme: str, transparent: bool, transparency_level: int, parent=None):
+    def __init__(self, theme: str, transparent: bool, transparency_level: int, accent_color: str = DEFAULT_ACCENT_COLOR, parent=None):
         super().__init__(parent)
         self.setObjectName("rootSurface")
         self._theme = theme
         self._transparent = transparent
         self._transparency_level = transparency_level
+        self._accent_color = normalize_accent_color(accent_color)
         self._pixmap = QPixmap()
         self.setAutoFillBackground(False)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.reload_background()
 
-    def set_visual_state(self, theme: str, transparent: bool, transparency_level: int):
+    def set_visual_state(self, theme: str, transparent: bool, transparency_level: int, accent_color: Optional[str] = None):
         changed_theme = theme != self._theme
         if changed_theme:
             self._theme = theme
             self.reload_background()
         self._transparent = transparent
         self._transparency_level = transparency_level
+        if accent_color is not None:
+            self._accent_color = normalize_accent_color(accent_color)
         self.update()
 
     def reload_background(self):
@@ -3991,26 +4093,16 @@ class BackgroundSurface(QWidget):
         painter.fillRect(rectf, self._overlay_color())
 
         glow = QLinearGradient(rectf.left(), rectf.top(), rectf.right(), rectf.bottom())
-        if self._theme == "day":
-            glow.setColorAt(0.0, QColor(255, 255, 255, 42))
-            glow.setColorAt(0.42, QColor(205, 228, 241, 18))
-            glow.setColorAt(1.0, QColor(255, 255, 255, 0))
-        elif self._theme == "light":
-            glow.setColorAt(0.0, QColor(255, 255, 255, 86))
-            glow.setColorAt(0.35, QColor(210, 234, 255, 28))
-            glow.setColorAt(1.0, QColor(255, 255, 255, 0))
-        elif self._theme == "black":
-            glow.setColorAt(0.0, QColor(255, 120, 120, 28))
-            glow.setColorAt(0.48, QColor(90, 150, 255, 22))
-            glow.setColorAt(1.0, QColor(0, 0, 0, 0))
-        elif self._theme == "night":
-            glow.setColorAt(0.0, QColor(255, 52, 66, 54))
-            glow.setColorAt(0.42, QColor(128, 20, 34, 24))
-            glow.setColorAt(1.0, QColor(0, 0, 0, 0))
-        else:
-            glow.setColorAt(0.0, QColor(120, 190, 255, 36))
-            glow.setColorAt(0.45, QColor(255, 255, 255, 18))
-            glow.setColorAt(1.0, QColor(0, 0, 0, 0))
+        accent = QColor(effective_accent_color(self._theme, self._accent_color))
+        accent_soft = QColor(accent)
+        accent_soft.setAlpha(52 if self._theme == "night" else 38)
+        accent_fade = accent.lighter(125)
+        accent_fade.setAlpha(20 if self._theme in {"day", "light"} else 24)
+        transparent_accent = QColor(accent)
+        transparent_accent.setAlpha(0)
+        glow.setColorAt(0.0, accent_soft)
+        glow.setColorAt(0.44, accent_fade)
+        glow.setColorAt(1.0, transparent_accent)
         painter.fillRect(rectf, glow)
 
         painter.setClipping(False)
@@ -4030,6 +4122,22 @@ class LogsDialog(QDialog):
         self.setWindowTitle(self.texts["logs_title"].format(name=name))
         self.resize(800, 500)
         layout = QVBoxLayout(self)
+        search_row = QHBoxLayout()
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText(self.texts["logs_search_placeholder"])
+        self.search_edit.setClearButtonEnabled(True)
+        self.btn_previous = QPushButton("↑")
+        self.btn_previous.setToolTip(self.texts["logs_previous"])
+        self.btn_next = QPushButton("↓")
+        self.btn_next.setToolTip(self.texts["logs_next"])
+        self.result_label = QLabel(self.texts["logs_no_results"])
+        self.result_label.setMinimumWidth(54)
+        self.result_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        search_row.addWidget(self.search_edit, 1)
+        search_row.addWidget(self.btn_previous)
+        search_row.addWidget(self.btn_next)
+        search_row.addWidget(self.result_label)
+        layout.addLayout(search_row)
         self.text_edit = QPlainTextEdit()
         self.text_edit.setReadOnly(True)
         self.text_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
@@ -4038,7 +4146,87 @@ class LogsDialog(QDialog):
         btn_refresh = QPushButton(self.texts["btn_refresh"])
         btn_refresh.clicked.connect(self.load_logs)
         layout.addWidget(btn_refresh)
+        self._search_matches: List[tuple[int, int]] = []
+        self._search_index = -1
+        self.search_edit.textChanged.connect(self.update_search)
+        self.search_edit.returnPressed.connect(self._search_return_pressed)
+        self.btn_previous.clicked.connect(self.previous_result)
+        self.btn_next.clicked.connect(self.next_result)
+        self.find_shortcut = QShortcut(QKeySequence.StandardKey.Find, self)
+        self.find_shortcut.activated.connect(self.focus_search)
+        self.clear_search_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        self.clear_search_shortcut.activated.connect(self.clear_search)
         self.load_logs()
+
+    def focus_search(self):
+        self.search_edit.setFocus()
+        self.search_edit.selectAll()
+
+    def clear_search(self):
+        self.search_edit.clear()
+        self.text_edit.setExtraSelections([])
+
+    def _search_return_pressed(self):
+        if QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.previous_result()
+        else:
+            self.next_result()
+
+    def update_search(self, _text: str = ""):
+        query = self.search_edit.text()
+        self._search_matches = []
+        self._search_index = -1
+        if query:
+            self._search_matches = [
+                (match.start(), match.end())
+                for match in re.finditer(re.escape(query), self.text_edit.toPlainText(), re.IGNORECASE)
+            ]
+        if self._search_matches:
+            self._search_index = 0
+        self._render_search_results()
+
+    def _render_search_results(self):
+        selections = []
+        palette = self.palette()
+        for index, (start, end) in enumerate(self._search_matches):
+            selection = QTextEdit.ExtraSelection()
+            cursor = self.text_edit.textCursor()
+            cursor.setPosition(start)
+            cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+            selection.cursor = cursor
+            if index == self._search_index:
+                selection.format.setBackground(palette.highlight())
+                selection.format.setForeground(palette.highlightedText())
+            else:
+                color = QColor(palette.highlight().color())
+                color.setAlpha(95)
+                selection.format.setBackground(color)
+            selections.append(selection)
+        self.text_edit.setExtraSelections(selections)
+        count = len(self._search_matches)
+        current = self._search_index + 1 if count else 0
+        self.result_label.setText(f"{current}/{count}")
+        self.btn_previous.setEnabled(bool(count))
+        self.btn_next.setEnabled(bool(count))
+        if count:
+            cursor = self.text_edit.textCursor()
+            start, end = self._search_matches[self._search_index]
+            cursor.setPosition(start)
+            cursor.setPosition(end, QTextCursor.MoveMode.KeepAnchor)
+            self.text_edit.setTextCursor(cursor)
+            self.text_edit.ensureCursorVisible()
+
+    def next_result(self):
+        if not self._search_matches:
+            return
+        self._search_index = (self._search_index + 1) % len(self._search_matches)
+        self._render_search_results()
+
+    def previous_result(self):
+        if not self._search_matches:
+            return
+        self._search_index = (self._search_index - 1) % len(self._search_matches)
+        self._render_search_results()
 
     def load_logs(self):
         vbar = self.text_edit.verticalScrollBar()
@@ -4049,6 +4237,7 @@ class LogsDialog(QDialog):
         try:
             logs = self.client.containers.get(self.name).logs(tail=200).decode("utf-8", errors="ignore")
             self.text_edit.setPlainText(logs)
+            self.update_search()
 
             def restore_scroll():
                 vbar.setValue(min(previous_v, vbar.maximum()))
@@ -4058,6 +4247,7 @@ class LogsDialog(QDialog):
             QTimer.singleShot(25, restore_scroll)
         except Exception as exc:
             self.text_edit.setPlainText(f"{self.texts['msg_error']}: {exc}")
+            self.update_search()
 
 
 class TutorialDialog(QDialog):
@@ -4304,25 +4494,47 @@ class AppSettingsDialog(QDialog):
         if theme_index >= 0:
             self.theme_combo.setCurrentIndex(theme_index)
 
+        self.neon_enabled_checkbox = QCheckBox(self.texts["app_settings_neon_enabled"])
+        neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
+        self.neon_enabled_checkbox.setChecked(neon_enabled)
         self.neon_checkbox = QCheckBox(self.texts["app_settings_neon_animate"])
-        neon_enabled = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
-        self.neon_checkbox.setChecked(neon_enabled)
+        neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
+        self.neon_checkbox.setChecked(neon_animate)
 
         self.neon_color_combo = QComboBox()
-        for label, value in NEON_PALETTE:
-            self.neon_color_combo.addItem(label, value)
+        for palette_index, (label, value) in enumerate(NEON_PALETTE):
+            if palette_index == MUTED_NEON_START_INDEX:
+                self.neon_color_combo.addItem(self.texts["neon_muted_header"])
+                header_index = self.neon_color_combo.count() - 1
+                header_item = self.neon_color_combo.model().item(header_index)
+                if header_item is not None:
+                    header_item.setEnabled(False)
+                    header_font = header_item.font()
+                    header_font.setBold(True)
+                    header_item.setFont(header_font)
+            display_label = NEON_COLOR_LABELS_PL.get(label, label) if self.texts.get("menu_file") == "Plik" else label
+            self.neon_color_combo.addItem(display_label, value)
             index = self.neon_color_combo.count() - 1
             self.neon_color_combo.setItemData(index, QColor(value), Qt.ItemDataRole.DecorationRole)
         saved_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
-        color_index = self.neon_color_combo.findData(saved_color)
+        color_index = next(
+            (
+                index
+                for index in range(self.neon_color_combo.count())
+                if self.neon_color_combo.itemData(index)
+                and normalize_accent_color(str(self.neon_color_combo.itemData(index))) == saved_color
+            ),
+            -1,
+        )
         if color_index < 0:
-            self.neon_color_combo.addItem(saved_color, saved_color)
+            self.neon_color_combo.addItem(self.texts["neon_custom"].format(color=saved_color.upper()), saved_color)
             self.neon_color_combo.setItemData(self.neon_color_combo.count() - 1, QColor(saved_color), Qt.ItemDataRole.DecorationRole)
             color_index = self.neon_color_combo.count() - 1
         self.neon_color_combo.setCurrentIndex(color_index)
         self.neon_color_combo.setEnabled(True)
 
         form.addRow(self.texts["app_settings_theme"], self.theme_combo)
+        form.addRow(self.neon_enabled_checkbox)
         form.addRow(self.neon_checkbox)
         form.addRow(self.texts["app_settings_neon_color"], self.neon_color_combo)
         layout.addLayout(form)
@@ -4591,10 +4803,10 @@ class NewContainerDialog(QDialog):
         screen = parent.screen() if parent is not None and parent.screen() is not None else QApplication.primaryScreen()
         available = screen.availableGeometry() if screen is not None else None
         default_width = 1160
-        default_height = 720
+        default_height = 900
         if available is not None and available.isValid():
             default_width = min(default_width, max(520, int(available.width() * 0.92)))
-            default_height = min(default_height, max(400, int(available.height() * 0.86)))
+            default_height = min(default_height, max(400, int(available.height() * 0.92)))
         self.setMinimumSize(480, 360)
         self.resize(default_width, default_height)
 
@@ -4609,7 +4821,7 @@ class NewContainerDialog(QDialog):
         self.dialog_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         self.dialog_scroll_content = QWidget()
-        self.dialog_scroll_content.setMinimumHeight(700)
+        self.dialog_scroll_content.setMinimumHeight(0)
         layout = QVBoxLayout(self.dialog_scroll_content)
         layout.setContentsMargins(4, 4, 4, 4)
         self.dialog_scroll_area.setWidget(self.dialog_scroll_content)
@@ -5045,7 +5257,7 @@ class NewContainerDialog(QDialog):
         self.btn_ai_generate.clicked.connect(self.generate_ai_command)
         self.btn_ai_apply.clicked.connect(self.apply_ai_command)
         self.btn_online_refresh.clicked.connect(self.refresh_selected_description_online)
-        self.btn_manual_config.clicked.connect(self.select_manual_configuration)
+        self.btn_manual_config.clicked.connect(lambda _checked=False: self.select_manual_configuration(clear_fields=not self.edit_mode))
         self.btn_repositories.clicked.connect(self.manage_catalog_repositories)
         self.btn_repo_refresh.clicked.connect(self.refresh_external_catalogs)
         self.btn_app_source.clicked.connect(lambda: self.open_selected_app_url("source"))
@@ -5062,9 +5274,9 @@ class NewContainerDialog(QDialog):
         self.update_cli_labels()
         if self.initial_args:
             self.load_run_args(self.initial_args)
-            self.select_manual_configuration()
+            self.select_manual_configuration(clear_fields=False)
         elif self.edit_mode:
-            self.select_manual_configuration()
+            self.select_manual_configuration(clear_fields=False)
         elif self.catalog_list.count() > 0:
             # Normal deployment opens as an application store.  Manual mode is
             # still one click away and edit mode keeps the current container
@@ -5949,12 +6161,36 @@ class NewContainerDialog(QDialog):
         else:
             self.update_store_description(template)
 
-    def select_manual_configuration(self):
+    def select_manual_configuration(self, clear_fields: Optional[bool] = None):
+        should_clear = (not self.edit_mode) if clear_fields is None else bool(clear_fields)
         self.manual_configuration_mode = True
         previous_block = self.catalog_list.blockSignals(True)
         self.catalog_list.clearSelection()
         self.catalog_list.setCurrentRow(-1)
         self.catalog_list.blockSignals(previous_block)
+        if should_clear:
+            self._syncing = True
+            try:
+                for field in (
+                    self.name_edit,
+                    self.image_edit,
+                    self.cport_edit,
+                    self.hport_edit,
+                    self.extra_edit,
+                    self.command_edit,
+                ):
+                    field.clear()
+                for editor in (
+                    self.command_input,
+                    self.notes_text,
+                    self.summary_text,
+                    self.ai_prompt_edit,
+                    self.ai_context_text,
+                    self.ai_result_text,
+                ):
+                    editor.clear()
+            finally:
+                self._syncing = False
         self.update_manual_store_card()
         self.update_summary()
 
@@ -8139,8 +8375,10 @@ class MainWindow(QMainWindow):
         self._restoring_container_column_widths = False
         self._applying_column_magnet = False
         self.music_enabled = str(self.settings.value("music_enabled", "true")).lower() in {"1", "true", "yes"}
+        self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
+        self.auto_refresh_enabled, self.auto_refresh_interval_s = load_auto_refresh_settings(self.settings)
         self.auto_start_docker_desktop = str(self.settings.value("auto_start_docker_desktop", "false")).lower() in {"1", "true", "yes"}
         self.auto_check_updates = str(self.settings.value("updates/auto_check", "true")).lower() in {"1", "true", "yes"}
         self.update_notifications = str(self.settings.value("updates/notifications", "true")).lower() in {"1", "true", "yes"}
@@ -8194,6 +8432,11 @@ class MainWindow(QMainWindow):
         self.update_timer.timeout.connect(self.check_for_updates)
         if self.auto_check_updates:
             self.update_timer.start()
+        self.auto_refresh_timer = QTimer(self)
+        self.auto_refresh_timer.setInterval(self.auto_refresh_interval_s * 1000)
+        self.auto_refresh_timer.timeout.connect(self.on_auto_refresh_timeout)
+        if self.auto_refresh_enabled:
+            self.auto_refresh_timer.start()
         self.restart_watch_timer = QTimer(self)
         self.restart_watch_timer.setInterval(4000)
         self.restart_watch_timer.timeout.connect(self.retry_restart_connection)
@@ -8288,6 +8531,8 @@ class MainWindow(QMainWindow):
         return True
 
     def closeEvent(self, event):
+        if hasattr(self, "auto_refresh_timer"):
+            self.auto_refresh_timer.stop()
         if not self._skip_persist_window_state:
             try:
                 if self.isFullScreen() or self.isMaximized():
@@ -8528,7 +8773,12 @@ class MainWindow(QMainWindow):
         menubar = QMenuBar(self)
         self.setMenuBar(menubar)
         self._build_menus()
-        central = BackgroundSurface(self.current_theme, self.transparent_mode, self.transparency_level)
+        central = BackgroundSurface(
+            self.current_theme,
+            self.transparent_mode,
+            self.transparency_level,
+            self.accent_color,
+        )
         central.setMinimumHeight(620)
         self.root_surface = central
         main_layout = QVBoxLayout(central)
@@ -8863,15 +9113,14 @@ class MainWindow(QMainWindow):
         self.glow_timer = QTimer(self)
         self.glow_timer.timeout.connect(self.advance_glow)
         self.fx_animations = []
-        for button, color in [
-            (self.btn_start_profile, "#33f0ff"),
-            (self.btn_local, "#4bffad"),
-            (self.btn_wsl_profile, "#6ec8ff"),
-        ]:
+        self.fx_effects = []
+        accent = effective_accent_color(self.current_theme, self.accent_color)
+        for button in (self.btn_start_profile, self.btn_local, self.btn_wsl_profile):
             shadow = QGraphicsDropShadowEffect(button)
             shadow.setBlurRadius(28)
             shadow.setOffset(0, 0)
-            shadow.setColor(QColor(color))
+            shadow.setColor(QColor(accent))
+            shadow.setEnabled(self.neon_enabled)
             button.setGraphicsEffect(shadow)
             anim = QPropertyAnimation(shadow, b"blurRadius", self)
             anim.setStartValue(18)
@@ -8880,6 +9129,7 @@ class MainWindow(QMainWindow):
             anim.setLoopCount(-1)
             anim.start()
             self.fx_animations.append(anim)
+            self.fx_effects.append(shadow)
         self.update_glow_timer()
     def _build_menus(self):
         menubar = self.menuBar()
@@ -8892,6 +9142,24 @@ class MainWindow(QMainWindow):
         self.action_store.setFont(store_action_font)
         self.action_store.setIcon(make_category_icon("all", QColor(effective_accent_color(self.current_theme, self.accent_color)), 16))
         self.action_store.triggered.connect(self.open_new_container_wizard)
+        self.file_menu.addSeparator()
+        self.refresh_menu = self.file_menu.addMenu(self.texts["menu_refresh"])
+        self.action_auto_refresh = self.refresh_menu.addAction(self.texts["menu_auto_refresh"])
+        self.action_auto_refresh.setCheckable(True)
+        self.action_auto_refresh.setChecked(self.auto_refresh_enabled)
+        self.action_auto_refresh.toggled.connect(self.set_auto_refresh_enabled)
+        self.refresh_menu.addSeparator()
+        self.auto_refresh_interval_group = QActionGroup(self)
+        self.auto_refresh_interval_group.setExclusive(True)
+        self.auto_refresh_interval_actions = {}
+        for seconds in AUTO_REFRESH_INTERVALS:
+            action = self.refresh_menu.addAction(f"{seconds} s")
+            action.setCheckable(True)
+            action.setData(seconds)
+            action.setChecked(seconds == self.auto_refresh_interval_s)
+            action.triggered.connect(lambda _checked=False, value=seconds: self.set_auto_refresh_interval(value))
+            self.auto_refresh_interval_group.addAction(action)
+            self.auto_refresh_interval_actions[seconds] = action
         self.file_menu.addSeparator()
         self.action_profiles_import = self.file_menu.addAction(self.texts["menu_profiles_import"])
         self.action_profiles_import.triggered.connect(self.import_profiles_from_file)
@@ -8967,6 +9235,8 @@ class MainWindow(QMainWindow):
         self.file_menu.setTitle(self.texts["menu_file"])
         self.action_store.setText(self.texts["menu_store"])
         self.action_store.setIcon(make_category_icon("all", QColor(effective_accent_color(self.current_theme, self.accent_color)), 16))
+        self.refresh_menu.setTitle(self.texts["menu_refresh"])
+        self.action_auto_refresh.setText(self.texts["menu_auto_refresh"])
         self.action_profiles_import.setText(self.texts["menu_profiles_import"])
         self.action_profiles_export.setText(self.texts["menu_profiles_export"])
         self.action_quit.setText(self.texts["menu_quit"])
@@ -9092,7 +9362,14 @@ class MainWindow(QMainWindow):
 
     def _load_theme(self):
         base_theme = "light" if self.current_theme in {"day", "light"} else "dark"
-        extra_qss = gaming_stylesheet(self.current_theme, self.glow_phase, self.transparent_mode, self.transparency_level, self.neon_animate, self.accent_color)
+        extra_qss = gaming_stylesheet(
+            self.current_theme,
+            self.glow_phase,
+            self.transparent_mode,
+            self.transparency_level,
+            self.neon_enabled and self.neon_animate,
+            self.accent_color,
+        )
         if hasattr(qdarktheme, "setup_theme"):
             qdarktheme.setup_theme(base_theme, additional_qss=extra_qss)
         else:
@@ -9100,7 +9377,12 @@ class MainWindow(QMainWindow):
             if app is not None:
                 app.setStyleSheet(extra_qss)
         if self.root_surface is not None:
-            self.root_surface.set_visual_state(self.current_theme, self.transparent_mode, self.transparency_level)
+            self.root_surface.set_visual_state(
+                self.current_theme,
+                self.transparent_mode,
+                self.transparency_level,
+                self.accent_color,
+            )
         self.refresh_dynamic_theme_elements()
         self.apply_window_surface()
         self.update_transparency_button()
@@ -9109,6 +9391,9 @@ class MainWindow(QMainWindow):
     def refresh_dynamic_theme_elements(self):
         """Refresh widgets/items whose colors are stored outside the global QSS."""
         effective_accent = effective_accent_color(self.current_theme, self.accent_color)
+        for effect in getattr(self, "fx_effects", []):
+            effect.setColor(QColor(effective_accent))
+            effect.setEnabled(self.neon_enabled)
         if hasattr(self, "infra_info_button"):
             self.infra_info_button.setIcon(make_terminal_icon(QColor(effective_accent), 16))
             self.infra_info_button.setIconSize(QSize(16, 16))
@@ -9174,6 +9459,7 @@ class MainWindow(QMainWindow):
         label = self.texts["btn_music_on" if self.music_enabled else "btn_music_off"]
         self.btn_music.setText("\u266b" if self.music_enabled else "\u266a")
         self.btn_music.setFixedWidth(38)
+        self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
         self.btn_music.setEnabled(MUSIC_FILE.exists() and self.media_player is not None)
@@ -9186,9 +9472,11 @@ class MainWindow(QMainWindow):
 
     def toggle_music(self):
         self.music_enabled = not self.music_enabled
+        self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
         self.settings.setValue("music_enabled", "true" if self.music_enabled else "false")
+        self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
         if self.media_player is not None:
@@ -9215,7 +9503,9 @@ class MainWindow(QMainWindow):
         # application while a QMenu is open makes popup menus flicker/disappear.
         self.glow_timer.stop()
         for animation in getattr(self, "fx_animations", []):
-            animation.setPaused(not self.neon_animate)
+            animation.setPaused(not (self.neon_enabled and self.neon_animate))
+        for effect in getattr(self, "fx_effects", []):
+            effect.setEnabled(self.neon_enabled)
 
     def advance_glow(self):
         return
@@ -9453,10 +9743,13 @@ class MainWindow(QMainWindow):
             else:
                 self.update_timer.stop()
             selected_theme = dialog.theme_combo.currentData() or self.current_theme
+            neon_enabled = dialog.neon_enabled_checkbox.isChecked()
             neon_animate = dialog.neon_checkbox.isChecked()
             accent_color = dialog.neon_color_combo.currentData() or self.accent_color
+            self.settings.setValue("neon_enabled", "true" if neon_enabled else "false")
             self.settings.setValue("neon_animate", "true" if neon_animate else "false")
             self.settings.setValue("accent_color", accent_color)
+            self.neon_enabled = neon_enabled
             self.neon_animate = neon_animate
             self.accent_color = normalize_accent_color(str(accent_color))
             if selected_theme:
@@ -11052,7 +11345,7 @@ try {
         if os.name == "nt":
             return set()
         id_program = shutil.which("id") or "/usr/bin/id"
-        if not Path(id_program).is_file() and not shutil.which("id"):
+        if not shutil.which("id") and not Path(id_program).is_file():
             return set()
         command = [id_program, "-nG"]
         if configured:
@@ -12800,6 +13093,46 @@ try {
             self.client.containers.get(name).remove(force=True)
         except Exception as exc:
             QMessageBox.warning(self, self.texts["msg_error"], f"{name}: {exc}")
+
+    def set_auto_refresh_enabled(self, enabled: bool):
+        self.auto_refresh_enabled = bool(enabled)
+        self.settings.setValue("containers/auto_refresh_enabled", "true" if self.auto_refresh_enabled else "false")
+        self.settings.sync()
+        timer = getattr(self, "auto_refresh_timer", None)
+        if timer is not None:
+            if self.auto_refresh_enabled:
+                timer.start(self.auto_refresh_interval_s * 1000)
+            else:
+                timer.stop()
+        action = getattr(self, "action_auto_refresh", None)
+        if action is not None and action.isChecked() != self.auto_refresh_enabled:
+            action.blockSignals(True)
+            action.setChecked(self.auto_refresh_enabled)
+            action.blockSignals(False)
+
+    def set_auto_refresh_interval(self, seconds: int):
+        seconds = int(seconds)
+        if seconds not in AUTO_REFRESH_INTERVALS:
+            return
+        self.auto_refresh_interval_s = seconds
+        self.settings.setValue("containers/auto_refresh_interval_s", seconds)
+        self.settings.sync()
+        timer = getattr(self, "auto_refresh_timer", None)
+        if timer is not None:
+            timer.setInterval(seconds * 1000)
+            if self.auto_refresh_enabled:
+                timer.start()
+        action = getattr(self, "auto_refresh_interval_actions", {}).get(seconds)
+        if action is not None:
+            action.setChecked(True)
+
+    def on_auto_refresh_timeout(self):
+        if not self.auto_refresh_enabled or not self.client:
+            return
+        thread = self.refresh_thread
+        if thread is not None and thread.isRunning():
+            return
+        self.refresh_containers()
 
     def refresh_containers(self):
         if not self.client:

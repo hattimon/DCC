@@ -235,7 +235,8 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
         stub.docker_desktop_button.setEnabled.assert_called_with(True)
 
     def test_linux_docker_desktop_install_detection_uses_desktop_binary(self):
-        stub = SimpleNamespace(linux_docker_desktop_path=lambda: dcc.Path("/opt/docker-desktop/bin/docker-desktop"))
+        desktop_path = dcc.Path("/opt/docker-desktop/bin/docker-desktop")
+        stub = SimpleNamespace(linux_docker_desktop_path=lambda: desktop_path)
         with patch.object(dcc.os, "name", "posix"):
             self.assertTrue(dcc.MainWindow.linux_docker_desktop_installed(stub))
 

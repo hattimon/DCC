@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import webbrowser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -58,6 +59,8 @@ REPO_BUILDER_UI = {
         "Load": "Load",
         "Validate": "Validate",
         "Save local JSON": "Save local JSON",
+        "Save": "Save",
+        "Save As...": "Save As...",
         "Git status": "Git status",
         "Commit catalog…": "Commit catalog…",
         "Push…": "Push…",
@@ -122,6 +125,8 @@ REPO_BUILDER_UI = {
         "Load": "Wczytaj",
         "Validate": "Sprawdź",
         "Save local JSON": "Zapisz lokalny JSON",
+        "Save": "Zapisz",
+        "Save As...": "Zapisz jako...",
         "Git status": "Stan Git",
         "Commit catalog…": "Zapisz commit…",
         "Push…": "Wyślij…",
@@ -202,13 +207,16 @@ def lines(value: str) -> List[str]:
 class RepoBuilderWindow(QMainWindow):
     def __init__(self, language: Optional[str] = None, theme: Optional[str] = None):
         super().__init__()
-        app_settings = QSettings(dcc.APP_SETTINGS_ORG, dcc.APP_SETTINGS_NAME)
-        self.lang = str(language or app_settings.value("language", "EN") or "EN").upper()
+        self.app_settings = QSettings(dcc.APP_SETTINGS_ORG, dcc.APP_SETTINGS_NAME)
+        self.lang = str(language or self.app_settings.value("language", "EN") or "EN").upper()
         if self.lang not in REPO_BUILDER_UI:
             self.lang = "EN"
-        self.current_theme = str(theme or app_settings.value("theme", "black") or "black").lower()
+        self.current_theme = str(theme or self.app_settings.value("theme", "black") or "black").lower()
         if self.current_theme not in {"light", "day", "dark", "black", "night"}:
             self.current_theme = "black"
+        self.neon_enabled = str(self.app_settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
+        self.neon_animate = str(self.app_settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
+        self.accent_color = dcc.normalize_accent_color(str(self.app_settings.value("accent_color", dcc.DEFAULT_ACCENT_COLOR)))
         self._apply_theme()
         self.setWindowTitle("DCC Repo Builder")
         self.resize(1180, 760)
@@ -227,8 +235,8 @@ class RepoBuilderWindow(QMainWindow):
             0.52,
             False,
             72,
-            False,
-            "#33f0ff",
+            self.neon_enabled and self.neon_animate,
+            self.accent_color,
         )
         if hasattr(dcc.qdarktheme, "setup_theme"):
             dcc.qdarktheme.setup_theme(base_theme, additional_qss=extra_qss)
@@ -295,7 +303,8 @@ class RepoBuilderWindow(QMainWindow):
         self.catalog_file = QLineEdit("dcc-catalog.json")
         self.btn_load = QPushButton("Load")
         self.btn_validate = QPushButton("Validate")
-        self.btn_save = QPushButton("Save local JSON")
+        self.btn_save = QPushButton("Save")
+        self.btn_save_as = QPushButton("Save As...")
         self.btn_git_status = QPushButton("Git status")
         self.btn_commit = QPushButton("Commit catalog…")
         self.btn_push = QPushButton("Push…")
@@ -304,6 +313,7 @@ class RepoBuilderWindow(QMainWindow):
         file_row.addWidget(self.btn_load)
         file_row.addWidget(self.btn_validate)
         file_row.addWidget(self.btn_save)
+        file_row.addWidget(self.btn_save_as)
         file_row.addWidget(self.btn_git_status)
         file_row.addWidget(self.btn_commit)
         file_row.addWidget(self.btn_push)
@@ -348,6 +358,7 @@ class RepoBuilderWindow(QMainWindow):
         self.btn_load.clicked.connect(self.load_catalog)
         self.btn_validate.clicked.connect(self.validate_catalog_dialog)
         self.btn_save.clicked.connect(self.save_catalog)
+        self.btn_save_as.clicked.connect(self.save_catalog_as)
         self.btn_git_status.clicked.connect(self.git_status)
         self.btn_commit.clicked.connect(self.git_commit)
         self.btn_push.clicked.connect(self.git_push)
@@ -502,6 +513,14 @@ class RepoBuilderWindow(QMainWindow):
         return tab
 
     def _load_default_checkout(self):
+        saved = str(self.app_settings.value("repo_builder/last_catalog_path", "") or "").strip()
+        if saved:
+            saved_path = Path(saved).expanduser()
+            if saved_path.is_file() and self._is_safe_catalog_path(saved_path):
+                self.repo_root.setText(str(saved_path.parent))
+                self.catalog_file.setText(saved_path.name)
+                self.load_catalog()
+                return
         candidate = Path(self.repo_root.text()).expanduser()
         if (candidate / "dcc-catalog.json").is_file():
             self.load_catalog()
@@ -515,6 +534,19 @@ class RepoBuilderWindow(QMainWindow):
     def catalog_disk_path(self) -> Path:
         return Path(self.repo_root.text().strip()).expanduser() / self.catalog_file.text().strip()
 
+    @staticmethod
+    def _is_safe_catalog_path(path: Path) -> bool:
+        try:
+            resolved = path.expanduser().resolve()
+            runtime_root = Path(getattr(sys, "_MEIPASS", "")).resolve() if getattr(sys, "_MEIPASS", "") else None
+            if runtime_root is not None and (resolved == runtime_root or runtime_root in resolved.parents):
+                return False
+            if any(part.upper().startswith("_MEI") for part in resolved.parts):
+                return False
+            return True
+        except Exception:
+            return False
+
     def load_catalog(self):
         path = self.catalog_disk_path()
         try:
@@ -524,6 +556,8 @@ class RepoBuilderWindow(QMainWindow):
                 raise ValueError("Catalog must contain an 'apps' array.")
             self.catalog = payload
             self.catalog_path = path
+            if self._is_safe_catalog_path(path):
+                self.app_settings.setValue("repo_builder/last_catalog_path", str(path.resolve()))
             self.current_index = -1
             self.refresh_app_list()
             self.status.setText(f"Loaded {len(apps)} apps from {path}")
@@ -776,7 +810,7 @@ class RepoBuilderWindow(QMainWindow):
         else:
             QMessageBox.information(self, "Catalog validation", f"OK - {len(self.catalog.get('apps', []))} entries are valid.")
 
-    def save_catalog(self):
+    def _capture_valid_form(self) -> bool:
         if self.current_app() is not None:
             try:
                 candidate = self.form_payload(self.current_app())
@@ -788,15 +822,72 @@ class RepoBuilderWindow(QMainWindow):
         errors = self.validate_catalog()
         if errors:
             QMessageBox.warning(self, "Cannot save", "Fix validation errors first:\n\n" + "\n".join(errors[:30]))
-            return
-        path = self.catalog_disk_path()
+            return False
+        return True
+
+    def _write_catalog_atomic(self, path: Path) -> bool:
+        if not self._is_safe_catalog_path(path):
+            QMessageBox.critical(self, "Save failed", "Choose a permanent location outside temporary or unpacked runtime folders.")
+            return False
+        temp_path: Optional[Path] = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(self.catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-            self.catalog_path = path
+            payload = json.dumps(self.catalog, ensure_ascii=False, indent=2) + "\n"
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="\n",
+                dir=str(path.parent),
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+                temp_path = Path(handle.name)
+            os.replace(temp_path, path)
+            self.catalog_path = path.resolve()
+            self.repo_root.setText(str(self.catalog_path.parent))
+            self.catalog_file.setText(self.catalog_path.name)
+            self.app_settings.setValue("repo_builder/last_catalog_path", str(self.catalog_path))
+            self.app_settings.sync()
             self.status.setText(f"Saved locally: {path}")
+            return True
         except Exception as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
+            return False
+        finally:
+            if temp_path is not None and temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+
+    def save_catalog(self):
+        if not self._capture_valid_form():
+            return False
+        path = self.catalog_path or self.catalog_disk_path()
+        if not self._is_safe_catalog_path(path):
+            return self.save_catalog_as()
+        return self._write_catalog_atomic(path)
+
+    def save_catalog_as(self):
+        if not self._capture_valid_form():
+            return False
+        initial = self.catalog_path or self.catalog_disk_path()
+        selected, _filter = QFileDialog.getSaveFileName(
+            self,
+            "Save catalog as" if self.lang == "EN" else "Zapisz katalog jako",
+            str(initial),
+            "JSON (*.json)",
+        )
+        if not selected:
+            return False
+        path = Path(selected).expanduser()
+        if path.suffix.lower() != ".json":
+            path = path.with_suffix(".json")
+        return self._write_catalog_atomic(path)
 
     def repo_path(self) -> Path:
         return Path(self.repo_root.text().strip()).expanduser()
@@ -840,6 +931,24 @@ class RepoBuilderWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "GitHub login failed", str(exc))
 
+    def github_auth_status(self, show_error: bool = True) -> bool:
+        if not shutil.which("gh"):
+            if show_error:
+                QMessageBox.warning(self, "GitHub CLI required", "Install GitHub CLI (gh), then use GitHub login. No token is stored by Repo Builder.")
+            return False
+        result = subprocess.run(
+            ["gh", "auth", "status", "--hostname", "github.com"],
+            cwd=str(self.repo_path()),
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode == 0:
+            return True
+        if show_error:
+            detail = (result.stderr or result.stdout or "Run: gh auth login --hostname github.com").strip()
+            QMessageBox.warning(self, "GitHub authentication required", detail)
+        return False
+
     def git_status(self):
         try:
             result = self._run_git(["status", "--short", "--branch"])
@@ -848,8 +957,7 @@ class RepoBuilderWindow(QMainWindow):
             QMessageBox.critical(self, "Git status failed", str(exc))
 
     def git_commit(self):
-        self.save_catalog()
-        if not self.catalog_path or not self.catalog_path.exists():
+        if not self.save_catalog() or not self.catalog_path or not self.catalog_path.exists():
             return
         relative = os.path.relpath(self.catalog_path, self.repo_path())
         message, ok = self._text_prompt("Commit catalog", "Commit message", "Update DCC deployment catalog")
@@ -870,6 +978,8 @@ class RepoBuilderWindow(QMainWindow):
             QMessageBox.critical(self, "Commit failed", (exc.stderr or exc.stdout or str(exc)).strip())
 
     def git_push(self):
+        if not self.github_auth_status(show_error=True):
+            return
         reply = QMessageBox.question(
             self,
             "Push to GitHub",
