@@ -80,6 +80,7 @@ install -d \
   "$PKG_ROOT/DEBIAN" \
   "$PKG_ROOT/usr/bin" \
   "$PKG_ROOT/usr/share/applications" \
+  "$PKG_ROOT/usr/share/docker-control-center/assets" \
   "$PKG_ROOT/usr/share/pixmaps"
 for size in "${ICON_SIZES[@]}"; do
   install -d "$PKG_ROOT/usr/share/icons/hicolor/${size}x${size}/apps"
@@ -95,6 +96,7 @@ for size in "${ICON_SIZES[@]}"; do
     "$PKG_ROOT/usr/share/icons/hicolor/${size}x${size}/apps/docker-control-center.png"
 done
 install -m 0644 "$ROOT_DIR/assets/icons/hicolor/512x512/apps/docker-control-center.png" "$PKG_ROOT/usr/share/pixmaps/docker-control-center.png"
+cp -a "$ROOT_DIR/assets/audio" "$PKG_ROOT/usr/share/docker-control-center/assets/audio"
 
 cat > "$PKG_ROOT/DEBIAN/postinst" <<'EOF'
 #!/bin/sh

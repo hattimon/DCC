@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('upstream_assets/icon.png', '.'), ('upstream_assets/bg.mp3', '.'), ('backgrounds', 'backgrounds'), ('dcc-catalog.json', '.'), ('catalog/media', 'catalog/media')]
+datas = [('upstream_assets/icon.png', '.'), ('assets/audio', 'assets/audio'), ('backgrounds', 'backgrounds'), ('dcc-catalog.json', '.'), ('catalog/media', 'catalog/media')]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('qdarktheme')

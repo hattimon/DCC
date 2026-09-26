@@ -11,22 +11,24 @@
 A cross-platform desktop control panel for managing Docker on Windows and Debian-family Linux, locally, through WSL/WSL2, and on remote hosts over SSH or Balena OS.
 
 ### Download Latest Version
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.8/DockerControlCenter-Setup-1.3.8.exe)
-[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.8/DockerControlCenter_1.3.8_amd64.deb)
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.9/DockerControlCenter-Setup-1.3.9.exe)
+[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.9/DockerControlCenter_1.3.9_amd64.deb)
 
-## What's New in v1.3.8
+## What's New in v1.3.9
 
 ### EN
-- Added new `Day` and `Night` themes and improved GUI readability/layout.
-- Expanded the application store and Repo Builder workflow.
-- Linux DEB now includes the DCC icon and a dedicated Repo Builder launcher.
+- Added theme-aware procedural ambient audio and Docker operation SFX for all five themes.
+- The note button now controls all DCC audio and sits before transparency controls.
+- Improved logs search, Day/Light themes, Store sizing, container auto-refresh and Repo Builder Save/Save As.
+- Preserved the safe Windows updater handoff and the cross-platform icon pipeline.
 
 ![Docker Control Center v1.3.5 - English overview](images/release-1.3.5/09-v1.3.5-overview-en.png)
 
 ### PL
-- Dodano nowe motywy `Day` i `Noc` oraz poprawiono czytelność i układ interfejsu.
-- Rozbudowano sklep aplikacji i workflow Repo Builder.
-- Pakiet Linux DEB zawiera teraz ikonę DCC i osobny launcher Repo Buildera.
+- Dodano proceduralny ambient zależny od motywu i SFX operacji Dockera dla wszystkich pięciu motywów.
+- Nutka steruje całym audio DCC i znajduje się przed kontrolkami przezroczystości.
+- Poprawiono wyszukiwanie logów, motywy Day/Light, rozmiary Store, auto-refresh kontenerów oraz Save/Save As w Repo Builderze.
+- Zachowano bezpieczny handoff updatera Windows i wspólny pipeline ikon Windows/Linux.
 
 ![Docker Control Center v1.3.5 - polskie podsumowanie](images/release-1.3.5/08-v1.3.5-overview-pl.png)
 
@@ -168,4 +170,4 @@ Ponizsze zrzuty pokazuja interfejs w jezyku angielskim.
 - `backgrounds/` - theme background artwork
 - `images/` - README screenshots
 - `icon.ico` / `icon.png` - application icons
-- `bg.mp3` - optional in-app background music
+- `assets/audio/` - procedural theme ambient and Docker operation sound effects

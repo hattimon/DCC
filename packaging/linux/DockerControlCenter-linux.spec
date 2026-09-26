@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_all
 ROOT = Path(SPECPATH).resolve().parents[1]
 datas = [
     (str(ROOT / 'upstream_assets/icon.png'), '.'),
-    (str(ROOT / 'upstream_assets/bg.mp3'), '.'),
+    (str(ROOT / 'assets/audio'), 'assets/audio'),
     (str(ROOT / 'backgrounds'), 'backgrounds'),
     (str(ROOT / 'dcc-catalog.json'), '.'),
     (str(ROOT / 'catalog/media'), 'catalog/media'),

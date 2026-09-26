@@ -36,10 +36,11 @@ except Exception:
     paramiko = None
 from PyQt6.QtGui import QActionGroup, QBrush, QColor, QFont, QFontMetrics, QIcon, QKeySequence, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QShortcut, QTextCursor
 try:
-    from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
+    from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer, QSoundEffect
 except Exception:
     QAudioOutput = None
     QMediaPlayer = None
+    QSoundEffect = None
 from PyQt6.QtWidgets import (
     QFileDialog,
     QApplication,
@@ -125,7 +126,16 @@ DEPLOYMENT_CATALOG_CACHE_FILE = USER_DATA_DIR / "deployment_catalog_cache.json"
 BUNDLED_DEPLOYMENT_CATALOG_FILE = RESOURCE_DIR / "dcc-catalog.json"
 STORE_MEDIA_CACHE_DIR = USER_DATA_DIR / "store-media-cache"
 STORE_MEDIA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-MUSIC_FILE = RESOURCE_DIR / "bg.mp3"
+AUDIO_ROOT = RESOURCE_DIR / "assets" / "audio"
+AUDIO_THEMES = {"light", "day", "dark", "black", "night"}
+AUDIO_EVENT_FILES = {
+    "start": "start.wav",
+    "stop": "stop.wav",
+    "restart": "restart.wav",
+    "success": "success.wav",
+    "error": "error.wav",
+    "remove": "remove.wav",
+}
 SECRET_FILE = USER_DATA_DIR / "docker_control_center_secrets.json"
 BACKGROUND_DIR = RESOURCE_DIR / "backgrounds"
 ICON_FILE = RESOURCE_DIR / "icon.png"
@@ -239,7 +249,7 @@ LLM_OPENAI_COMPATIBLE_BASE_URLS = {
     "xai": "https://api.x.ai/v1",
 }
 
-APP_VERSION = "1.3.8"
+APP_VERSION = "1.3.9"
 APP_VERSION_TAG = f"v{APP_VERSION}"
 GITHUB_REPO = "hattimon/DCC"
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
@@ -247,6 +257,26 @@ DEFAULT_DEPLOYMENT_REPOSITORY = GITHUB_REPO_URL
 GITHUB_RELEASES_URL = f"{GITHUB_REPO_URL}/releases"
 GITHUB_LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000
+
+
+def resolve_resource_path(relative_path: str | Path, resource_root: Optional[Path] = None) -> Path:
+    """Resolve a bundled runtime resource in source and PyInstaller modes."""
+    base = Path(resource_root) if resource_root is not None else RESOURCE_DIR
+    return base / Path(relative_path)
+
+
+def audio_theme_name(theme: str) -> str:
+    return theme if theme in AUDIO_THEMES else "black"
+
+
+def audio_asset_path(theme: str, filename: str, resource_root: Optional[Path] = None) -> Path:
+    return resolve_resource_path(Path("assets") / "audio" / audio_theme_name(theme) / filename, resource_root)
+
+
+def audio_assets_for_theme(theme: str, resource_root: Optional[Path] = None) -> Dict[str, Path]:
+    assets = {"ambient": audio_asset_path(theme, "ambient.wav", resource_root)}
+    assets.update({event: audio_asset_path(theme, filename, resource_root) for event, filename in AUDIO_EVENT_FILES.items()})
+    return assets
 
 TEXTS = {
     "EN": {
@@ -286,8 +316,8 @@ TEXTS = {
         "info_app_open_repo": "Open repository",
         "info_app_open_release": "Open latest release",
         "info_app_check_updates": "Check updates",
-        "info_app_changelog_title": "Changelog (v1.3.8)",
-        "info_app_changelog": "- Added Day and Night themes and improved GUI menu readability.\n- Kept category buttons fixed in place, moved the heading above their frame and added bottom spacing.\n- Fixed SmartWAN artwork and description overlap in the application catalog.\n- Increased application and configuration rows so their text is fully visible.\n- Expanded the application store and Repo Builder workflow.",
+        "info_app_changelog_title": "Changelog (v1.3.9)",
+        "info_app_changelog": "- Added theme-aware ambient audio and Docker operation sound effects.\n- The note button now enables or disables all DCC audio.\n- Improved logs, themes, Repo Builder, Store sizing, container auto-refresh and icon packaging.\n- Preserved the safe Windows updater handoff introduced in v1.3.8.",
         "info_update_available_title": "Update available",
         "info_update_available_body": "A newer release is available: {release}.",
         "info_update_question": "Update to {release} is available. Install it now?",
@@ -476,10 +506,10 @@ TEXTS = {
         "local_profiles_wsl_command": "WSL quick test (selected distro): wsl -d {distro} sh -lc \"docker ps\"",        "btn_transparency_on": "Transparency: ON",
         "btn_transparency_off": "Transparency: OFF",
         "transparency_level": "Glass level",
-        "btn_music_on": "Music: ON",
-        "btn_music_off": "Music: OFF",
-        "music_missing": "bg.mp3 was not found next to the application.",
-        "music_unavailable": "PyQt6 audio module is not available. Install PyQt6 multimedia support.",
+        "btn_music_on": "Audio: ON",
+        "btn_music_off": "Audio: OFF",
+        "music_missing": "Theme audio assets are missing from the application package.",
+        "music_unavailable": "Audio backend is unavailable. Docker Control Center will continue without sound.",
         "hero_title": "DCC | DOCKER CONTROL CENTER",
         "hero_subtitle": "Professional control center for local Docker, WSL and remote SSH hosts with ready deployment presets.",
         "hero_subtitle_linux": "Professional control center for the local Docker Engine and remote SSH / Balena hosts with ready deployment presets.",
@@ -843,8 +873,8 @@ TEXTS = {
         "info_app_open_repo": "Otwórz repozytorium",
         "info_app_open_release": "Otwórz najnowsze wydanie",
         "info_app_check_updates": "Sprawdź aktualizacje",
-        "info_app_changelog_title": "Changelog (v1.3.8)",
-        "info_app_changelog": "- Dodano motywy Day i Noc oraz poprawiono czytelność menu GUI.\n- Przyciski kategorii są nieruchome, nagłówek przeniesiono nad ramkę i dodano dolny odstęp.\n- Poprawiono nakładanie grafiki SmartWAN i opisu w katalogu aplikacji.\n- Zwiększono wysokość kart aplikacji i pól konfiguracji, aby tekst nie był ucinany.\n- Rozbudowano sklep aplikacji i Repo Builder.",
+        "info_app_changelog_title": "Changelog (v1.3.9)",
+        "info_app_changelog": "- Dodano ambient zależny od motywu oraz dźwięki operacji Dockera.\n- Nutka włącza lub wyłącza teraz całe audio DCC.\n- Poprawiono logi, motywy, Repo Builder, rozmiary Store, auto-refresh kontenerów i pakowanie ikon.\n- Zachowano bezpieczny handoff updatera Windows z v1.3.8.",
         "info_update_available_title": "Dostępna aktualizacja",
         "info_update_available_body": "Dostępna jest nowsza wersja: {release}.",
         "info_update_question": "Dostępna jest aktualizacja do wersji {release}. Czy wykonać ja teraz?",
@@ -1034,10 +1064,10 @@ TEXTS = {
         "local_profiles_wsl_command": "Szybki test WSL (wybrana dystrybucja): wsl -d {distro} sh -lc \"docker ps\"",        "btn_transparency_on": "Przezroczystość: ON",
         "btn_transparency_off": "Przezroczystość: OFF",
         "transparency_level": "Poziom szkła",
-        "btn_music_on": "Muzyka: ON",
-        "btn_music_off": "Muzyka: OFF",
-        "music_missing": "Nie znaleziono pliku bg.mp3 obok aplikacji.",
-        "music_unavailable": "Moduł audio PyQt6 nie jest dostępny. Doinstaluj PyQt6-Qt6 / multimedia.",
+        "btn_music_on": "Dźwięk: ON",
+        "btn_music_off": "Dźwięk: OFF",
+        "music_missing": "Brakuje zasobów audio motywu w paczce aplikacji.",
+        "music_unavailable": "Backend audio jest niedostępny. Docker Control Center będzie działać bez dźwięku.",
         "hero_title": "DCC | DOCKER CONTROL CENTER",
         "hero_subtitle": "Profesjonalny panel do zarządzania Dockerem lokalnym, WSL i zdalnymi hostami SSH z gotowymi presetami wdrożeń.",
         "hero_subtitle_linux": "Profesjonalny panel do lokalnego Docker Engine oraz zdalnych host\u00f3w SSH / Balena z gotowymi presetami wdro\u017ce\u0144.",
@@ -8374,7 +8404,9 @@ class MainWindow(QMainWindow):
         self._container_column_base_widths: Optional[List[float]] = None
         self._restoring_container_column_widths = False
         self._applying_column_magnet = False
-        self.music_enabled = str(self.settings.value("music_enabled", "true")).lower() in {"1", "true", "yes"}
+        audio_setting = self.settings.value("audio_enabled", self.settings.value("music_enabled", "true"))
+        self.audio_enabled = str(audio_setting).lower() in {"1", "true", "yes"}
+        self.music_enabled = self.audio_enabled
         self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
@@ -8407,6 +8439,8 @@ class MainWindow(QMainWindow):
         self.tunnel_process: Optional[subprocess.Popen] = None
         self.audio_output = None
         self.media_player = None
+        self.sfx_effects: Dict[str, object] = {}
+        self._audio_theme = ""
         self.root_surface: Optional[BackgroundSurface] = None
         self.latest_release_tag = ""
         self.latest_release_url = GITHUB_RELEASES_URL
@@ -8889,8 +8923,8 @@ class MainWindow(QMainWindow):
         local_layout.addWidget(self.wsl_label)
         local_layout.addWidget(self.wsl_combo)
         local_layout.addWidget(self.btn_wsl_refresh)
-        local_layout.addWidget(self.btn_transparency)
         local_layout.addWidget(self.btn_music)
+        local_layout.addWidget(self.btn_transparency)
         self.transparency_label.setVisible(False)
         self.transparency_slider.setMaximumWidth(130)
         local_layout.addWidget(self.transparency_slider)
@@ -9436,34 +9470,72 @@ class MainWindow(QMainWindow):
 
 
     def _setup_audio(self):
-        if QMediaPlayer is None or QAudioOutput is None:
+        if QMediaPlayer is None or QAudioOutput is None or QSoundEffect is None:
             self.audio_output = None
             self.media_player = None
+            self.sfx_effects = {}
             return
         try:
             self.audio_output = QAudioOutput(self)
-            self.audio_output.setVolume(0.24)
+            self.audio_output.setVolume(0.16)
             self.media_player = QMediaPlayer(self)
             self.media_player.setAudioOutput(self.audio_output)
-            if MUSIC_FILE.exists():
-                self.media_player.setSource(QUrl.fromLocalFile(str(MUSIC_FILE)))
-                if hasattr(self.media_player, "setLoops"):
-                    self.media_player.setLoops(QMediaPlayer.Loops.Infinite)
-                if self.music_enabled:
-                    self.media_player.play()
+            if hasattr(self.media_player, "setLoops"):
+                self.media_player.setLoops(QMediaPlayer.Loops.Infinite)
+            self.sfx_effects = {}
+            for event in AUDIO_EVENT_FILES:
+                effect = QSoundEffect(self)
+                effect.setVolume(0.38)
+                self.sfx_effects[event] = effect
+            self._load_audio_theme(force=True)
         except Exception:
             self.audio_output = None
             self.media_player = None
+            self.sfx_effects = {}
+
+    def _load_audio_theme(self, force: bool = False) -> bool:
+        if self.media_player is None:
+            return False
+        theme = audio_theme_name(self.current_theme)
+        assets = audio_assets_for_theme(theme)
+        if not all(path.is_file() for path in assets.values()):
+            self.media_player.stop()
+            self._audio_theme = ""
+            return False
+        if not force and self._audio_theme == theme:
+            return True
+        self.media_player.stop()
+        self.media_player.setSource(QUrl.fromLocalFile(str(assets["ambient"])))
+        for event, effect in self.sfx_effects.items():
+            effect.setSource(QUrl.fromLocalFile(str(assets[event])))
+        self._audio_theme = theme
+        if self.audio_enabled:
+            self.media_player.play()
+        return True
+
+    def play_audio_event(self, event: str) -> None:
+        if not self.audio_enabled:
+            return
+        effect = self.sfx_effects.get(event)
+        if effect is None:
+            return
+        try:
+            if effect.isPlaying():
+                effect.stop()
+            effect.play()
+        except Exception:
+            return
 
     def update_music_button(self):
-        label = self.texts["btn_music_on" if self.music_enabled else "btn_music_off"]
-        self.btn_music.setText("\u266b" if self.music_enabled else "\u266a")
+        label = self.texts["btn_music_on" if self.audio_enabled else "btn_music_off"]
+        self.btn_music.setText("\u266b" if self.audio_enabled else "\u266a")
         self.btn_music.setFixedWidth(38)
         self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
-        self.btn_music.setEnabled(MUSIC_FILE.exists() and self.media_player is not None)
-        if not MUSIC_FILE.exists():
+        assets_ready = all(path.is_file() for path in audio_assets_for_theme(self.current_theme).values())
+        self.btn_music.setEnabled(assets_ready and self.media_player is not None)
+        if not assets_ready:
             self.btn_music.setToolTip(self.texts["music_missing"])
         elif self.media_player is None:
             self.btn_music.setToolTip(self.texts["music_unavailable"])
@@ -9471,17 +9543,22 @@ class MainWindow(QMainWindow):
             self.btn_music.setToolTip(label)
 
     def toggle_music(self):
-        self.music_enabled = not self.music_enabled
+        self.audio_enabled = not self.audio_enabled
+        self.music_enabled = self.audio_enabled
         self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
-        self.settings.setValue("music_enabled", "true" if self.music_enabled else "false")
+        enabled_value = "true" if self.audio_enabled else "false"
+        self.settings.setValue("audio_enabled", enabled_value)
+        self.settings.setValue("music_enabled", enabled_value)
         self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
         if self.media_player is not None:
-            if self.music_enabled and MUSIC_FILE.exists():
-                self.media_player.play()
+            if self.audio_enabled:
+                self._load_audio_theme()
+                if self._audio_theme:
+                    self.media_player.play()
             else:
                 self.media_player.stop()
         self.update_music_button()
@@ -9516,6 +9593,7 @@ class MainWindow(QMainWindow):
         self.current_theme = theme
         self.settings.setValue("theme", theme)
         self._load_theme()
+        self._load_audio_theme(force=True)
 
     def platform_text(self, key: str) -> str:
         if os.name != "nt":
@@ -9902,6 +9980,10 @@ class MainWindow(QMainWindow):
                 if any(alias and alias in name for alias in arch_aliases):
                     return asset
             return deb_assets[0] if deb_assets else None
+        for asset in assets:
+            name = str(asset.get("name") or "")
+            if re.fullmatch(r"DockerControlCenter-Setup-[0-9][0-9A-Za-z._-]*\.exe", name, re.IGNORECASE):
+                return asset
         for asset in assets:
             name = str(asset.get("name") or "")
             if name.lower().endswith("setup.exe"):
@@ -10583,7 +10665,9 @@ try {
             self,
         )
         dialog.exec()
-        return dialog.success is True
+        success = dialog.success is True
+        self.play_audio_event("success" if success else "error")
+        return success
 
     def selected_container_name_for_edit(self) -> str:
         names = self.get_selected_names()
@@ -11033,7 +11117,9 @@ try {
     def execute_backend_command_with_progress(self, args: List[str], title: str, status_text: str) -> bool:
         dialog = CommandProgressDialog(title, status_text, self.run_backend_docker_command_stream, args, self.texts, self)
         dialog.exec()
-        return dialog.success is True
+        success = dialog.success is True
+        self.play_audio_event("success" if success else "error")
+        return success
 
     def build_catalog_image_with_progress(self, template: ImageTemplate) -> bool:
         context = str(template.build_context or "").strip()
@@ -11055,7 +11141,9 @@ try {
         worker = lambda payload, emit_line: self.run_container_with_repair_stream(payload, emit_line, auto_fix=auto_fix, allow_ai=allow_ai)
         dialog = CommandProgressDialog(title, status_text, worker, args, self.texts, self)
         dialog.exec()
-        return dialog.success is True
+        success = dialog.success is True
+        self.play_audio_event("success" if success else "error")
+        return success
 
     def is_local_docker_available(self) -> bool:
         try:
@@ -13250,16 +13338,33 @@ try {
             return
         blocked_messages = []
         error_messages = []
+        successful_actions = 0
         for name in names:
             try:
                 container = self.client.containers.get(name)
                 message = self.execute_container_action(container, action)
                 if message:
                     blocked_messages.append(message)
+                else:
+                    successful_actions += 1
             except Exception as exc:
                 error_messages.append(f"{name}: {exc}")
         self.show_action_feedback(blocked_messages)
         self.show_action_feedback(error_messages, self.texts["msg_error"])
+        if error_messages:
+            self.play_audio_event("error")
+        elif successful_actions:
+            event_by_action = {
+                "start": "start",
+                "stop": "stop",
+                "restart": "restart",
+                "pause": "stop",
+                "unpause": "start",
+                "remove": "remove",
+                "autostart_on": "success",
+                "autostart_off": "success",
+            }
+            self.play_audio_event(event_by_action.get(action, "success"))
         self.refresh_containers()
 
     def show_selected_logs(self):
@@ -13334,15 +13439,28 @@ def main():
         required = {
             "docker": bool(docker),
             "PyQt6": bool(QApplication),
+            "QtMultimedia": QMediaPlayer is not None and QAudioOutput is not None and QSoundEffect is not None,
             "qdarktheme": bool(qdarktheme),
             "paramiko": paramiko is not None,
         }
+        audio_resources = {
+            theme: all(path.is_file() and path.stat().st_size > 44 for path in audio_assets_for_theme(theme).values())
+            for theme in sorted(AUDIO_THEMES)
+        }
+        resources = {
+            "icon": ICON_FILE.is_file(),
+            "catalog": BUNDLED_DEPLOYMENT_CATALOG_FILE.is_file(),
+            "audio_license": (AUDIO_ROOT / "LICENSES.md").is_file(),
+            "audio_themes": all(audio_resources.values()),
+        }
         payload = {
-            "ok": all(required.values()),
+            "ok": all(required.values()) and all(resources.values()),
             "version": APP_VERSION,
             "platform": sys.platform,
             "architecture": platform.machine(),
             "required": required,
+            "resources": resources,
+            "audio": audio_resources,
         }
         print(json.dumps(payload, ensure_ascii=False))
         raise SystemExit(0 if payload["ok"] else 2)

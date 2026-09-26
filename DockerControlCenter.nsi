@@ -9,7 +9,7 @@ RequestExecutionLevel user
 !define REPO_BUILDER_EXE "DCCRepoBuilder.exe"
 !define APP_ID "DockerControlCenter"
 !define APP_PUBLISHER "Docker Control Center"
-!define APP_VERSION "1.3.8"
+!define APP_VERSION "1.3.9"
 
 Name "${APP_NAME}"
 OutFile "..\release\DockerControlCenter-Setup.exe"
