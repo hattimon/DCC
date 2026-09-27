@@ -112,8 +112,8 @@
       "homepage_url": "https://www.stirlingpdf.com/",
       "icon_text": "🧰",
       "upstream_repo": "Stirling-Tools/Stirling-PDF",
-      "latest_release": "v3.0.0",
-      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.0.0",
+      "latest_release": "v3.0.1",
+      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.0.1",
       "icon_url": "catalog/media/icons/stirling-pdf.png"
     },
     {
@@ -1766,8 +1766,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v4.5.6",
-      "latest_release_url": "https://github.com/nicolargo/glances/releases/tag/v4.5.6",
+      "latest_release": "v4.5.7",
+      "latest_release_url": "https://github.com/nicolargo/glances/releases/tag/v4.5.7",
       "icon_url": "catalog/media/icons/glances.png"
     },
     {
