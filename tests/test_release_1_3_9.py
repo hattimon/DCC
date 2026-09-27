@@ -145,12 +145,16 @@ class Release139Tests(unittest.TestCase):
         self.assertIn("dcc-update-handoff.log", source)
         self.assertIn("Start-Sleep -Milliseconds 1200", source)
         self.assertIn("while (Get-Process -Id $DccProcessId -ErrorAction SilentlyContinue)", source)
-        self.assertIn("-ArgumentList '/DCCUPDATE=1'", source)
+        self.assertIn("-ArgumentList @('/S', '/DCCUPDATE=1')", source)
+        self.assertIn("does not match expected version", source)
+        self.assertIn("Show-UpdateFailure $reason", source)
         self.assertIn('"-DccProcessId"', source)
         for path in (ROOT / "DockerControlCenter.nsi", ROOT / "upstream_assets" / "DockerControlCenter.nsi"):
             nsi = path.read_text(encoding="utf-8-sig").lower()
             self.assertNotIn("taskkill", nsi)
             self.assertNotIn("stop-process", nsi)
+            self.assertIn("dcc-update-handoff*.ps1", nsi)
+            self.assertIn("setsilent silent", nsi)
             self.assertNotIn('execwait \'"$instdir\\${app_exe}" --self-check\'', nsi)
 
     def test_windows_installer_shortcuts_graceful_close_and_relaunch(self):
@@ -183,6 +187,9 @@ class Release139Tests(unittest.TestCase):
         self.assertIn("Marshal.QueryInterface(unknown, ref propertyStoreId, out storePointer)", helper)
         self.assertNotIn("Marshal.QueryInterface(unknown, in propertyStoreId", helper)
         self.assertIn("Write-ShortcutHelperLog", helper)
+        self.assertIn("User Pinned\\TaskBar", helper)
+        self.assertIn('IconLocation = "$target,0"', helper)
+        self.assertIn("PinnedShortcutDirectory", helper)
 
     def test_windows_identity_and_version_resources(self):
         source = (ROOT / "DockerControlCenter.py").read_text(encoding="utf-8")
@@ -239,7 +246,7 @@ class Release139Tests(unittest.TestCase):
         self.assertIn("dcc-update-handoff.log", source)
         self.assertIn("while (Get-Process -Id $DccProcessId -ErrorAction SilentlyContinue)", source)
         self.assertIn("Start-Sleep -Milliseconds 1200", source)
-        self.assertIn("-ArgumentList '/DCCUPDATE=1'", source)
+        self.assertIn("-ArgumentList @('/S', '/DCCUPDATE=1')", source)
 
     def test_release_notes_and_expected_asset_names(self):
         notes = (ROOT / "release" / "RELEASE_NOTES_1.3.9.md").read_text(encoding="utf-8")

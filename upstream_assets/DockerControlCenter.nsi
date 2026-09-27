@@ -76,6 +76,20 @@ Function .onInit
       StrCpy $UpdateMode "1"
   ${EndIf}
 
+  ; Older 1.3.8 updaters launch the staged installer without command-line
+  ; arguments. Their handoff script is a marker that this is an update.
+  StrCmp $UpdateMode "1" update_mode_silent
+  ClearErrors
+  FindFirst $R0 $R1 "$EXEDIR\dcc-update-handoff*.ps1"
+  IfErrors update_mode_check_done
+  FindClose $R0
+  StrCmp $R1 "" update_mode_check_done
+  StrCpy $UpdateMode "1"
+update_mode_check_done:
+  StrCmp $UpdateMode "1" 0 check_running
+update_mode_silent:
+  SetSilent silent
+
 check_running:
   Call CheckDccProcesses
   Pop $0

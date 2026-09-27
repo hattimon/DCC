@@ -4,6 +4,7 @@ DCC 1.3.9 finalizes the UI, theme, audio, icon, refresh and packaging work built
 
 ## English
 
+- Fixed the Windows 1.3.8 update handoff: v1.3.9 recognizes the legacy staged updater helper, installs silently and relaunches DCC. The current updater verifies the installed version and reports failures; DCC taskbar pin icons refresh in place.
 - Added case-insensitive search to Logs; the query remains in place when logs are refreshed.
 - Added configurable container auto-refresh with saved on/off state and a 5, 10, 15, 30 or 60 second interval. Refreshes do not overlap an active container refresh.
 - New Container opens in Store mode and can switch to a manual Docker command; editing an existing container keeps its real configuration while the catalog refreshes.
@@ -35,6 +36,7 @@ DCC 1.3.9 finalizes the UI, theme, audio, icon, refresh and packaging work built
 
 ## Polski
 
+- Naprawiono aktualizację Windows ze starszego updatera 1.3.8: instalator 1.3.9 rozpoznaje stary plik pomocniczy, instaluje aktualizację po cichu i ponownie uruchamia DCC. Aktualny updater sprawdza zainstalowaną wersję i zgłasza błąd; ikony przypiętych skrótów DCC są odświeżane bez usuwania przypięć.
 - Dodano niewrażliwe na wielkość liter wyszukiwanie w Logs; wpisane zapytanie pozostaje po odświeżeniu logów.
 - Dodano konfigurowalne auto-odświeżanie kontenerów z zapamiętaniem stanu i interwałem 5, 10, 15, 30 lub 60 sekund. Odświeżanie nie uruchamia się ponownie, gdy poprzednie nadal trwa.
 - New Container otwiera się domyślnie w Store i pozwala przełączyć się na ręczną komendę Docker; edycja istniejącego kontenera zachowuje jego konfigurację podczas odświeżania katalogu.

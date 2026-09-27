@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string]$MainAppId,
     [Parameter(Mandatory = $true)][string]$RepoShortcut,
     [Parameter(Mandatory = $true)][string]$RepoAppId,
-    [string]$LogPath
+    [string]$LogPath,
+    [string]$PinnedShortcutDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -111,3 +112,54 @@ public static class DccShortcutIdentity
 Write-ShortcutHelperLog "Assigned '$MainAppId' to '$MainShortcut'."
 [DccShortcutIdentity]::Set($RepoShortcut, $RepoAppId)
 Write-ShortcutHelperLog "Assigned '$RepoAppId' to '$RepoShortcut'."
+
+if ([string]::IsNullOrWhiteSpace($PinnedShortcutDirectory) -and -not [string]::IsNullOrWhiteSpace($env:APPDATA)) {
+    $PinnedShortcutDirectory = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
+}
+
+if (-not [string]::IsNullOrWhiteSpace($PinnedShortcutDirectory)) {
+    if (Test-Path -LiteralPath $PinnedShortcutDirectory -PathType Container) {
+        $shell = New-Object -ComObject WScript.Shell
+        $targetAppIds = @{}
+        $shortcutEntries = @(
+            [pscustomobject]@{ Path = $MainShortcut; AppId = $MainAppId }
+            [pscustomobject]@{ Path = $RepoShortcut; AppId = $RepoAppId }
+        )
+        foreach ($entry in $shortcutEntries) {
+            $appShortcut = $shell.CreateShortcut([string]$entry.Path)
+            try {
+                $target = [Environment]::ExpandEnvironmentVariables([string]$appShortcut.TargetPath)
+                if (-not [string]::IsNullOrWhiteSpace($target)) {
+                    $targetAppIds[[IO.Path]::GetFullPath($target)] = [string]$entry.AppId
+                }
+            } finally {
+                [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($appShortcut)
+            }
+        }
+
+        foreach ($pinnedFile in Get-ChildItem -LiteralPath $PinnedShortcutDirectory -Filter '*.lnk' -File -ErrorAction Stop) {
+            $pinnedShortcut = $null
+            try {
+                $pinnedShortcut = $shell.CreateShortcut($pinnedFile.FullName)
+                $target = [Environment]::ExpandEnvironmentVariables([string]$pinnedShortcut.TargetPath)
+                if ([string]::IsNullOrWhiteSpace($target)) { continue }
+                $target = [IO.Path]::GetFullPath($target)
+                if (-not $targetAppIds.ContainsKey($target)) { continue }
+
+                $pinnedShortcut.IconLocation = "$target,0"
+                $pinnedShortcut.Save()
+                [DccShortcutIdentity]::Set($pinnedFile.FullName, $targetAppIds[$target])
+                Write-ShortcutHelperLog "Refreshed pinned icon '$($pinnedFile.FullName)' from '$target'."
+            } catch {
+                Write-ShortcutHelperLog "WARNING: Could not refresh pinned shortcut '$($pinnedFile.FullName)': $($_.Exception.Message)"
+            } finally {
+                if ($pinnedShortcut) {
+                    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($pinnedShortcut)
+                }
+            }
+        }
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)
+    } else {
+        Write-ShortcutHelperLog "Pinned shortcut directory was not found: '$PinnedShortcutDirectory'."
+    }
+}

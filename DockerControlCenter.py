@@ -735,7 +735,7 @@ TEXTS = {
         "info_update_cancel": "Cancel",
         "info_update_downloading": "Downloading update {release}...",
         "info_update_download_failed": "Could not download or start the update.",
-        "info_update_windows_handoff": "The update has been downloaded. Docker Control Center will now close, then the installer will start. Finish the installer normally; it will confirm when version {release} has been installed.",
+        "info_update_windows_handoff": "The update has been downloaded. Docker Control Center will close, install the update automatically, and relaunch. If installation fails, a message will explain what to do.",
         "info_update_linux_auth_title": "Linux update - password required",
         "info_update_linux_auth": "The update package has been downloaded. Linux will now open a system authorization window. Enter your user/administrator password there to allow the package installation. Docker Control Center will remain open until the installation finishes.",
         "info_update_linux_installing": "Installing the Linux update... Complete the system password prompt if it is still visible.",
@@ -1302,7 +1302,7 @@ TEXTS = {
         "info_update_cancel": "Anuluj",
         "info_update_downloading": "Pobieranie aktualizacji {release}...",
         "info_update_download_failed": "Nie udało się pobrać lub uruchomić aktualizacji.",
-        "info_update_windows_handoff": "Aktualizacja została pobrana. Docker Control Center zostanie teraz zamknięty, a po jego zamknięciu uruchomi się instalator. Dokończ instalację normalnie; instalator potwierdzi, gdy wersja {release} zostanie zainstalowana.",
+        "info_update_windows_handoff": "Aktualizacja została pobrana. Docker Control Center zostanie zamknięty, zaktualizowany automatycznie i uruchomiony ponownie. Jeśli instalacja się nie powiedzie, zobaczysz komunikat z dalszymi instrukcjami.",
         "info_update_linux_auth_title": "Aktualizacja Linux - wymagane hasło",
         "info_update_linux_auth": "Pakiet aktualizacji został pobrany. Linux otworzy teraz systemowe okno uwierzytelnienia. Wpisz w nim hasło swojego konta/użytkownika administratora, aby zezwolić na instalację pakietu. Docker Control Center pozostanie uruchomiony aż do zakończenia instalacji.",
         "info_update_linux_installing": "Instalowanie aktualizacji Linux... Jeśli okno hasła jest nadal widoczne, wpisz hasło i zatwierdź.",
@@ -10980,11 +10980,10 @@ class MainWindow(QMainWindow):
     def start_windows_update_installer_after_exit(self, path: str) -> None:
         """Start the NSIS installer only after this DCC process has exited.
 
-        Starting the installer while DCC is still alive makes NSIS kill the
-        application while Qt is finishing the download callback.  Besides
-        looking like an updater crash, that races with file replacement.  A
-        tiny PowerShell helper waits for our PID and then starts the
-        installer normally, so the installer can finish and show its result.
+        Starting the installer while DCC is still alive can race with Qt
+        shutdown and executable replacement. A small PowerShell helper waits
+        for our PID, runs the installer in silent update mode, and verifies
+        the installed version before the installer relaunches DCC.
         """
         installer_path = Path(path).resolve()
         if not installer_path.is_file():
@@ -11007,6 +11006,29 @@ function Write-UpdateLog([string]$Message) {
     $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'
     Add-Content -LiteralPath $LogPath -Value ("[$stamp] $Message") -Encoding UTF8
 }
+function Show-UpdateFailure([string]$Reason) {
+    $title = 'Docker Control Center update'
+    if ([Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName -eq 'pl') {
+        $message = "Nie udało się zainstalować aktualizacji Docker Control Center.`n$Reason`n`nSzczegóły: $LogPath"
+        $title = 'Aktualizacja Docker Control Center'
+    } else {
+        $message = "Docker Control Center could not install the update.`n$Reason`n`nDetails: $LogPath"
+    }
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        [void][System.Windows.Forms.MessageBox]::Show(
+            $message,
+            $title,
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        )
+        return
+    } catch {}
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        [void]$shell.Popup($message, 0, $title, 0x10)
+    } catch {}
+}
 try {
     Write-UpdateLog "Waiting for DCC PID $DccProcessId to exit."
     $deadline = (Get-Date).AddMinutes(2)
@@ -11025,13 +11047,38 @@ try {
     }
 
     $workDir = Split-Path -Parent $InstallerPath
+    $installerName = [System.IO.Path]::GetFileName($InstallerPath)
+    if ($installerName -notmatch '^DockerControlCenter-Setup-(\\d+\\.\\d+\\.\\d+)\\.exe$') {
+        throw "Unexpected installer filename: $installerName"
+    }
+    $expectedVersion = $Matches[1]
     Write-UpdateLog "Starting installer: $InstallerPath"
-    $process = Start-Process -FilePath $InstallerPath -ArgumentList '/DCCUPDATE=1' -WorkingDirectory $workDir -PassThru
+    $process = Start-Process -FilePath $InstallerPath -ArgumentList @('/S', '/DCCUPDATE=1') -WorkingDirectory $workDir -PassThru
     $process.WaitForExit()
     Write-UpdateLog "Installer finished with exit code $($process.ExitCode)."
-    exit $process.ExitCode
+    if ($process.ExitCode -ne 0) {
+        throw "Installer returned exit code $($process.ExitCode)."
+    }
+
+    $uninstall = Get-ItemProperty -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\DockerControlCenter' -ErrorAction Stop
+    if ([string]$uninstall.DisplayVersion -ne $expectedVersion) {
+        throw "Installed version '$($uninstall.DisplayVersion)' does not match expected version '$expectedVersion'."
+    }
+    $installSettings = Get-ItemProperty -LiteralPath 'HKCU:\\Software\\DockerControlCenter' -Name InstallDir -ErrorAction Stop
+    $installedExe = Join-Path ([string]$installSettings.InstallDir) 'DockerControlCenter.exe'
+    if (-not (Test-Path -LiteralPath $installedExe -PathType Leaf)) {
+        throw "Installed application was not found at '$installedExe'."
+    }
+    $binaryVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($installedExe).ProductVersion
+    if ($binaryVersion -and $binaryVersion -notmatch ('^' + [regex]::Escape($expectedVersion) + '(\\.|$)')) {
+        throw "Installed executable version '$binaryVersion' does not match expected version '$expectedVersion'."
+    }
+    Write-UpdateLog "Verified installed DCC version $expectedVersion at $installedExe."
+    exit 0
 } catch {
-    try { Write-UpdateLog ("Updater handoff failed: " + $_.Exception.Message) } catch {}
+    $reason = $_.Exception.Message
+    try { Write-UpdateLog ("Updater handoff failed: " + $reason) } catch {}
+    Show-UpdateFailure $reason
     exit 1
 }
 """,
