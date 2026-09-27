@@ -4,6 +4,8 @@ DCC 1.3.9 finalizes the UI, theme, audio, icon, refresh and packaging work built
 
 ## English
 
+- Reset PyInstaller state before the installer relaunches DCC, preventing python312.dll errors from deleted temporary directories when updating from 1.3.8.
+
 - Fixed the Windows 1.3.8 update handoff: v1.3.9 recognizes the legacy staged updater helper, installs silently and relaunches DCC. The current updater verifies the installed version and reports failures; DCC taskbar pin icons refresh in place.
 - Added case-insensitive search to Logs; the query remains in place when logs are refreshed.
 - Added configurable container auto-refresh with saved on/off state and a 5, 10, 15, 30 or 60 second interval. Refreshes do not overlap an active container refresh.

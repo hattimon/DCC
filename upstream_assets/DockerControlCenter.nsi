@@ -231,11 +231,19 @@ shortcut_ids_ready:
   Goto install_done
 
 launch_after_install:
-  Exec '"$InstDir\${APP_EXE}"'
+  Call LaunchDccClean
 
 install_done:
 SectionEnd
 
+Function LaunchDccClean
+  ; The 1.3.8 updater can pass worker state referring to its deleted _MEI directory.
+  ; Force a fresh one-file extraction even when the installed EXE path is unchanged.
+  System::Call 'kernel32::SetEnvironmentVariableW(w "PYINSTALLER_RESET_ENVIRONMENT", w "1") i .r0'
+  System::Call 'kernel32::SetDllDirectoryW(p 0) i .r0'
+  SetOutPath "$InstDir"
+  Exec '"$InstDir\${APP_EXE}"'
+FunctionEnd
 Function LaunchDccPage
   StrCmp $UpdateMode "1" launch_page_done
   IfSilent launch_page_done
@@ -263,7 +271,7 @@ FunctionEnd
 Function LaunchDccLeave
   ${NSD_GetState} $LaunchDccCheckbox $0
   ${If} $0 == ${BST_CHECKED}
-    Exec '"$InstDir\${APP_EXE}"'
+    Call LaunchDccClean
   ${EndIf}
 FunctionEnd
 
