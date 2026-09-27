@@ -11,9 +11,22 @@
 A cross-platform desktop control panel for managing Docker on Windows and Debian-family Linux, locally, through WSL/WSL2, and on remote hosts over SSH or Balena OS.
 
 ### Download Latest Version
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.9/DockerControlCenter-Setup-1.3.9.exe)
-[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.9/DockerControlCenter_1.3.9_amd64.deb)
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.10/DockerControlCenter-Setup-1.3.10.exe)
+[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.10/DockerControlCenter_1.3.10_amd64.deb)
 
+## What's New in v1.3.10
+
+### EN
+- Fixed the Windows infrastructure terminal so it opens visibly.
+- Improved Store heading and catalog-status contrast in Day and Light themes on Windows and Linux.
+- Tightened refresh-thread cleanup and paused automatic container refresh while modal dialogs such as the Store are open.
+- Preserved the working 1.3.9 updater flow, restart behavior and Windows shortcut icon refresh.
+
+### PL
+- Naprawiono terminal infrastruktury Windows, aby otwierał się jako widoczne okno.
+- Poprawiono kontrast nagłówków sklepu i statusu katalogu w motywach Dzień i Jasny na Windows i Linux.
+- Poprawiono kończenie wątków odświeżania i wstrzymano auto-odświeżanie kontenerów podczas otwartych okien modalnych, takich jak Sklep.
+- Zachowano działający updater 1.3.9, restart aplikacji i odświeżanie ikon skrótów Windows.
 ## What's New in v1.3.9
 
 ### EN

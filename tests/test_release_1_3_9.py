@@ -112,10 +112,10 @@ class Release139Tests(unittest.TestCase):
         self.assertEqual(dll_path_changes, [None, str(bundle)])
 
     def test_release_version_metadata(self):
-        self.assertEqual(dcc.APP_VERSION, "1.3.9")
+        self.assertEqual(dcc.APP_VERSION, "1.3.10")
         for path in (ROOT / "DockerControlCenter.nsi", ROOT / "upstream_assets" / "DockerControlCenter.nsi"):
             text = path.read_text(encoding="utf-8-sig")
-            self.assertIn('!define APP_VERSION "1.3.9"', text)
+            self.assertIn('!define APP_VERSION "1.3.10"', text)
 
     def test_update_path_138_to_139_is_available(self):
         class VersionHarness:
@@ -126,6 +126,14 @@ class Release139Tests(unittest.TestCase):
             self.assertTrue(dcc.MainWindow._is_newer_version(harness, "v1.3.9"))
             self.assertFalse(dcc.MainWindow._is_newer_version(harness, "v1.3.8"))
 
+    def test_update_path_139_to_1310_is_available(self):
+        class VersionHarness:
+            _parse_version_value = dcc.MainWindow._parse_version_value
+
+        harness = VersionHarness()
+        with patch.object(dcc, "APP_VERSION", "1.3.9"):
+            self.assertTrue(dcc.MainWindow._is_newer_version(harness, "v1.3.10"))
+            self.assertFalse(dcc.MainWindow._is_newer_version(harness, "v1.3.9"))
     def test_windows_discovery_selects_versioned_setup_asset(self):
         release = {
             "tag_name": "v1.3.9",
@@ -202,8 +210,8 @@ class Release139Tests(unittest.TestCase):
         repo_version = (ROOT / "packaging" / "windows" / "RepoBuilder.version.txt").read_text(encoding="utf-8")
         self.assertIn("DCC - Docker Control Center", main_version)
         self.assertIn("DCC Repo Builder", repo_version)
-        self.assertIn("1.3.9", main_version)
-        self.assertIn("1.3.9", repo_version)
+        self.assertIn("1.3.10", main_version)
+        self.assertIn("1.3.10", repo_version)
 
     def test_stage_c_start_menu_icons_registration_and_running_process_flow(self):
         for path in (ROOT / "DockerControlCenter.nsi", ROOT / "upstream_assets" / "DockerControlCenter.nsi"):

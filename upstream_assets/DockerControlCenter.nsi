@@ -11,7 +11,7 @@ RequestExecutionLevel user
 !define REPO_BUILDER_EXE "DCCRepoBuilder.exe"
 !define APP_ID "DockerControlCenter"
 !define APP_PUBLISHER "Hattimon"
-!define APP_VERSION "1.3.9"
+!define APP_VERSION "1.3.10"
 !define START_MENU_DIR "DCC"
 
 Name "${APP_NAME}"

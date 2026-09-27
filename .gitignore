@@ -35,3 +35,4 @@ dcc_catalog_refresh_*.py
 # OS / editor
 Thumbs.db
 .DS_Store
+.venv-release-*/

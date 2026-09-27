@@ -398,7 +398,7 @@ LLM_OPENAI_COMPATIBLE_BASE_URLS = {
     "xai": "https://api.x.ai/v1",
 }
 
-APP_VERSION = "1.3.9"
+APP_VERSION = "1.3.10"
 APP_VERSION_TAG = f"v{APP_VERSION}"
 GITHUB_REPO = "hattimon/DCC"
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
@@ -725,8 +725,8 @@ TEXTS = {
         "info_app_open_repo": "Open repository",
         "info_app_open_release": "Open latest release",
         "info_app_check_updates": "Check updates",
-        "info_app_changelog_title": "Changelog (v1.3.9)",
-        "info_app_changelog": "- Added one-shot theme intros and Docker operation sound effects.\n- The note button now enables or disables all DCC audio.\n- Improved logs, themes, Repo Builder, Store sizing, container auto-refresh and icon packaging.\n- Preserved the safe Windows updater handoff introduced in v1.3.8.",
+        "info_app_changelog_title": "Changelog (v1.3.10)",
+        "info_app_changelog": "- Fixed the Windows Infrastructure terminal so it opens visibly.\n- Improved Store heading and catalog-status contrast in Day and Light themes on Windows and Linux.\n- Improved refresh-thread cleanup and pause periodic container refresh while modal dialogs such as the Store are open.\n- Preserved the working 1.3.9 updater handoff, Windows restart behavior and shortcut icon refresh.",
         "info_update_available_title": "Update available",
         "info_update_available_body": "A newer release is available: {release}.",
         "info_update_question": "Update to {release} is available. Install it now?",
@@ -1292,8 +1292,8 @@ TEXTS = {
         "info_app_open_repo": "Otwórz repozytorium",
         "info_app_open_release": "Otwórz najnowsze wydanie",
         "info_app_check_updates": "Sprawdź aktualizacje",
-        "info_app_changelog_title": "Changelog (v1.3.9)",
-        "info_app_changelog": "- Dodano jednorazowe intro motywów oraz dźwięki operacji Dockera.\n- Nutka włącza lub wyłącza teraz całe audio DCC.\n- Poprawiono logi, motywy, Repo Builder, rozmiary Store, auto-refresh kontenerów i pakowanie ikon.\n- Zachowano bezpieczny handoff updatera Windows z v1.3.8.",
+        "info_app_changelog_title": "Changelog (v1.3.10)",
+        "info_app_changelog": "- Naprawiono terminal Infrastruktury na Windows — otwiera się teraz jako widoczne okno.\n- Poprawiono czytelność nagłówków Sklepu i statusu katalogu w motywach Dzień i Jasny na Windows i Linux.\n- Poprawiono kończenie wątków odświeżania i wstrzymano okresowe odświeżanie kontenerów podczas otwartych okien modalnych, w tym Sklepu.\n- Zachowano działający handoff updatera z 1.3.9, restart Windows i odświeżanie ikon skrótów.",
         "info_update_available_title": "Dostępna aktualizacja",
         "info_update_available_body": "Dostępna jest nowsza wersja: {release}.",
         "info_update_question": "Dostępna jest aktualizacja do wersji {release}. Czy wykonać ja teraz?",
@@ -3461,7 +3461,11 @@ def detect_local_os_name() -> str:
 def launch_interactive_terminal(command: Optional[List[str]] = None, shell_command: str = ""):
     if os.name == "nt":
         argv = list(command or [])
-        start_external_process(["cmd.exe", "/k"] + argv)
+        start_external_process(
+            ["cmd.exe", "/k"] + argv,
+            cwd=str(application_working_directory()),
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
         return
 
     text = shell_command.strip()
@@ -5523,6 +5527,7 @@ class NewContainerDialog(QDialog):
         self.dialog_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         self.dialog_scroll_content = QWidget()
+        self.dialog_scroll_content.setObjectName("storeRootContent")
         self.dialog_scroll_content.setMinimumHeight(0)
         layout = QVBoxLayout(self.dialog_scroll_content)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -5533,6 +5538,7 @@ class NewContainerDialog(QDialog):
         store_header.setSpacing(6)
         store_text = QVBoxLayout()
         subtitle = QLabel(self.texts["wizard_store_subtitle"])
+        self.store_subtitle = subtitle
         subtitle_font = subtitle.font()
         subtitle_font.setBold(True)
         subtitle.setFont(subtitle_font)
@@ -6113,6 +6119,11 @@ class NewContainerDialog(QDialog):
 
     def _apply_catalog_card_style(self):
         colors = self._catalog_visual_colors()
+        if self.catalog_theme in {"day", "light"}:
+            # These labels sit outside the light cards, on the dark store
+            # background. Keep their contrast on both Windows and Linux.
+            for label in (self.store_subtitle, self.repo_status_label):
+                label.setStyleSheet("color: #edf3fa; background: transparent;")
         if hasattr(self, "target_host_icon"):
             self.target_host_icon.setPixmap(
                 make_category_icon("container", QColor(colors["accent"]), 18).pixmap(18, 18)
@@ -6167,6 +6178,10 @@ class NewContainerDialog(QDialog):
         category_frame_qss, category_title_qss, category_nav_qss = self._catalog_category_styles(colors)
         self.store_categories_frame.setStyleSheet(category_frame_qss)
         self.store_categories_title.setStyleSheet(category_title_qss)
+        if self.catalog_theme in {"day", "light"}:
+            self.store_categories_title.setStyleSheet(
+                category_title_qss + "\nQLabel#storeColumnTitle { color: #edf3fa; }"
+            )
         self.category_nav.setStyleSheet(category_nav_qss)
         self.editor_tabs.setStyleSheet(
             f"""
@@ -6954,7 +6969,7 @@ class NewContainerDialog(QDialog):
         self.refresh_external_catalogs()
 
     def refresh_external_catalogs(self, silent: bool = False):
-        if self.catalog_refresh_thread is not None and self.catalog_refresh_thread.isRunning():
+        if self.catalog_refresh_thread is not None:
             if not silent:
                 self._catalog_refresh_notify_on_finish = True
             return
@@ -13261,7 +13276,7 @@ try {
             cwd=str(application_working_directory()),
             env=external_process_environment(),
             close_fds=True,
-            creationflags=CREATE_NO_WINDOW,
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
 
     def open_infra_terminal(self):
@@ -14315,6 +14330,10 @@ try {
     def on_auto_refresh_timeout(self):
         if not self.auto_refresh_enabled or not self.client:
             return
+        # Modal workflows can use the same Docker/SSH client. Defer periodic
+        # refresh until the user returns, without changing their saved setting.
+        if QApplication.activeModalWidget() is not None:
+            return
         thread = self.refresh_thread
         if thread is not None and thread.isRunning():
             return
@@ -14324,7 +14343,7 @@ try {
         if not self.client:
             self.show_local_docker_unavailable(self.texts["docker_not_available"])
             return
-        if self.refresh_thread is not None and self.refresh_thread.isRunning():
+        if self.refresh_thread is not None:
             return
         self.statusBar().showMessage(self.texts["status_loading"])
         self.refresh_thread = QThread()
@@ -14335,13 +14354,16 @@ try {
         self.worker.finished.connect(self.refresh_thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
 
-        def thread_finished():
-            if self.refresh_thread is not None:
-                self.refresh_thread.deleteLater()
-                self.refresh_thread = None
-
-        self.refresh_thread.finished.connect(thread_finished)
+        self.refresh_thread.finished.connect(self.on_container_refresh_thread_finished)
         self.refresh_thread.start()
+
+    def on_container_refresh_thread_finished(self):
+        thread = self.sender()
+        if thread is not self.refresh_thread:
+            return
+        self.refresh_thread = None
+        self.worker = None
+        thread.deleteLater()
 
     def refresh_monitoring(self):
         if self.restart_watch_active:
