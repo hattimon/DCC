@@ -199,3 +199,7 @@ Jeżeli DCC jest dla Ciebie przydatny, możesz wesprzeć dalszy rozwój projektu
 DCC is licensed under the MIT License. See [LICENSE](LICENSE).
 
 Projekt DCC jest udostępniany na licencji MIT.
+
+Third-party assets are covered by their respective licenses or ownership terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom właścicieli.
