@@ -70,6 +70,8 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
     QSlider,
     QSpinBox,
+    QStyle,
+    QStyleOptionButton,
     QStyledItemDelegate,
     QStyleOptionViewItem,
     QStatusBar,
@@ -80,6 +82,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+NativeCheckBox = QCheckBox
 
 
 class CategoryTileDelegate(QStyledItemDelegate):
@@ -114,6 +118,8 @@ DOCKER_HTTP_TIMEOUT = 30
 APP_SETTINGS_ORG = "DockerControlCenter"
 APP_SETTINGS_NAME = "DockerControlCenter"
 APP_DATA_DIR_NAME = "DockerControlCenter"
+MAIN_APP_USER_MODEL_ID = "Hattimon.DCC"
+REPO_BUILDER_APP_USER_MODEL_ID = "Hattimon.DCC.RepoBuilder"
 RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 if os.name == "nt":
     USER_DATA_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_DATA_DIR_NAME
@@ -127,18 +133,26 @@ BUNDLED_DEPLOYMENT_CATALOG_FILE = RESOURCE_DIR / "dcc-catalog.json"
 STORE_MEDIA_CACHE_DIR = USER_DATA_DIR / "store-media-cache"
 STORE_MEDIA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 AUDIO_ROOT = RESOURCE_DIR / "assets" / "audio"
-AUDIO_THEMES = {"light", "day", "dark", "black", "night"}
+AUDIO_PROFILES = ("night", "black", "dark", "light", "day")
+AUDIO_THEMES = set(AUDIO_PROFILES)
 AUDIO_EVENT_FILES = {
-    "start": "start.wav",
-    "stop": "stop.wav",
-    "restart": "restart.wav",
+    "container_start_requested": "container_start_requested.wav",
+    "container_started": "container_started.wav",
+    "container_stop_requested": "container_stop_requested.wav",
+    "container_stopped": "container_stopped.wav",
+    "container_restart_requested": "container_restart_requested.wav",
+    "container_restart_completed": "container_restart_completed.wav",
+    "install_completed": "install_completed.wav",
+    "uninstall_completed": "uninstall_completed.wav",
+    "host_connected": "host_connected.wav",
     "success": "success.wav",
+    "warning": "warning.wav",
     "error": "error.wav",
-    "remove": "remove.wav",
 }
 SECRET_FILE = USER_DATA_DIR / "docker_control_center_secrets.json"
 BACKGROUND_DIR = RESOURCE_DIR / "backgrounds"
 ICON_FILE = RESOURCE_DIR / "icon.png"
+REPO_BUILDER_ICON_FILE = RESOURCE_DIR / "repo_builder_icon.png"
 BACKGROUND_NAMES = {
     "light": ("theme_light", "light"),
     "day": ("theme_day", "day"),
@@ -265,18 +279,278 @@ def resolve_resource_path(relative_path: str | Path, resource_root: Optional[Pat
     return base / Path(relative_path)
 
 
+def set_windows_app_user_model_id(app_id: str) -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        result = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(str(app_id))
+        return int(result) == 0
+    except Exception:
+        return False
+
+
+def audio_profile_name(profile: str) -> str:
+    value = str(profile or "").strip().lower()
+    return value if value in AUDIO_THEMES else "black"
+
+
 def audio_theme_name(theme: str) -> str:
-    return theme if theme in AUDIO_THEMES else "black"
+    """Backward-compatible alias used by older tests/helpers."""
+    return audio_profile_name(theme)
+
+
+def effective_audio_profile(profile: str, theme: str) -> str:
+    selected = str(profile or "auto").strip().lower()
+    if selected == "auto":
+        return audio_profile_name(theme)
+    return audio_profile_name(selected)
 
 
 def audio_asset_path(theme: str, filename: str, resource_root: Optional[Path] = None) -> Path:
-    return resolve_resource_path(Path("assets") / "audio" / audio_theme_name(theme) / filename, resource_root)
+    return resolve_resource_path(Path("assets") / "audio" / audio_profile_name(theme) / filename, resource_root)
 
 
 def audio_assets_for_theme(theme: str, resource_root: Optional[Path] = None) -> Dict[str, Path]:
-    assets = {"ambient": audio_asset_path(theme, "ambient.wav", resource_root)}
+    assets = {"intro": audio_asset_path(theme, "intro.wav", resource_root)}
     assets.update({event: audio_asset_path(theme, filename, resource_root) for event, filename in AUDIO_EVENT_FILES.items()})
     return assets
+
+
+def clamp_percent(value: object, default: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = int(default)
+    return max(0, min(100, number))
+
+
+def load_audio_settings(settings: QSettings) -> Dict[str, object]:
+    enabled_raw = settings.value(
+        "audio/enabled",
+        settings.value("audio_enabled", settings.value("music_enabled", "true")),
+    )
+    enabled = str(enabled_raw).lower() in {"1", "true", "yes"}
+    profile = str(settings.value("audio/profile", "auto") or "auto").strip().lower()
+    if profile not in {"auto", *AUDIO_PROFILES}:
+        profile = "auto"
+    if settings.contains("audio/intro_volume"):
+        intro_raw = settings.value("audio/intro_volume", 35)
+    else:
+        intro_raw = settings.value("audio/ambient_volume", 35)
+    return {
+        "enabled": enabled,
+        "profile": profile,
+        "master_volume": clamp_percent(settings.value("audio/master_volume", 100), 100),
+        "intro_volume": clamp_percent(intro_raw, 35),
+        "effects_volume": clamp_percent(settings.value("audio/effects_volume", 65), 65),
+    }
+
+
+class AudioManager:
+    """Central runtime audio controller for DCC.
+
+    MainWindow keeps small compatibility wrappers, while playback, profile
+    loading, volume math and transition deduplication live here.
+    """
+
+    def __init__(self, owner):
+        self.owner = owner
+        self.audio_output = None
+        self.media_player = None
+        self.sfx_effects: Dict[str, object] = {}
+        self.loaded_profile = ""
+        self.last_event_at: Dict[str, float] = {}
+        self.container_status_baseline: Optional[Dict[str, str]] = None
+        self.pending_container_actions: Dict[str, str] = {}
+        self.host_connection_state = False
+
+    def effective_profile(self) -> str:
+        return effective_audio_profile(self.owner.audio_profile, self.owner.current_theme)
+
+    def effective_volumes(self) -> tuple[float, float]:
+        master = clamp_percent(self.owner.audio_master_volume, 100) / 100.0
+        intro = master * (clamp_percent(self.owner.audio_intro_volume, 35) / 100.0)
+        effects = master * (clamp_percent(self.owner.audio_effects_volume, 65) / 100.0)
+        return intro, effects
+
+    def _sync_compatibility_refs(self) -> None:
+        self.owner.audio_output = self.audio_output
+        self.owner.media_player = self.media_player
+        self.owner.sfx_effects = self.sfx_effects
+        self.owner._audio_theme = self.loaded_profile
+        self.owner._container_status_baseline = self.container_status_baseline
+        self.owner._pending_container_actions = self.pending_container_actions
+        self.owner._host_connection_state = self.host_connection_state
+
+    def setup(self) -> None:
+        if QMediaPlayer is None or QAudioOutput is None or QSoundEffect is None:
+            self._sync_compatibility_refs()
+            return
+        try:
+            self.audio_output = QAudioOutput(self.owner)
+            self.media_player = QMediaPlayer(self.owner)
+            self.media_player.setAudioOutput(self.audio_output)
+            if hasattr(self.media_player, "setLoops"):
+                self.media_player.setLoops(QMediaPlayer.Loops.Once)
+            self.sfx_effects = {
+                event: QSoundEffect(self.owner)
+                for event in AUDIO_EVENT_FILES
+            }
+            self.apply_volumes()
+            self.load_profile(force=True)
+            self._sync_compatibility_refs()
+            if self.owner.audio_enabled:
+                QTimer.singleShot(0, self.play_intro)
+        except Exception:
+            self.audio_output = None
+            self.media_player = None
+            self.sfx_effects = {}
+            self.loaded_profile = ""
+            self._sync_compatibility_refs()
+
+    def apply_volumes(self) -> None:
+        intro, effects = self.effective_volumes()
+        if self.audio_output is not None:
+            try:
+                self.audio_output.setVolume(intro)
+            except Exception:
+                pass
+        for effect in self.sfx_effects.values():
+            try:
+                effect.setVolume(effects)
+            except Exception:
+                continue
+
+    def load_profile(self, force: bool = False) -> bool:
+        if self.media_player is None:
+            self._sync_compatibility_refs()
+            return False
+        profile = self.effective_profile()
+        assets = audio_assets_for_theme(profile)
+        if not all(path.is_file() for path in assets.values()):
+            self.stop_all()
+            self.loaded_profile = ""
+            self._sync_compatibility_refs()
+            return False
+        if not force and self.loaded_profile == profile:
+            return True
+        try:
+            self.media_player.stop()
+            self.media_player.setSource(QUrl.fromLocalFile(str(assets["intro"])))
+            for event, effect in self.sfx_effects.items():
+                effect.setSource(QUrl.fromLocalFile(str(assets[event])))
+            self.loaded_profile = profile
+            self.apply_volumes()
+            self._sync_compatibility_refs()
+            return True
+        except Exception:
+            return False
+
+    def play_intro(self) -> None:
+        if not self.owner.audio_enabled or self.media_player is None:
+            return
+        if not self.load_profile():
+            return
+        try:
+            # Intro is always one-shot. Starting a new cue stops the previous one.
+            self.media_player.stop()
+            self.media_player.setPosition(0)
+            self.media_player.play()
+        except Exception:
+            pass
+
+    def play_event(self, event: str) -> None:
+        if not self.owner.audio_enabled:
+            return
+        effect = self.sfx_effects.get(event)
+        if effect is None:
+            return
+        now = time.monotonic()
+        if now - self.last_event_at.get(event, -999.0) < 0.08:
+            return
+        self.last_event_at[event] = now
+        try:
+            if effect.isPlaying():
+                effect.stop()
+            effect.play()
+        except Exception:
+            pass
+
+    def stop_all(self) -> None:
+        if self.media_player is not None:
+            try:
+                self.media_player.stop()
+            except Exception:
+                pass
+        for effect in self.sfx_effects.values():
+            try:
+                effect.stop()
+            except Exception:
+                continue
+
+    def reset_container_baseline(self) -> None:
+        self.container_status_baseline = None
+        self.pending_container_actions.clear()
+        self._sync_compatibility_refs()
+
+    @staticmethod
+    def normalized_container_state(container) -> str:
+        status = str(getattr(container, "status", "") or "").strip().lower()
+        if status.startswith("up") or status in {"running", "paused", "restarting"}:
+            return "running"
+        return "stopped"
+
+    def process_container_transitions(self, containers: List[object]) -> None:
+        current = {
+            str(getattr(container, "name", "") or ""): self.normalized_container_state(container)
+            for container in (containers or [])
+            if str(getattr(container, "name", "") or "")
+        }
+        previous = self.container_status_baseline
+        if previous is None:
+            self.container_status_baseline = current
+            self._sync_compatibility_refs()
+            return
+
+        for name, new_state in current.items():
+            old_state = previous.get(name)
+            pending = self.pending_container_actions.get(name)
+            if pending == "restart" and new_state == "running":
+                self.play_event("container_restart_completed")
+                self.pending_container_actions.pop(name, None)
+                continue
+            if pending == "start" and new_state == "running":
+                self.play_event("container_started")
+                self.pending_container_actions.pop(name, None)
+                continue
+            if pending == "stop" and new_state == "stopped":
+                self.play_event("container_stopped")
+                self.pending_container_actions.pop(name, None)
+                continue
+            if old_state is None or old_state == new_state:
+                continue
+            if old_state == "stopped" and new_state == "running":
+                self.play_event("container_started")
+            elif old_state == "running" and new_state == "stopped":
+                self.play_event("container_stopped")
+
+        self.container_status_baseline = current
+        self._sync_compatibility_refs()
+
+    def set_host_connected(self, available: bool) -> None:
+        previous = self.host_connection_state
+        self.host_connection_state = bool(available)
+        if self.host_connection_state and not previous:
+            self.play_event("host_connected")
+        self._sync_compatibility_refs()
+
+    def cleanup(self) -> None:
+        self.stop_all()
+        self.sfx_effects.clear()
+        self.media_player = None
+        self.audio_output = None
+        self.loaded_profile = ""
+        self._sync_compatibility_refs()
 
 TEXTS = {
     "EN": {
@@ -317,7 +591,7 @@ TEXTS = {
         "info_app_open_release": "Open latest release",
         "info_app_check_updates": "Check updates",
         "info_app_changelog_title": "Changelog (v1.3.9)",
-        "info_app_changelog": "- Added theme-aware ambient audio and Docker operation sound effects.\n- The note button now enables or disables all DCC audio.\n- Improved logs, themes, Repo Builder, Store sizing, container auto-refresh and icon packaging.\n- Preserved the safe Windows updater handoff introduced in v1.3.8.",
+        "info_app_changelog": "- Added one-shot theme intros and Docker operation sound effects.\n- The note button now enables or disables all DCC audio.\n- Improved logs, themes, Repo Builder, Store sizing, container auto-refresh and icon packaging.\n- Preserved the safe Windows updater handoff introduced in v1.3.8.",
         "info_update_available_title": "Update available",
         "info_update_available_body": "A newer release is available: {release}.",
         "info_update_question": "Update to {release} is available. Install it now?",
@@ -363,6 +637,16 @@ TEXTS = {
         "app_settings_neon_animate": "Animate neon glow",
         "app_settings_neon_enabled": "Enable neon glow",
         "app_settings_neon_color": "Neon color (static)",
+        "theme_settings_menu": "SETTINGS",
+        "theme_settings_visual_section": "A. Visual theme",
+        "theme_settings_neon_section": "B. Neon / accent",
+        "theme_settings_audio_section": "C. Sound",
+        "audio_enabled_label": "Application sounds",
+        "audio_profile_label": "Sound style",
+        "audio_profile_auto": "Auto (follow visual theme)",
+        "audio_master_volume": "Master volume",
+        "audio_intro_volume": "Theme intro volume",
+        "audio_effects_volume": "Effects volume",
         "neon_muted_header": "Muted / deep colors",
         "neon_custom": "Custom ({color})",
         "app_settings_updates_title": "Updates",
@@ -874,7 +1158,7 @@ TEXTS = {
         "info_app_open_release": "Otwórz najnowsze wydanie",
         "info_app_check_updates": "Sprawdź aktualizacje",
         "info_app_changelog_title": "Changelog (v1.3.9)",
-        "info_app_changelog": "- Dodano ambient zależny od motywu oraz dźwięki operacji Dockera.\n- Nutka włącza lub wyłącza teraz całe audio DCC.\n- Poprawiono logi, motywy, Repo Builder, rozmiary Store, auto-refresh kontenerów i pakowanie ikon.\n- Zachowano bezpieczny handoff updatera Windows z v1.3.8.",
+        "info_app_changelog": "- Dodano jednorazowe intro motywów oraz dźwięki operacji Dockera.\n- Nutka włącza lub wyłącza teraz całe audio DCC.\n- Poprawiono logi, motywy, Repo Builder, rozmiary Store, auto-refresh kontenerów i pakowanie ikon.\n- Zachowano bezpieczny handoff updatera Windows z v1.3.8.",
         "info_update_available_title": "Dostępna aktualizacja",
         "info_update_available_body": "Dostępna jest nowsza wersja: {release}.",
         "info_update_question": "Dostępna jest aktualizacja do wersji {release}. Czy wykonać ja teraz?",
@@ -920,6 +1204,16 @@ TEXTS = {
         "app_settings_neon_animate": "Animuj neon",
         "app_settings_neon_enabled": "Włącz neon",
         "app_settings_neon_color": "Kolor neonu (stały)",
+        "theme_settings_menu": "USTAWIENIA",
+        "theme_settings_visual_section": "A. Motyw wizualny",
+        "theme_settings_neon_section": "B. Neon / akcent",
+        "theme_settings_audio_section": "C. Dźwięk",
+        "audio_enabled_label": "Dźwięki aplikacji",
+        "audio_profile_label": "Styl dźwięku",
+        "audio_profile_auto": "Auto (zgodnie z motywem)",
+        "audio_master_volume": "Głośność główna",
+        "audio_intro_volume": "Głośność intro / motywu",
+        "audio_effects_volume": "Głośność efektów",
         "neon_muted_header": "Kolory stonowane / głębokie",
         "neon_custom": "Niestandardowy ({color})",
         "app_settings_updates_title": "Aktualizacje",
@@ -4013,6 +4307,25 @@ def make_category_icon(kind: str, color: QColor, size: int = 18) -> QIcon:
 class ResizeGripHeader(QHeaderView):
     """Interactive table header with a visible resize grip at each divider."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._grip_color = QColor(DEFAULT_ACCENT_COLOR)
+
+    def setGripColor(self, color: str) -> None:
+        candidate = QColor(str(color or DEFAULT_ACCENT_COLOR))
+        if candidate.isValid():
+            self._grip_color = candidate
+            self.viewport().update()
+
+    @staticmethod
+    def _grip_dot_rects(rect) -> List[QRectF]:
+        x = rect.right() - 3.0
+        center_y = rect.center().y()
+        return [
+            QRectF(x - 1.15, center_y + offset - 1.15, 2.3, 2.3)
+            for offset in (-4.0, 0.0, 4.0)
+        ]
+
     def paintSection(self, painter: QPainter, rect, logical_index: int):
         super().paintSection(painter, rect, logical_index)
         if (
@@ -4022,15 +4335,80 @@ class ResizeGripHeader(QHeaderView):
         ):
             return
         painter.save()
-        grip_color = self.palette().color(self.foregroundRole())
-        grip_color.setAlpha(150)
+        grip_color = QColor(self._grip_color)
+        grip_color.setAlpha(210)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(grip_color)
-        x = rect.right() - 3.0
-        center_y = rect.center().y()
-        for offset in (-4.0, 0.0, 4.0):
-            painter.drawEllipse(QRectF(x - 1.15, center_y + offset - 1.15, 2.3, 2.3))
+        for dot_rect in self._grip_dot_rects(rect):
+            painter.drawEllipse(dot_rect)
         painter.restore()
+
+
+class VisibleCheckBox(NativeCheckBox):
+    """Native QCheckBox with an explicit high-contrast DCC accent checkmark."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._check_accent: Optional[QColor] = None
+
+    def setAccentColor(self, color: str) -> None:
+        candidate = QColor(str(color or DEFAULT_ACCENT_COLOR))
+        if candidate.isValid():
+            self._check_accent = candidate
+            self.update()
+
+    def _current_check_accent(self) -> QColor:
+        if self._check_accent is not None and self._check_accent.isValid():
+            return QColor(self._check_accent)
+        app = QApplication.instance()
+        if app is not None:
+            candidate = QColor(str(app.property("dcc_checkbox_accent") or ""))
+            if candidate.isValid():
+                return candidate
+        return QColor(DEFAULT_ACCENT_COLOR)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.isChecked():
+            return
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        rect = self.style().subElementRect(QStyle.SubElement.SE_CheckBoxIndicator, option, self)
+        if not rect.isValid():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        accent = self._current_check_accent()
+        contrast = QColor("#07101d") if accent.lightnessF() > 0.55 else QColor("#f4fbff")
+        points = (
+            (
+                int(rect.left() + rect.width() * 0.22),
+                int(rect.top() + rect.height() * 0.52),
+                int(rect.left() + rect.width() * 0.43),
+                int(rect.top() + rect.height() * 0.73),
+            ),
+            (
+                int(rect.left() + rect.width() * 0.43),
+                int(rect.top() + rect.height() * 0.73),
+                int(rect.left() + rect.width() * 0.80),
+                int(rect.top() + rect.height() * 0.28),
+            ),
+        )
+        for color, width in ((contrast, max(3.2, rect.width() / 4.2)), (accent, max(1.8, rect.width() / 7.0))):
+            pen = QPen(color)
+            pen.setWidthF(width)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            for x1, y1, x2, y2 in points:
+                painter.drawLine(x1, y1, x2, y2)
+        painter.end()
+
+
+# All DCC checkbox constructors below resolve to the same native-QCheckBox subclass.
+# NativeCheckBox remains available for isinstance() so externally-created QCheckBox
+# instances keep working in test harnesses and integrations.
+QCheckBox = VisibleCheckBox
 
 
 def resolve_background_path(theme: str) -> Path:
@@ -4173,6 +4551,13 @@ class LogsDialog(QDialog):
         self.text_edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.text_edit.setCenterOnScroll(False)
         layout.addWidget(self.text_edit)
+        self._scroll_restore_position = (0, 0)
+        self._scroll_restore_soon_timer = QTimer(self)
+        self._scroll_restore_soon_timer.setSingleShot(True)
+        self._scroll_restore_soon_timer.timeout.connect(self._restore_scroll_position)
+        self._scroll_restore_later_timer = QTimer(self)
+        self._scroll_restore_later_timer.setSingleShot(True)
+        self._scroll_restore_later_timer.timeout.connect(self._restore_scroll_position)
         btn_refresh = QPushButton(self.texts["btn_refresh"])
         btn_refresh.clicked.connect(self.load_logs)
         layout.addWidget(btn_refresh)
@@ -4258,23 +4643,26 @@ class LogsDialog(QDialog):
         self._search_index = (self._search_index - 1) % len(self._search_matches)
         self._render_search_results()
 
+    def _restore_scroll_position(self):
+        previous_v, previous_h = self._scroll_restore_position
+        vbar = self.text_edit.verticalScrollBar()
+        hbar = self.text_edit.horizontalScrollBar()
+        vbar.setValue(min(previous_v, vbar.maximum()))
+        hbar.setValue(min(previous_h, hbar.maximum()))
+
     def load_logs(self):
         vbar = self.text_edit.verticalScrollBar()
         hbar = self.text_edit.horizontalScrollBar()
         previous_v = vbar.value()
         previous_h = hbar.value()
+        self._scroll_restore_position = (previous_v, previous_h)
         self.text_edit.setPlainText(self.texts["logs_loading"])
         try:
             logs = self.client.containers.get(self.name).logs(tail=200).decode("utf-8", errors="ignore")
             self.text_edit.setPlainText(logs)
             self.update_search()
-
-            def restore_scroll():
-                vbar.setValue(min(previous_v, vbar.maximum()))
-                hbar.setValue(min(previous_h, hbar.maximum()))
-
-            QTimer.singleShot(0, restore_scroll)
-            QTimer.singleShot(25, restore_scroll)
+            self._scroll_restore_soon_timer.start(0)
+            self._scroll_restore_later_timer.start(25)
         except Exception as exc:
             self.text_edit.setPlainText(f"{self.texts['msg_error']}: {exc}")
             self.update_search()
@@ -4473,46 +4861,27 @@ class LlmSettingsDialog(QDialog):
         self.settings.remove("llm/openai_api_key")
         self.accept()
 
-class AppSettingsDialog(QDialog):
+class ThemeSettingsDialog(QDialog):
     def __init__(self, settings: QSettings, texts: Dict[str, str], parent=None, update_check_callback=None):
         super().__init__(parent)
         self.settings = settings
         self.texts = texts
-        self.update_check_callback = update_check_callback
+        self.runtime_parent = parent if hasattr(parent, "apply_theme_settings_state") else None
+        self._initial_runtime_state = (
+            self.runtime_parent.capture_theme_settings_state() if self.runtime_parent is not None else None
+        )
+        self._building = True
         self.setWindowTitle(self.texts["app_settings_title"])
-        self.resize(680, 360)
+        self.resize(720, 620)
 
         layout = QVBoxLayout(self)
         intro = QLabel(self.texts["app_settings_intro"])
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
-        self.auto_start_checkbox = QCheckBox(self.texts["app_settings_autostart_dd"])
-        enabled = str(self.settings.value("auto_start_docker_desktop", "false")).lower() in {"1", "true", "yes"}
-        self.auto_start_checkbox.setChecked(enabled)
-        layout.addWidget(self.auto_start_checkbox)
-
-        note = QLabel(self.texts["app_settings_note"])
-        note.setWordWrap(True)
-        layout.addWidget(note)
-
-        updates_label = QLabel(f"<b>{self.texts['app_settings_updates_title']}</b>")
-        layout.addWidget(updates_label)
-        self.auto_updates_checkbox = QCheckBox(self.texts["app_settings_auto_updates"])
-        auto_updates = str(self.settings.value("updates/auto_check", "true")).lower() in {"1", "true", "yes"}
-        self.auto_updates_checkbox.setChecked(auto_updates)
-        layout.addWidget(self.auto_updates_checkbox)
-        self.update_notifications_checkbox = QCheckBox(self.texts["app_settings_update_notifications"])
-        notifications = str(self.settings.value("updates/notifications", "true")).lower() in {"1", "true", "yes"}
-        self.update_notifications_checkbox.setChecked(notifications)
-        layout.addWidget(self.update_notifications_checkbox)
-        self.check_updates_button = QPushButton(self.texts["app_settings_check_updates"])
-        self.check_updates_button.setEnabled(self.update_check_callback is not None)
-        if self.update_check_callback is not None:
-            self.check_updates_button.clicked.connect(self.update_check_callback)
-        layout.addWidget(self.check_updates_button)
-
         form = QFormLayout()
+        visual_heading = QLabel(f"<b>{self.texts['theme_settings_visual_section']}</b>")
+        form.addRow(visual_heading)
         self.theme_combo = QComboBox()
         self.theme_combo.addItem(self.texts["theme_day"], "day")
         self.theme_combo.addItem(self.texts["theme_light"], "light")
@@ -4524,6 +4893,10 @@ class AppSettingsDialog(QDialog):
         if theme_index >= 0:
             self.theme_combo.setCurrentIndex(theme_index)
 
+        form.addRow(self.texts["app_settings_theme"], self.theme_combo)
+
+        neon_heading = QLabel(f"<b>{self.texts['theme_settings_neon_section']}</b>")
+        form.addRow(neon_heading)
         self.neon_enabled_checkbox = QCheckBox(self.texts["app_settings_neon_enabled"])
         neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_enabled_checkbox.setChecked(neon_enabled)
@@ -4563,16 +4936,153 @@ class AppSettingsDialog(QDialog):
         self.neon_color_combo.setCurrentIndex(color_index)
         self.neon_color_combo.setEnabled(True)
 
-        form.addRow(self.texts["app_settings_theme"], self.theme_combo)
         form.addRow(self.neon_enabled_checkbox)
         form.addRow(self.neon_checkbox)
         form.addRow(self.texts["app_settings_neon_color"], self.neon_color_combo)
+
+        audio_heading = QLabel(f"<b>{self.texts['theme_settings_audio_section']}</b>")
+        form.addRow(audio_heading)
+        self.audio_enabled_checkbox = QCheckBox(self.texts["audio_enabled_label"])
+        audio_enabled = str(self.settings.value("audio/enabled", "true")).lower() in {"1", "true", "yes"}
+        if self.runtime_parent is not None:
+            audio_enabled = bool(self.runtime_parent.audio_enabled)
+        self.audio_enabled_checkbox.setChecked(audio_enabled)
+        form.addRow(self.audio_enabled_checkbox)
+
+        self.audio_profile_combo = QComboBox()
+        self.audio_profile_combo.addItem(self.texts["audio_profile_auto"], "auto")
+        for profile in AUDIO_PROFILES:
+            self.audio_profile_combo.addItem(profile.capitalize(), profile)
+        current_profile = (
+            self.runtime_parent.audio_profile if self.runtime_parent is not None
+            else str(self.settings.value("audio/profile", "auto") or "auto").lower()
+        )
+        profile_index = self.audio_profile_combo.findData(current_profile)
+        self.audio_profile_combo.setCurrentIndex(profile_index if profile_index >= 0 else 0)
+        form.addRow(self.texts["audio_profile_label"], self.audio_profile_combo)
+
+        master = self.runtime_parent.audio_master_volume if self.runtime_parent is not None else clamp_percent(self.settings.value("audio/master_volume", 100), 100)
+        intro_value = self.runtime_parent.audio_intro_volume if self.runtime_parent is not None else clamp_percent(self.settings.value("audio/intro_volume", self.settings.value("audio/ambient_volume", 35)), 35)
+        effects = self.runtime_parent.audio_effects_volume if self.runtime_parent is not None else clamp_percent(self.settings.value("audio/effects_volume", 65), 65)
+        self.master_slider, self.master_value_label, master_row = self._volume_row(master)
+        self.intro_slider, self.intro_value_label, intro_row = self._volume_row(intro_value)
+        self.effects_slider, self.effects_value_label, effects_row = self._volume_row(effects)
+        form.addRow(self.texts["audio_master_volume"], master_row)
+        form.addRow(self.texts["audio_intro_volume"], intro_row)
+        form.addRow(self.texts["audio_effects_volume"], effects_row)
         layout.addLayout(form)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+        self.theme_combo.currentIndexChanged.connect(lambda _index: self._preview(True))
+        self.neon_enabled_checkbox.toggled.connect(lambda _checked: self._preview(False))
+        self.neon_checkbox.toggled.connect(lambda _checked: self._preview(False))
+        self.neon_color_combo.currentIndexChanged.connect(lambda _index: self._preview(False))
+        self.audio_enabled_checkbox.toggled.connect(lambda _checked: self._preview(True))
+        self.audio_profile_combo.currentIndexChanged.connect(lambda _index: self._preview(True))
+        self.master_slider.valueChanged.connect(lambda value: self._volume_changed(self.master_value_label, value))
+        self.intro_slider.valueChanged.connect(lambda value: self._volume_changed(self.intro_value_label, value))
+        self.effects_slider.valueChanged.connect(lambda value: self._volume_changed(self.effects_value_label, value))
+        self._building = False
+
+    def _volume_row(self, value: int):
+        row = QWidget(self)
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        slider = QSlider(Qt.Orientation.Horizontal, row)
+        slider.setRange(0, 100)
+        slider.setValue(clamp_percent(value, 0))
+        label = QLabel(f"{slider.value()}%", row)
+        label.setMinimumWidth(44)
+        label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        row_layout.addWidget(slider, 1)
+        row_layout.addWidget(label)
+        return slider, label, row
+
+    def _volume_changed(self, label: QLabel, value: int):
+        label.setText(f"{int(value)}%")
+        self._preview(False)
+
+    def theme_settings_payload(self) -> Dict[str, object]:
+        return {
+            "theme": self.theme_combo.currentData() or "black",
+            "neon_enabled": self.neon_enabled_checkbox.isChecked(),
+            "neon_animate": self.neon_checkbox.isChecked(),
+            "accent_color": self.neon_color_combo.currentData() or DEFAULT_ACCENT_COLOR,
+            "audio_enabled": self.audio_enabled_checkbox.isChecked(),
+            "audio_profile": self.audio_profile_combo.currentData() or "auto",
+            "audio_master_volume": self.master_slider.value(),
+            "audio_intro_volume": self.intro_slider.value(),
+            "audio_effects_volume": self.effects_slider.value(),
+        }
+
+    def _preview(self, play_intro: bool):
+        if self._building or self.runtime_parent is None:
+            return
+        self.runtime_parent.apply_theme_settings_state(
+            self.theme_settings_payload(), persist=False, play_intro=play_intro
+        )
+
+    def reject(self):
+        if self.runtime_parent is not None and self._initial_runtime_state is not None:
+            self.runtime_parent.apply_theme_settings_state(
+                self._initial_runtime_state, persist=False, play_intro=False
+            )
+        super().reject()
+
+
+class AppSettingsDialog(QDialog):
+    """General application settings kept separate from visual/audio settings."""
+
+    def __init__(self, settings: QSettings, texts: Dict[str, str], parent=None, update_check_callback=None):
+        super().__init__(parent)
+        self.settings = settings
+        self.texts = texts
+        self.update_check_callback = update_check_callback
+        self.setWindowTitle(self.texts["app_settings_title"])
+        self.resize(640, 340)
+
+        layout = QVBoxLayout(self)
+        intro = QLabel(self.texts["app_settings_intro"])
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        self.auto_start_checkbox = QCheckBox(self.texts["app_settings_autostart_dd"])
+        enabled = str(self.settings.value("auto_start_docker_desktop", "false")).lower() in {"1", "true", "yes"}
+        self.auto_start_checkbox.setChecked(enabled)
+        layout.addWidget(self.auto_start_checkbox)
+
+        note = QLabel(self.texts["app_settings_note"])
+        note.setWordWrap(True)
+        layout.addWidget(note)
+
+        updates_label = QLabel(f"<b>{self.texts['app_settings_updates_title']}</b>")
+        layout.addWidget(updates_label)
+        self.auto_updates_checkbox = QCheckBox(self.texts["app_settings_auto_updates"])
+        auto_updates = str(self.settings.value("updates/auto_check", "true")).lower() in {"1", "true", "yes"}
+        self.auto_updates_checkbox.setChecked(auto_updates)
+        layout.addWidget(self.auto_updates_checkbox)
+
+        self.update_notifications_checkbox = QCheckBox(self.texts["app_settings_update_notifications"])
+        notifications = str(self.settings.value("updates/notifications", "true")).lower() in {"1", "true", "yes"}
+        self.update_notifications_checkbox.setChecked(notifications)
+        layout.addWidget(self.update_notifications_checkbox)
+
+        self.check_updates_button = QPushButton(self.texts["app_settings_check_updates"])
+        self.check_updates_button.setEnabled(self.update_check_callback is not None)
+        if self.update_check_callback is not None:
+            self.check_updates_button.clicked.connect(self.update_check_callback)
+        layout.addWidget(self.check_updates_button)
+
+        layout.addStretch(1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
 class CatalogRepositoryDialog(QDialog):
     def __init__(self, sources: List[str], texts: Dict[str, str], parent=None):
         super().__init__(parent)
@@ -5317,7 +5827,21 @@ class NewContainerDialog(QDialog):
             self.select_manual_configuration()
         self.load_ai_models(fetch=False)
         self.update_summary()
-        QTimer.singleShot(250, lambda: self.refresh_external_catalogs(silent=True))
+        self._single_shot(250, lambda: self.refresh_external_catalogs(silent=True))
+
+    def _single_shot(self, delay_ms: int, callback) -> None:
+        """Run a deferred callback only while this dialog is still alive."""
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+
+        def invoke():
+            try:
+                callback()
+            finally:
+                timer.deleteLater()
+
+        timer.timeout.connect(invoke)
+        timer.start(max(0, int(delay_ms)))
 
     def _catalog_visual_colors(self) -> Dict[str, str]:
         palette = palette_for_theme(self.catalog_theme)
@@ -5334,7 +5858,7 @@ class NewContainerDialog(QDialog):
                     "description": palette["muted"],
                     "card_bg": "rgba(255, 255, 255, 142)",
                     "surface": "rgba(255, 255, 255, 112)",
-                    "surface_alt": "rgba(235, 244, 248, 158)",
+                    "surface_alt": "rgba(240, 248, 250, 154)",
                     "border": "rgba(74, 96, 108, 118)",
                 }
             return {
@@ -5379,6 +5903,51 @@ class NewContainerDialog(QDialog):
             "surface_alt": "rgba(35, 37, 41, 240)",
             "border": "rgba(112, 116, 124, 88)",
         }
+
+    @staticmethod
+    def _catalog_category_styles(colors: Dict[str, str]) -> tuple[str, str, str]:
+        frame_qss = f"""
+            QFrame#storeCategoriesFrame {{
+                border: 1px solid {colors['border']};
+                border-radius: 14px;
+                background: {colors['surface']};
+            }}
+        """
+        title_qss = f"""
+            QLabel#storeColumnTitle {{
+                color: {colors['title']};
+                background: transparent;
+                font-weight: 800;
+                font-size: 10pt;
+                padding: 2px 10px 0px 10px;
+            }}
+        """
+        nav_qss = f"""
+            QListWidget#storeCategoryNav {{
+                border: none;
+                background: transparent;
+                outline: 0;
+            }}
+            QListWidget#storeCategoryNav::item {{
+                color: {colors['description']};
+                border: 1px solid {colors['border']};
+                border-radius: 9px;
+                background: {colors['card_bg']};
+                padding: 3px 8px;
+                margin: 1px;
+            }}
+            QListWidget#storeCategoryNav::item:hover {{
+                color: {colors['title']};
+                background: {colors['surface_alt']};
+            }}
+            QListWidget#storeCategoryNav::item:selected {{
+                color: {colors['title']};
+                border: 1px solid {colors['accent']};
+                background: {colors['surface_alt']};
+                font-weight: 700;
+            }}
+        """
+        return frame_qss, title_qss, nav_qss
 
     def _apply_catalog_card_style(self):
         colors = self._catalog_visual_colors()
@@ -5433,53 +6002,10 @@ class NewContainerDialog(QDialog):
             }}
             """
         )
-        self.store_categories_frame.setStyleSheet(
-            f"""
-            QFrame#storeCategoriesFrame {{
-                border: 1px solid {colors['border']};
-                border-radius: 14px;
-                background: {colors['surface']};
-            }}
-            """
-        )
-        self.store_categories_title.setStyleSheet(
-            f"""
-            QLabel#storeColumnTitle {{
-                color: {colors['title']};
-                background: transparent;
-                font-weight: 800;
-                font-size: 10pt;
-                padding: 2px 10px 0px 10px;
-            }}
-            """
-        )
-        self.category_nav.setStyleSheet(
-            f"""
-            QListWidget#storeCategoryNav {{
-                border: none;
-                background: transparent;
-                outline: 0;
-            }}
-            QListWidget#storeCategoryNav::item {{
-                color: {colors['description']};
-                border: 1px solid {colors['border']};
-                border-radius: 9px;
-                background: {colors['card_bg']};
-                padding: 3px 8px;
-                margin: 1px;
-            }}
-            QListWidget#storeCategoryNav::item:hover {{
-                color: {colors['title']};
-                background: {colors['surface_alt']};
-            }}
-            QListWidget#storeCategoryNav::item:selected {{
-                color: {colors['title']};
-                border: 1px solid {colors['accent']};
-                background: {colors['surface_alt']};
-                font-weight: 700;
-            }}
-            """
-        )
+        category_frame_qss, category_title_qss, category_nav_qss = self._catalog_category_styles(colors)
+        self.store_categories_frame.setStyleSheet(category_frame_qss)
+        self.store_categories_title.setStyleSheet(category_title_qss)
+        self.category_nav.setStyleSheet(category_nav_qss)
         self.editor_tabs.setStyleSheet(
             f"""
             QTabWidget#storeEditorTabs::pane {{
@@ -5672,7 +6198,7 @@ class NewContainerDialog(QDialog):
         self.category_nav.blockSignals(previous_block)
         row = self.category_combo.findText(current)
         self.category_nav.setCurrentRow(max(0, row))
-        QTimer.singleShot(0, self._update_category_nav_height)
+        self._single_shot(0, self._update_category_nav_height)
 
     def _update_category_nav_height(self):
         if not hasattr(self, "category_nav") or self.category_nav.count() <= 0:
@@ -5745,9 +6271,9 @@ class NewContainerDialog(QDialog):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, "category_nav"):
-            QTimer.singleShot(0, self._update_category_nav_height)
+            self._single_shot(0, self._update_category_nav_height)
         if hasattr(self, "catalog_row"):
-            QTimer.singleShot(0, self._update_store_responsive_layout)
+            self._single_shot(0, self._update_store_responsive_layout)
 
     def _update_store_responsive_layout(self):
         if not hasattr(self, "catalog_row"):
@@ -6041,7 +6567,7 @@ class NewContainerDialog(QDialog):
         if hasattr(self, "store_gallery_labels") and label in self.store_gallery_labels:
             self.store_gallery_title.setVisible(True)
         if hasattr(self, "editor_tabs"):
-            QTimer.singleShot(0, self._fit_editor_tabs_height)
+            self._single_shot(0, self._fit_editor_tabs_height)
         return True
 
     def load_store_image(self, url: str, label: QLabel, hero: bool = False, generation: Optional[int] = None):
@@ -6183,8 +6709,14 @@ class NewContainerDialog(QDialog):
             for container in installed:
                 container.remove(force=True)
         except Exception as exc:
+            parent = self.parent()
+            if parent is not None and hasattr(parent, "play_audio_event"):
+                parent.play_audio_event("error")
             QMessageBox.critical(self, self.texts["msg_error"], str(exc))
             return
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "play_audio_event"):
+            parent.play_audio_event("uninstall_completed")
         QMessageBox.information(self, self.texts["msg_info"], self.texts["wizard_store_uninstall_done"])
         if self.category_combo.currentText().strip() == self.texts["wizard_installed_category"]:
             self.filter_catalog()
@@ -6324,9 +6856,9 @@ class NewContainerDialog(QDialog):
                 vbar.setValue(min(previous_v, vbar.maximum()))
             widget.horizontalScrollBar().setValue(0)
 
-        QTimer.singleShot(0, restore_scroll)
-        QTimer.singleShot(25, restore_scroll)
-        QTimer.singleShot(60, restore_scroll)
+        self._single_shot(0, restore_scroll)
+        self._single_shot(25, restore_scroll)
+        self._single_shot(60, restore_scroll)
 
     def apply_selected_template(self, row: int):
         if row < 0 or row >= len(self.filtered_catalog) or self._syncing:
@@ -8404,9 +8936,18 @@ class MainWindow(QMainWindow):
         self._container_column_base_widths: Optional[List[float]] = None
         self._restoring_container_column_widths = False
         self._applying_column_magnet = False
-        audio_setting = self.settings.value("audio_enabled", self.settings.value("music_enabled", "true"))
-        self.audio_enabled = str(audio_setting).lower() in {"1", "true", "yes"}
+        audio_settings = load_audio_settings(self.settings)
+        self.audio_enabled = bool(audio_settings["enabled"])
         self.music_enabled = self.audio_enabled
+        self.audio_profile = str(audio_settings["profile"])
+        self.audio_master_volume = int(audio_settings["master_volume"])
+        self.audio_intro_volume = int(audio_settings["intro_volume"])
+        self.audio_effects_volume = int(audio_settings["effects_volume"])
+        self.settings.setValue("audio/enabled", "true" if self.audio_enabled else "false")
+        self.settings.setValue("audio/profile", self.audio_profile)
+        self.settings.setValue("audio/master_volume", self.audio_master_volume)
+        self.settings.setValue("audio/intro_volume", self.audio_intro_volume)
+        self.settings.setValue("audio/effects_volume", self.audio_effects_volume)
         self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
         self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
         self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
@@ -8440,7 +8981,11 @@ class MainWindow(QMainWindow):
         self.audio_output = None
         self.media_player = None
         self.sfx_effects: Dict[str, object] = {}
+        self.audio_manager: Optional[AudioManager] = None
         self._audio_theme = ""
+        self._container_status_baseline: Optional[Dict[str, str]] = None
+        self._pending_container_actions: Dict[str, str] = {}
+        self._host_connection_state = False
         self.root_surface: Optional[BackgroundSurface] = None
         self.latest_release_tag = ""
         self.latest_release_url = GITHUB_RELEASES_URL
@@ -8567,6 +9112,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         if hasattr(self, "auto_refresh_timer"):
             self.auto_refresh_timer.stop()
+        if getattr(self, "audio_manager", None) is not None:
+            self.audio_manager.cleanup()
         if not self._skip_persist_window_state:
             try:
                 if self.isFullScreen() or self.isMaximized():
@@ -9016,7 +9563,8 @@ class MainWindow(QMainWindow):
         self.btn_host_restart.setIconSize(QPixmap(12, 12).size())
         self.btn_host_restart.setMinimumWidth(170)
         self.btn_host_restart.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self.column_magnet_checkbox = QCheckBox(self.texts["column_magnet"])
+        self.column_magnet_checkbox = VisibleCheckBox(self.texts["column_magnet"])
+        self.column_magnet_checkbox.setAccentColor(effective_accent_color(self.current_theme, self.accent_color))
         self.column_magnet_checkbox.setChecked(self.container_column_magnet)
         self.column_magnet_checkbox.setToolTip(self.texts["column_magnet_tooltip"])
         self.column_magnet_checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
@@ -9059,6 +9607,8 @@ class MainWindow(QMainWindow):
         self.table.setFont(table_font)
         self._set_table_headers()
         header = self.table.horizontalHeader()
+        if isinstance(header, ResizeGripHeader):
+            header.setGripColor(effective_accent_color(self.current_theme, self.accent_color))
         header_font = QFont(table_font)
         header_font.setBold(True)
         header.setFont(header_font)
@@ -9212,6 +9762,12 @@ class MainWindow(QMainWindow):
 
         self.theme_menu = QMenu(self.texts["menu_theme"], self)
         self.view_menu.addMenu(self.theme_menu)
+        self.action_theme_settings = self.theme_menu.addAction(self.texts["theme_settings_menu"])
+        settings_font = self.action_theme_settings.font()
+        settings_font.setBold(True)
+        self.action_theme_settings.setFont(settings_font)
+        self.action_theme_settings.triggered.connect(self.open_theme_settings_dialog)
+        self.theme_menu.addSeparator()
         self.action_theme_day = self.theme_menu.addAction(self.texts["theme_day"])
         self.action_theme_day.triggered.connect(lambda: self.set_theme("day"))
         self.action_theme_light = self.theme_menu.addAction(self.texts["theme_light"])
@@ -9277,6 +9833,7 @@ class MainWindow(QMainWindow):
         self.view_menu.setTitle(self.texts["menu_view"])
         self.action_fullscreen.setText(self.texts["menu_fullscreen"])
         self.theme_menu.setTitle(self.texts["menu_theme"])
+        self.action_theme_settings.setText(self.texts["theme_settings_menu"])
         self.action_theme_day.setText(self.texts["theme_day"])
         self.action_theme_light.setText(self.texts["theme_light"])
         self.action_theme_dark.setText(self.texts["theme_dark"])
@@ -9396,6 +9953,9 @@ class MainWindow(QMainWindow):
 
     def _load_theme(self):
         base_theme = "light" if self.current_theme in {"day", "light"} else "dark"
+        app = QApplication.instance()
+        if app is not None:
+            app.setProperty("dcc_checkbox_accent", effective_accent_color(self.current_theme, self.accent_color))
         extra_qss = gaming_stylesheet(
             self.current_theme,
             self.glow_phase,
@@ -9407,7 +9967,6 @@ class MainWindow(QMainWindow):
         if hasattr(qdarktheme, "setup_theme"):
             qdarktheme.setup_theme(base_theme, additional_qss=extra_qss)
         else:
-            app = QApplication.instance()
             if app is not None:
                 app.setStyleSheet(extra_qss)
         if self.root_surface is not None:
@@ -9431,9 +9990,14 @@ class MainWindow(QMainWindow):
         if hasattr(self, "infra_info_button"):
             self.infra_info_button.setIcon(make_terminal_icon(QColor(effective_accent), 16))
             self.infra_info_button.setIconSize(QSize(16, 16))
+        if hasattr(self, "column_magnet_checkbox") and isinstance(self.column_magnet_checkbox, VisibleCheckBox):
+            self.column_magnet_checkbox.setAccentColor(effective_accent)
         table = getattr(self, "table", None)
         if table is None:
             return
+        header = table.horizontalHeader()
+        if isinstance(header, ResizeGripHeader):
+            header.setGripColor(effective_accent)
         accent = QColor(effective_accent)
         background = QColor(accent)
         background.setAlpha(26 if self.current_theme in {"day", "light"} else 38)
@@ -9470,50 +10034,74 @@ class MainWindow(QMainWindow):
 
 
     def _setup_audio(self):
-        if QMediaPlayer is None or QAudioOutput is None or QSoundEffect is None:
-            self.audio_output = None
-            self.media_player = None
-            self.sfx_effects = {}
+        self.audio_manager = AudioManager(self)
+        self.audio_manager.setup()
+
+    def effective_audio_profile(self) -> str:
+        manager = getattr(self, "audio_manager", None)
+        if manager is not None:
+            return manager.effective_profile()
+        return effective_audio_profile(self.audio_profile, self.current_theme)
+
+    def _apply_audio_volumes(self) -> None:
+        manager = getattr(self, "audio_manager", None)
+        if manager is not None:
+            manager.apply_volumes()
             return
-        try:
-            self.audio_output = QAudioOutput(self)
-            self.audio_output.setVolume(0.16)
-            self.media_player = QMediaPlayer(self)
-            self.media_player.setAudioOutput(self.audio_output)
-            if hasattr(self.media_player, "setLoops"):
-                self.media_player.setLoops(QMediaPlayer.Loops.Infinite)
-            self.sfx_effects = {}
-            for event in AUDIO_EVENT_FILES:
-                effect = QSoundEffect(self)
-                effect.setVolume(0.38)
-                self.sfx_effects[event] = effect
-            self._load_audio_theme(force=True)
-        except Exception:
-            self.audio_output = None
-            self.media_player = None
-            self.sfx_effects = {}
+        master = self.audio_master_volume / 100.0
+        intro = master * (self.audio_intro_volume / 100.0)
+        effects = master * (self.audio_effects_volume / 100.0)
+        if self.audio_output is not None:
+            self.audio_output.setVolume(intro)
+        for effect in self.sfx_effects.values():
+            try:
+                effect.setVolume(effects)
+            except Exception:
+                continue
 
     def _load_audio_theme(self, force: bool = False) -> bool:
+        manager = getattr(self, "audio_manager", None)
+        if manager is not None:
+            return manager.load_profile(force=force)
         if self.media_player is None:
             return False
-        theme = audio_theme_name(self.current_theme)
-        assets = audio_assets_for_theme(theme)
+        profile = self.effective_audio_profile()
+        assets = audio_assets_for_theme(profile)
         if not all(path.is_file() for path in assets.values()):
             self.media_player.stop()
             self._audio_theme = ""
             return False
-        if not force and self._audio_theme == theme:
+        if not force and self._audio_theme == profile:
             return True
         self.media_player.stop()
-        self.media_player.setSource(QUrl.fromLocalFile(str(assets["ambient"])))
+        self.media_player.setSource(QUrl.fromLocalFile(str(assets["intro"])))
         for event, effect in self.sfx_effects.items():
             effect.setSource(QUrl.fromLocalFile(str(assets[event])))
-        self._audio_theme = theme
-        if self.audio_enabled:
-            self.media_player.play()
+        self._audio_theme = profile
+        self._apply_audio_volumes()
         return True
 
+    def play_audio_intro(self) -> None:
+        manager = getattr(self, "audio_manager", None)
+        if manager is not None:
+            manager.play_intro()
+            return
+        if not self.audio_enabled or self.media_player is None:
+            return
+        if not self._load_audio_theme():
+            return
+        try:
+            self.media_player.stop()
+            self.media_player.setPosition(0)
+            self.media_player.play()
+        except Exception:
+            return
+
     def play_audio_event(self, event: str) -> None:
+        manager = getattr(self, "audio_manager", None)
+        if manager is not None:
+            manager.play_event(event)
+            return
         if not self.audio_enabled:
             return
         effect = self.sfx_effects.get(event)
@@ -9530,10 +10118,7 @@ class MainWindow(QMainWindow):
         label = self.texts["btn_music_on" if self.audio_enabled else "btn_music_off"]
         self.btn_music.setText("\u266b" if self.audio_enabled else "\u266a")
         self.btn_music.setFixedWidth(38)
-        self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
-        self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
-        self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
-        assets_ready = all(path.is_file() for path in audio_assets_for_theme(self.current_theme).values())
+        assets_ready = all(path.is_file() for path in audio_assets_for_theme(self.effective_audio_profile()).values())
         self.btn_music.setEnabled(assets_ready and self.media_player is not None)
         if not assets_ready:
             self.btn_music.setToolTip(self.texts["music_missing"])
@@ -9545,22 +10130,128 @@ class MainWindow(QMainWindow):
     def toggle_music(self):
         self.audio_enabled = not self.audio_enabled
         self.music_enabled = self.audio_enabled
-        self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
-        self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
-        self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
         enabled_value = "true" if self.audio_enabled else "false"
-        self.settings.setValue("audio_enabled", enabled_value)
-        self.settings.setValue("music_enabled", enabled_value)
-        self.neon_enabled = str(self.settings.value("neon_enabled", "true")).lower() in {"1", "true", "yes"}
-        self.neon_animate = str(self.settings.value("neon_animate", "true")).lower() in {"1", "true", "yes"}
-        self.accent_color = normalize_accent_color(str(self.settings.value("accent_color", "#33f0ff")))
-        if self.media_player is not None:
-            if self.audio_enabled:
-                self._load_audio_theme()
-                if self._audio_theme:
-                    self.media_player.play()
+        self.settings.setValue("audio/enabled", enabled_value)
+        if self.audio_enabled:
+            self._load_audio_theme(force=True)
+            self.play_audio_intro()
+        elif getattr(self, "audio_manager", None) is not None:
+            self.audio_manager.stop_all()
+        elif self.media_player is not None:
+            self.media_player.stop()
+            for effect in self.sfx_effects.values():
+                try:
+                    effect.stop()
+                except Exception:
+                    continue
+        self.update_music_button()
+
+    def set_audio_profile(self, profile: str, persist: bool = True, play_intro: bool = True):
+        value = str(profile or "auto").strip().lower()
+        if value not in {"auto", *AUDIO_PROFILES}:
+            value = "auto"
+        changed = value != self.audio_profile
+        self.audio_profile = value
+        if persist:
+            self.settings.setValue("audio/profile", value)
+        self._load_audio_theme(force=True)
+        if changed and play_intro and self.audio_enabled:
+            self.play_audio_intro()
+
+    def set_audio_volumes(self, master: int, intro: int, effects: int, persist: bool = True):
+        self.audio_master_volume = clamp_percent(master, 100)
+        self.audio_intro_volume = clamp_percent(intro, 35)
+        self.audio_effects_volume = clamp_percent(effects, 65)
+        if persist:
+            self.settings.setValue("audio/master_volume", self.audio_master_volume)
+            self.settings.setValue("audio/intro_volume", self.audio_intro_volume)
+            self.settings.setValue("audio/effects_volume", self.audio_effects_volume)
+        self._apply_audio_volumes()
+
+    def reset_audio_connection_state(self) -> None:
+        manager = getattr(self, "audio_manager", None)
+        if manager is not None:
+            manager.set_host_connected(False)
+            manager.reset_container_baseline()
+            return
+        self._host_connection_state = False
+        self._container_status_baseline = None
+        self._pending_container_actions.clear()
+
+    def capture_theme_settings_state(self) -> Dict[str, object]:
+        return {
+            "theme": self.current_theme,
+            "neon_enabled": self.neon_enabled,
+            "neon_animate": self.neon_animate,
+            "accent_color": self.accent_color,
+            "audio_enabled": self.audio_enabled,
+            "audio_profile": self.audio_profile,
+            "audio_master_volume": self.audio_master_volume,
+            "audio_intro_volume": self.audio_intro_volume,
+            "audio_effects_volume": self.audio_effects_volume,
+        }
+
+    def apply_theme_settings_state(
+        self,
+        state: Dict[str, object],
+        persist: bool = False,
+        play_intro: bool = False,
+    ) -> None:
+        previous_theme = self.current_theme
+        previous_profile = self.audio_profile
+        previous_audio_enabled = self.audio_enabled
+
+        theme = str(state.get("theme", self.current_theme) or self.current_theme).lower()
+        if theme not in {"light", "day", "dark", "black", "night"}:
+            theme = "black"
+        profile = str(state.get("audio_profile", self.audio_profile) or "auto").lower()
+        if profile not in {"auto", *AUDIO_PROFILES}:
+            profile = "auto"
+
+        self.current_theme = theme
+        self.neon_enabled = bool(state.get("neon_enabled", self.neon_enabled))
+        self.neon_animate = bool(state.get("neon_animate", self.neon_animate))
+        self.accent_color = normalize_accent_color(str(state.get("accent_color", self.accent_color)))
+        self.audio_enabled = bool(state.get("audio_enabled", self.audio_enabled))
+        self.music_enabled = self.audio_enabled
+        self.audio_profile = profile
+        self.audio_master_volume = clamp_percent(state.get("audio_master_volume"), self.audio_master_volume)
+        self.audio_intro_volume = clamp_percent(state.get("audio_intro_volume"), self.audio_intro_volume)
+        self.audio_effects_volume = clamp_percent(state.get("audio_effects_volume"), self.audio_effects_volume)
+
+        if persist:
+            self.settings.setValue("theme", self.current_theme)
+            self.settings.setValue("neon_enabled", "true" if self.neon_enabled else "false")
+            self.settings.setValue("neon_animate", "true" if self.neon_animate else "false")
+            self.settings.setValue("accent_color", self.accent_color)
+            self.settings.setValue("audio/enabled", "true" if self.audio_enabled else "false")
+            self.settings.setValue("audio/profile", self.audio_profile)
+            self.settings.setValue("audio/master_volume", self.audio_master_volume)
+            self.settings.setValue("audio/intro_volume", self.audio_intro_volume)
+            self.settings.setValue("audio/effects_volume", self.audio_effects_volume)
+
+        self.update_glow_timer()
+        self._load_theme()
+        self._apply_audio_volumes()
+        self._load_audio_theme(force=True)
+
+        if not self.audio_enabled:
+            if getattr(self, "audio_manager", None) is not None:
+                self.audio_manager.stop_all()
             else:
-                self.media_player.stop()
+                if self.media_player is not None:
+                    self.media_player.stop()
+                for effect in self.sfx_effects.values():
+                    try:
+                        effect.stop()
+                    except Exception:
+                        continue
+        elif play_intro and (
+            not previous_audio_enabled
+            or previous_theme != self.current_theme
+            or previous_profile != self.audio_profile
+        ):
+            self.play_audio_intro()
         self.update_music_button()
 
     def toggle_transparency(self):
@@ -9587,13 +10278,17 @@ class MainWindow(QMainWindow):
     def advance_glow(self):
         return
 
-    def set_theme(self, theme: str):
+    def set_theme(self, theme: str, persist: bool = True, play_intro: bool = True):
         if theme not in {"light", "day", "dark", "black", "night"}:
             theme = "black"
+        changed = theme != self.current_theme
         self.current_theme = theme
-        self.settings.setValue("theme", theme)
+        if persist:
+            self.settings.setValue("theme", theme)
         self._load_theme()
         self._load_audio_theme(force=True)
+        if changed and play_intro and self.audio_enabled:
+            self.play_audio_intro()
 
     def platform_text(self, key: str) -> str:
         if os.name != "nt":
@@ -9820,25 +10515,17 @@ class MainWindow(QMainWindow):
                     self.update_timer.start()
             else:
                 self.update_timer.stop()
-            selected_theme = dialog.theme_combo.currentData() or self.current_theme
-            neon_enabled = dialog.neon_enabled_checkbox.isChecked()
-            neon_animate = dialog.neon_checkbox.isChecked()
-            accent_color = dialog.neon_color_combo.currentData() or self.accent_color
-            self.settings.setValue("neon_enabled", "true" if neon_enabled else "false")
-            self.settings.setValue("neon_animate", "true" if neon_animate else "false")
-            self.settings.setValue("accent_color", accent_color)
-            self.neon_enabled = neon_enabled
-            self.neon_animate = neon_animate
-            self.accent_color = normalize_accent_color(str(accent_color))
-            if selected_theme:
-                self.current_theme = selected_theme
-                self.settings.setValue("theme", selected_theme)
-            self.update_glow_timer()
-            self._load_theme()
             if self.auto_start_docker_desktop and self.current_backend == "local" and not self.is_local_docker_available():
                 if self.try_start_docker_desktop():
                     self.statusBar().showMessage(self.texts["docker_desktop_starting"])
                     QTimer.singleShot(1800, self.reconnect_local_docker_after_desktop_start)
+
+    def open_theme_settings_dialog(self):
+        dialog = ThemeSettingsDialog(self.settings, self.texts, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.apply_theme_settings_state(
+                dialog.theme_settings_payload(), persist=True, play_intro=False
+            )
 
     def open_repo_builder(self):
         commands: List[List[str]] = []
@@ -10167,7 +10854,7 @@ try {
 
     $workDir = Split-Path -Parent $InstallerPath
     Write-UpdateLog "Starting installer: $InstallerPath"
-    $process = Start-Process -FilePath $InstallerPath -WorkingDirectory $workDir -PassThru
+    $process = Start-Process -FilePath $InstallerPath -ArgumentList '/DCCUPDATE=1' -WorkingDirectory $workDir -PassThru
     $process.WaitForExit()
     Write-UpdateLog "Installer finished with exit code $($process.ExitCode)."
     exit $process.ExitCode
@@ -10406,6 +11093,7 @@ try {
             QMessageBox.information(self, self.texts["msg_info"], self.texts["wsl_detect_error"])
             self.update_infrastructure_ui(False)
             return
+        self.reset_audio_connection_state()
         try:
             self.client = WslDockerClient(distro)
             self.client.ping()
@@ -10485,26 +11173,51 @@ try {
         blocked = self.validate_container_action(container, action) if action in {"start", "stop", "restart", "pause", "unpause"} else None
         if blocked:
             return blocked
-        if action == "start":
-            container.start()
-        elif action == "stop":
-            container.stop()
-        elif action == "restart":
-            container.restart()
-        elif action == "pause":
-            container.pause()
-        elif action == "unpause":
-            container.unpause()
-        elif action == "remove":
-            container.remove(force=True)
-        elif action == "autostart_on":
-            if not self.autostart_supported(container):
-                return None
-            container.update(restart_policy={"Name": "unless-stopped"})
-        elif action == "autostart_off":
-            if not self.autostart_supported(container):
-                return None
-            container.update(restart_policy={"Name": "no"})
+        name = str(getattr(container, "name", "") or "")
+        request_sound = {
+            "start": "container_start_requested",
+            "stop": "container_stop_requested",
+            "restart": "container_restart_requested",
+        }.get(action)
+        if request_sound:
+            if name:
+                self._pending_container_actions[name] = action
+            self.play_audio_event(request_sound)
+        try:
+            if action == "start":
+                container.start()
+            elif action == "stop":
+                container.stop()
+            elif action == "restart":
+                container.restart()
+            elif action == "pause":
+                container.pause()
+                self.play_audio_event("success")
+            elif action == "unpause":
+                container.unpause()
+                self.play_audio_event("success")
+            elif action == "remove":
+                container.remove(force=True)
+                if name:
+                    self._pending_container_actions.pop(name, None)
+                    if self._container_status_baseline is not None:
+                        self._container_status_baseline.pop(name, None)
+                self.play_audio_event("uninstall_completed")
+            elif action == "autostart_on":
+                if not self.autostart_supported(container):
+                    return None
+                container.update(restart_policy={"Name": "unless-stopped"})
+                self.play_audio_event("success")
+            elif action == "autostart_off":
+                if not self.autostart_supported(container):
+                    return None
+                container.update(restart_policy={"Name": "no"})
+                self.play_audio_event("success")
+        except Exception:
+            if name:
+                self._pending_container_actions.pop(name, None)
+            self.play_audio_event("error")
+            raise
         return None
 
     def show_action_feedback(self, messages: List[str], title: Optional[str] = None):
@@ -11142,7 +11855,7 @@ try {
         dialog = CommandProgressDialog(title, status_text, worker, args, self.texts, self)
         dialog.exec()
         success = dialog.success is True
-        self.play_audio_event("success" if success else "error")
+        self.play_audio_event("install_completed" if success else "error")
         return success
 
     def is_local_docker_available(self) -> bool:
@@ -11865,6 +12578,7 @@ try {
         message.exec()
 
     def connect_local_docker(self):
+        self.reset_audio_connection_state()
         self.current_backend = "local"
         self.current_wsl_distro = ""
         self.active_remote_profile = None
@@ -11895,6 +12609,9 @@ try {
             return
         if self.remote_connect_thread is not None and self.remote_connect_thread.isRunning():
             return
+
+        if not restart_mode:
+            self.reset_audio_connection_state()
 
         self.connecting_profile = profile
         self.connecting_restart_mode = bool(restart_mode)
@@ -12101,12 +12818,61 @@ try {
         return self.texts["infra_local_label"].format(os=os_name, arch=arch or "?")
 
     def set_host_status_indicator(self, available: bool):
+        if getattr(self, "audio_manager", None) is not None:
+            self.audio_manager.set_host_connected(bool(available))
+        else:
+            was_available = bool(getattr(self, "_host_connection_state", False))
+            self._host_connection_state = bool(available)
+            if available and not was_available:
+                self.play_audio_event("host_connected")
         if not hasattr(self, "btn_host_restart"):
             return
         icon = self.host_status_icon_running if available else self.host_status_icon_off
         self.btn_host_restart.setIcon(icon)
         tooltip = self.texts["host_status_running"] if available else self.texts["host_status_off"]
         self.btn_host_restart.setToolTip(tooltip)
+
+    @staticmethod
+    def normalized_container_audio_state(container) -> str:
+        return AudioManager.normalized_container_state(container)
+
+    def process_container_audio_transitions(self, containers: List[object]) -> None:
+        if getattr(self, "audio_manager", None) is not None:
+            self.audio_manager.process_container_transitions(containers)
+            return
+        current = {
+            str(getattr(container, "name", "") or ""): self.normalized_container_audio_state(container)
+            for container in (containers or [])
+            if str(getattr(container, "name", "") or "")
+        }
+        previous = self._container_status_baseline
+        if previous is None:
+            self._container_status_baseline = current
+            return
+
+        for name, new_state in current.items():
+            old_state = previous.get(name)
+            pending = self._pending_container_actions.get(name)
+            if pending == "restart" and new_state == "running":
+                self.play_audio_event("container_restart_completed")
+                self._pending_container_actions.pop(name, None)
+                continue
+            if pending == "start" and new_state == "running":
+                self.play_audio_event("container_started")
+                self._pending_container_actions.pop(name, None)
+                continue
+            if pending == "stop" and new_state == "stopped":
+                self.play_audio_event("container_stopped")
+                self._pending_container_actions.pop(name, None)
+                continue
+            if old_state is None or old_state == new_state:
+                continue
+            if old_state == "stopped" and new_state == "running":
+                self.play_audio_event("container_started")
+            elif old_state == "running" and new_state == "stopped":
+                self.play_audio_event("container_stopped")
+
+        self._container_status_baseline = current
 
     def update_infrastructure_ui(self, available: Optional[bool] = None):
         if hasattr(self, "infra_info_button"):
@@ -12542,7 +13308,7 @@ try {
                 if str(metadata.get("group") or "") != storage_key:
                     continue
                 checkbox = self.table.cellWidget(row, 0)
-                if isinstance(checkbox, QCheckBox):
+                if isinstance(checkbox, NativeCheckBox):
                     checkbox.setChecked(checked)
         finally:
             self._updating_group_selection = False
@@ -12553,7 +13319,7 @@ try {
         if not storage_key or getattr(self, "_updating_group_selection", False):
             return
         group_checkbox = getattr(self, "group_checkboxes", {}).get(storage_key)
-        if not isinstance(group_checkbox, QCheckBox):
+        if not isinstance(group_checkbox, NativeCheckBox):
             return
         child_states = []
         for row in range(self.table.rowCount()):
@@ -12564,7 +13330,7 @@ try {
             if str(metadata.get("group") or "") != storage_key:
                 continue
             checkbox = self.table.cellWidget(row, 0)
-            if isinstance(checkbox, QCheckBox):
+            if isinstance(checkbox, NativeCheckBox):
                 child_states.append(checkbox.isChecked())
         group_checkbox.blockSignals(True)
         group_checkbox.setChecked(bool(child_states) and all(child_states))
@@ -12583,7 +13349,7 @@ try {
             if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
                 continue
             checkbox = self.table.cellWidget(row, 0)
-            if isinstance(checkbox, QCheckBox):
+            if isinstance(checkbox, NativeCheckBox):
                 child_states.append(checkbox.isChecked())
         self.select_all_checkbox.blockSignals(True)
         self.select_all_checkbox.setChecked(bool(child_states) and all(child_states))
@@ -12609,7 +13375,7 @@ try {
                 if not isinstance(metadata, dict) or metadata.get("row_type") != "container":
                     continue
                 widget = self.table.cellWidget(row, 0)
-                if isinstance(widget, QCheckBox):
+                if isinstance(widget, NativeCheckBox):
                     widget.setChecked(checked)
         finally:
             self._updating_group_selection = False
@@ -12644,7 +13410,7 @@ try {
                 group_visible_children[current_group_row] = group_visible_children.get(current_group_row, 0) + 1
             if hidden:
                 checkbox = self.table.cellWidget(row, 0)
-                if isinstance(checkbox, QCheckBox):
+                if isinstance(checkbox, NativeCheckBox):
                     checkbox.setChecked(False)
 
         for group_row, visible_count in group_visible_children.items():
@@ -12654,15 +13420,106 @@ try {
         names = []
         for row in range(self.table.rowCount()):
             cb = self.table.cellWidget(row, 0)
-            if isinstance(cb, QCheckBox) and cb.isChecked():
+            if isinstance(cb, NativeCheckBox) and cb.isChecked():
                 item = self.table.item(row, 2)
                 if item:
                     names.append(item.text())
         return names
 
+    def _container_row_anchor(self, row: int) -> tuple[str, str]:
+        if row < 0 or row >= self.table.rowCount():
+            return ("", "")
+        group_item = self.table.item(row, 0)
+        metadata = group_item.data(Qt.ItemDataRole.UserRole) if group_item is not None else None
+        if isinstance(metadata, dict) and metadata.get("row_type") == "group":
+            return ("group", str(metadata.get("storage_key") or ""))
+        name_item = self.table.item(row, 2)
+        if name_item is not None:
+            return ("container", name_item.text())
+        return ("", "")
+
+    def _capture_container_view_state(self) -> Dict[str, object]:
+        if not hasattr(self, "table"):
+            return {}
+        vertical = self.table.verticalScrollBar()
+        horizontal = self.table.horizontalScrollBar()
+        top_row = self.table.rowAt(0)
+        if top_row < 0 and self.table.rowCount():
+            top_row = 0
+        anchor = self._container_row_anchor(top_row)
+        anchor_offset = 0
+        if top_row >= 0:
+            anchor_item = self.table.item(top_row, 2) or self.table.item(top_row, 0)
+            if anchor_item is not None:
+                anchor_offset = self.table.visualItemRect(anchor_item).top()
+        selected_rows = []
+        selection_model = self.table.selectionModel()
+        if selection_model is not None:
+            for index in selection_model.selectedRows():
+                key = self._container_row_anchor(index.row())
+                if key != ("", ""):
+                    selected_rows.append(key)
+        return {
+            "vertical": vertical.value(),
+            "horizontal": horizontal.value(),
+            "anchor": anchor,
+            "anchor_offset": anchor_offset,
+            "checked": self.get_selected_names(),
+            "selected_rows": selected_rows,
+            "collapsed_groups": set(self.collapsed_groups),
+        }
+
+    def _find_container_row_anchor(self, anchor: tuple[str, str]) -> int:
+        if not anchor or anchor == ("", ""):
+            return -1
+        for row in range(self.table.rowCount()):
+            if self._container_row_anchor(row) == anchor:
+                return row
+        return -1
+
+    def _restore_container_view_state(self, state: Dict[str, object]) -> None:
+        if not state or not hasattr(self, "table"):
+            return
+        self.collapsed_groups = set(state.get("collapsed_groups") or self.collapsed_groups)
+        checked = {str(name) for name in state.get("checked", [])}
+        for row in range(self.table.rowCount()):
+            checkbox = self.table.cellWidget(row, 0)
+            name_item = self.table.item(row, 2)
+            if isinstance(checkbox, NativeCheckBox) and name_item is not None:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(name_item.text() in checked)
+                checkbox.blockSignals(False)
+        for group_key in list(self.group_checkboxes):
+            self.sync_group_checkbox(group_key)
+
+        self.table.clearSelection()
+        selected_rows = state.get("selected_rows", [])
+        if selected_rows:
+            row = self._find_container_row_anchor(tuple(selected_rows[0]))
+            if row >= 0:
+                self.table.selectRow(row)
+
+        vertical = self.table.verticalScrollBar()
+        anchor = tuple(state.get("anchor") or ("", ""))
+        anchor_row = self._find_container_row_anchor(anchor)
+        if anchor_row >= 0:
+            anchor_item = self.table.item(anchor_row, 2) or self.table.item(anchor_row, 0)
+            if anchor_item is not None:
+                self.table.scrollToItem(anchor_item, QAbstractItemView.ScrollHint.PositionAtTop)
+                desired_offset = int(state.get("anchor_offset", 0) or 0)
+                if desired_offset < 0:
+                    vertical.setValue(vertical.value() - desired_offset)
+        else:
+            vertical.setValue(int(state.get("vertical", vertical.value()) or 0))
+        # scrollToItem() can also move the horizontal scrollbar to reveal the
+        # anchor cell, so restore the user's horizontal position last.
+        horizontal = self.table.horizontalScrollBar()
+        horizontal.setValue(int(state.get("horizontal", horizontal.value()) or 0))
+
     def render_container_table(self, containers: List[object]):
         if not hasattr(self, "table"):
             return
+        view_state = self._capture_container_view_state()
         self.group_checkboxes = {}
         self.container_by_name = {
             str(getattr(container, "name", "") or ""): container
@@ -12785,6 +13642,7 @@ try {
         finally:
             self.table.setUpdatesEnabled(True)
         self.filter_container_rows(self.container_search.text())
+        self._restore_container_view_state(view_state)
         self.update_link_widget_selection_states()
 
     def remote_access_host(self) -> str:
@@ -13178,7 +14036,8 @@ try {
         if reply != QMessageBox.StandardButton.Yes:
             return
         try:
-            self.client.containers.get(name).remove(force=True)
+            self.execute_container_action(self.client.containers.get(name), "remove")
+            self.refresh_containers()
         except Exception as exc:
             QMessageBox.warning(self, self.texts["msg_error"], f"{name}: {exc}")
 
@@ -13229,9 +14088,6 @@ try {
         if self.refresh_thread is not None and self.refresh_thread.isRunning():
             return
         self.statusBar().showMessage(self.texts["status_loading"])
-        self.select_all_checkbox.blockSignals(True)
-        self.select_all_checkbox.setChecked(False)
-        self.select_all_checkbox.blockSignals(False)
         self.refresh_thread = QThread()
         self.worker = RefreshWorker(self.client)
         self.worker.moveToThread(self.refresh_thread)
@@ -13311,6 +14167,7 @@ try {
         self._container_metrics_text = container_metrics_text
         self._host_metrics_tooltip_text = metrics_text
         self.update_infrastructure_ui(True)
+        self.process_container_audio_transitions(list(containers))
         self.last_containers = list(containers)
         self.render_container_table(self.last_containers)
         message = self.texts["status_ready"]
@@ -13351,20 +14208,6 @@ try {
                 error_messages.append(f"{name}: {exc}")
         self.show_action_feedback(blocked_messages)
         self.show_action_feedback(error_messages, self.texts["msg_error"])
-        if error_messages:
-            self.play_audio_event("error")
-        elif successful_actions:
-            event_by_action = {
-                "start": "start",
-                "stop": "stop",
-                "restart": "restart",
-                "pause": "stop",
-                "unpause": "start",
-                "remove": "remove",
-                "autostart_on": "success",
-                "autostart_off": "success",
-            }
-            self.play_audio_event(event_by_action.get(action, "success"))
         self.refresh_containers()
 
     def show_selected_logs(self):
@@ -13464,6 +14307,7 @@ def main():
         }
         print(json.dumps(payload, ensure_ascii=False))
         raise SystemExit(0 if payload["ok"] else 2)
+    set_windows_app_user_model_id(MAIN_APP_USER_MODEL_ID)
     app = QApplication(sys.argv)
     app.setOrganizationName(APP_SETTINGS_ORG)
     app.setApplicationName(APP_SETTINGS_NAME)

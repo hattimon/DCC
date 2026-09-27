@@ -1,5 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
+
+ROOT = Path(SPECPATH).resolve()
 
 datas = [('upstream_assets/icon.png', '.'), ('assets/audio', 'assets/audio'), ('backgrounds', 'backgrounds'), ('dcc-catalog.json', '.'), ('catalog/media', 'catalog/media')]
 binaries = []
@@ -43,4 +46,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=['upstream_assets/icon.ico'],
+    version=str(ROOT / 'packaging/windows/DockerControlCenter.version.txt'),
 )

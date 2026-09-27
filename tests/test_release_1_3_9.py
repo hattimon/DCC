@@ -47,11 +47,38 @@ class Release139Tests(unittest.TestCase):
         self.assertIn("dcc-update-handoff.log", source)
         self.assertIn("Start-Sleep -Milliseconds 1200", source)
         self.assertIn("while (Get-Process -Id $DccProcessId -ErrorAction SilentlyContinue)", source)
+        self.assertIn("-ArgumentList '/DCCUPDATE=1'", source)
         self.assertIn('"-DccProcessId"', source)
         for path in (ROOT / "DockerControlCenter.nsi", ROOT / "upstream_assets" / "DockerControlCenter.nsi"):
             nsi = path.read_text(encoding="utf-8-sig").lower()
             self.assertNotIn("taskkill", nsi)
+            self.assertNotIn("stop-process", nsi)
             self.assertNotIn('execwait \'"$instdir\\${app_exe}" --self-check\'', nsi)
+
+    def test_windows_installer_shortcuts_graceful_close_and_relaunch(self):
+        for path in (ROOT / "DockerControlCenter.nsi", ROOT / "upstream_assets" / "DockerControlCenter.nsi"):
+            nsi = path.read_text(encoding="utf-8-sig")
+            self.assertIn("DCC - Docker Control Center.lnk", nsi)
+            self.assertIn("DCC Repo Builder.lnk", nsi)
+            self.assertIn("Uninstall DCC.lnk", nsi)
+            self.assertIn("CloseMainWindow", nsi)
+            self.assertIn("DCC jest uruchomione i musi zostać zamknięte", nsi)
+            self.assertIn("/DCCUPDATE=", nsi)
+            self.assertIn("SHChangeNotify", nsi)
+
+    def test_windows_identity_and_version_resources(self):
+        source = (ROOT / "DockerControlCenter.py").read_text(encoding="utf-8")
+        repo = (ROOT / "RepoBuilder.py").read_text(encoding="utf-8")
+        self.assertIn('MAIN_APP_USER_MODEL_ID = "Hattimon.DCC"', source)
+        self.assertIn('REPO_BUILDER_APP_USER_MODEL_ID = "Hattimon.DCC.RepoBuilder"', source)
+        self.assertIn("set_windows_app_user_model_id(MAIN_APP_USER_MODEL_ID)", source)
+        self.assertIn("REPO_BUILDER_APP_USER_MODEL_ID", repo)
+        main_version = (ROOT / "packaging" / "windows" / "DockerControlCenter.version.txt").read_text(encoding="utf-8")
+        repo_version = (ROOT / "packaging" / "windows" / "RepoBuilder.version.txt").read_text(encoding="utf-8")
+        self.assertIn("DCC - Docker Control Center", main_version)
+        self.assertIn("DCC Repo Builder", repo_version)
+        self.assertIn("1.3.9", main_version)
+        self.assertIn("1.3.9", repo_version)
 
     def test_release_notes_and_expected_asset_names(self):
         notes = (ROOT / "release" / "RELEASE_NOTES_1.3.9.md").read_text(encoding="utf-8")

@@ -58,7 +58,7 @@ class DayThemeTests(unittest.TestCase):
     def test_day_is_listed_above_light_in_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings = QSettings(str(Path(tmp) / "dcc.ini"), QSettings.Format.IniFormat)
-            dialog = dcc.AppSettingsDialog(settings, dcc.TEXTS["PL"])
+            dialog = dcc.ThemeSettingsDialog(settings, dcc.TEXTS["PL"])
             day_index = dialog.theme_combo.findData("day")
             light_index = dialog.theme_combo.findData("light")
             self.assertEqual(day_index, 0)

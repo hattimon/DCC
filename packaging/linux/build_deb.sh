@@ -94,6 +94,9 @@ for size in "${ICON_SIZES[@]}"; do
   install -m 0644 \
     "$ROOT_DIR/assets/icons/hicolor/${size}x${size}/apps/docker-control-center.png" \
     "$PKG_ROOT/usr/share/icons/hicolor/${size}x${size}/apps/docker-control-center.png"
+  install -m 0644 \
+    "$ROOT_DIR/assets/icons/hicolor/${size}x${size}/apps/dcc-repo-builder.png" \
+    "$PKG_ROOT/usr/share/icons/hicolor/${size}x${size}/apps/dcc-repo-builder.png"
 done
 install -m 0644 "$ROOT_DIR/assets/icons/hicolor/512x512/apps/docker-control-center.png" "$PKG_ROOT/usr/share/pixmaps/docker-control-center.png"
 cp -a "$ROOT_DIR/assets/audio" "$PKG_ROOT/usr/share/docker-control-center/assets/audio"

@@ -1,7 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('upstream_assets/icon.png', '.'), ('dcc-catalog.json', '.'), ('catalog/media', 'catalog/media')]
+ROOT = Path(SPECPATH).resolve()
+
+datas = [('upstream_assets/icon.png', '.'), ('upstream_assets/repo_builder_icon.png', '.'), ('dcc-catalog.json', '.'), ('catalog/media', 'catalog/media')]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('qdarktheme')
@@ -41,5 +44,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['upstream_assets/icon.ico'],
+    icon=['upstream_assets/repo_builder_icon.ico'],
+    version=str(ROOT / 'packaging/windows/RepoBuilder.version.txt'),
 )

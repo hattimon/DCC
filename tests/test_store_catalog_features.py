@@ -5,11 +5,18 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QCoreApplication, QEvent, Qt
 from PyQt6.QtGui import QColor, QFontMetrics
 from PyQt6.QtWidgets import QApplication, QListView
 
 import DockerControlCenter as dcc
+
+
+def _dispose_widget(widget):
+    widget.close()
+    widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    QApplication.processEvents()
 
 
 class _FakeImage:
@@ -141,7 +148,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             )
             self.assertGreater(dialog.catalog_list.count(), 0)
             self.assertTrue(all(item.supports_engine("balena") for item in dialog.filtered_catalog))
-            dialog.close()
+            _dispose_widget(dialog)
 
     def test_store_palette_follows_theme_with_neutral_surfaces(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(
@@ -154,7 +161,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             self.assertEqual(colors["accent"], "#ff4bd8")
             self.assertIn("rgba(14, 15, 17", colors["surface"])
             self.assertIn("rgba(24, 25, 28", colors["card_bg"])
-            dialog.close()
+            _dispose_widget(dialog)
 
     def test_light_store_uses_readable_text_and_accent(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(
@@ -169,11 +176,28 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             self.assertEqual(colors["title"], dcc.palette_for_theme("light")["fg"])
             self.assertEqual(colors["description"], dcc.palette_for_theme("light")["muted"])
             self.assertIn("rgba(248, 248, 249", colors["card_bg"])
-            dialog.close()
+            _dispose_widget(dialog)
 
         qss = dcc.gaming_stylesheet("light", 0.0, False, 100, False, "#33f0ff")
         self.assertIn("rgba(250,252,255,0.88)", qss)
         self.assertIn("rgba(218,231,250,0.92)", qss)
+
+    def test_store_light_and_day_categories_use_readable_theme_surfaces(self):
+        class Harness:
+            catalog_accent = "#33f0ff"
+
+        for theme, lang in (("light", "PL"), ("day", "EN")):
+            harness = Harness()
+            harness.catalog_theme = theme
+            palette = dcc.palette_for_theme(theme)
+            colors = dcc.NewContainerDialog._catalog_visual_colors(harness)
+            combined = "\n".join(dcc.NewContainerDialog._catalog_category_styles(colors)).lower()
+            self.assertIn(palette["fg"].lower(), combined)
+            self.assertIn(colors["surface"].lower(), combined)
+            self.assertIn(colors["card_bg"].lower(), combined)
+            self.assertIn(dcc.TEXTS[lang]["wizard_store_categories"], {"Kategorie", "Categories"})
+            self.assertNotIn("background: #0e0f11", combined)
+            self.assertNotIn("background: #18191c", combined)
 
     def test_store_categories_stay_compact_at_desktop_width(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(
@@ -227,7 +251,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
 
             self.assertTrue(dialog.category_nav.item(0).font().bold())
             self.assertTrue(dialog.category_nav.item(1).font().bold())
-            dialog.close()
+            _dispose_widget(dialog)
 
     def test_installed_category_lists_only_apps_present_on_current_host(self):
         template = dcc.default_image_catalog()[0]
@@ -251,7 +275,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             dialog.catalog_list.setCurrentRow(0)
             self.app.processEvents()
             self.assertEqual(dialog.btn_store_primary.text(), dcc.TEXTS["PL"]["wizard_store_uninstall"])
-            dialog.close()
+            _dispose_widget(dialog)
 
     def test_store_layout_has_no_horizontal_scroll_at_normal_compact_width(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(
@@ -265,7 +289,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             self.app.processEvents()
             self.assertEqual(dialog.dialog_scroll_area.horizontalScrollBar().maximum(), 0)
             self.assertEqual(dialog.catalog_row.direction(), dcc.QBoxLayout.Direction.TopToBottom)
-            dialog.close()
+            _dispose_widget(dialog)
 
     def test_bundled_icons_are_used_and_missing_media_reserves_no_space(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(
@@ -287,7 +311,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             self.app.processEvents()
             self.assertTrue(dialog.store_hero_image.isVisible())
             self.assertTrue(dialog.store_gallery_title.isVisible())
-            dialog.close()
+            _dispose_widget(dialog)
 
     def test_two_line_description_uses_three_dots_only_on_overflow(self):
         label = dcc.TwoLineElideLabel()
@@ -370,7 +394,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
                 target_host_label="Raspberry Pi · Ubuntu · armv7l",
             )
             self.assertIn("SmartWAN Manager", [item.name for item in dialog.filtered_catalog])
-            dialog.close()
+            _dispose_widget(dialog)
 
     def test_source_built_catalog_app_never_pulls_registry_image_on_run(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(
@@ -391,7 +415,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             regular_args = dialog.build_run_args()
             regular_pull_index = regular_args.index("--pull")
             self.assertEqual(regular_args[regular_pull_index + 1], "always")
-            dialog.close()
+            _dispose_widget(dialog)
 
     def test_store_target_host_is_visually_emphasized(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(
@@ -408,7 +432,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             self.assertIn("LOCAL / Docker Desktop", dialog.target_label.text())
             self.assertFalse(dialog.target_host_icon.pixmap().isNull())
             self.assertIn("border", dialog.target_host_frame.styleSheet())
-            dialog.close()
+            _dispose_widget(dialog)
 
 
 if __name__ == "__main__":

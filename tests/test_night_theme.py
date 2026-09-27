@@ -44,7 +44,7 @@ class NightThemeTests(unittest.TestCase):
     def test_settings_theme_combo_contains_night(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings = QSettings(str(Path(tmp) / "dcc.ini"), QSettings.Format.IniFormat)
-            dialog = dcc.AppSettingsDialog(settings, dcc.TEXTS["PL"])
+            dialog = dcc.ThemeSettingsDialog(settings, dcc.TEXTS["PL"])
             index = dialog.theme_combo.findData("night")
             self.assertGreaterEqual(index, 0)
             self.assertEqual(dialog.theme_combo.itemText(index), "Noc")

@@ -306,6 +306,7 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
             active_remote_profile=object(),
             client=object(),
             linux_docker_group_requires_relaunch=lambda: True,
+            reset_audio_connection_state=Mock(),
             update_infrastructure_ui=Mock(),
             show_local_docker_unavailable=Mock(),
             build_local_docker_client=Mock(),
@@ -319,6 +320,7 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
 
         self.assertEqual(stub.current_backend, "local")
         self.assertIsNone(stub.client)
+        stub.reset_audio_connection_state.assert_called_once_with()
         stub.build_local_docker_client.assert_not_called()
         stub.show_local_docker_unavailable.assert_called_once_with()
 

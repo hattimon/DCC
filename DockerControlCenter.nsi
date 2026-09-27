@@ -3,13 +3,15 @@ ManifestDPIAware True
 RequestExecutionLevel user
 !include "LogicLib.nsh"
 !include "x64.nsh"
+!include "FileFunc.nsh"
 
-!define APP_NAME "Docker Control Center"
+!define APP_NAME "DCC - Docker Control Center"
 !define APP_EXE "DockerControlCenter.exe"
 !define REPO_BUILDER_EXE "DCCRepoBuilder.exe"
 !define APP_ID "DockerControlCenter"
-!define APP_PUBLISHER "Docker Control Center"
+!define APP_PUBLISHER "Hattimon"
 !define APP_VERSION "1.3.9"
+!define START_MENU_DIR "DCC"
 
 Name "${APP_NAME}"
 OutFile "..\release\DockerControlCenter-Setup.exe"
@@ -21,21 +23,90 @@ UninstallIcon "icon.ico"
 ShowInstDetails show
 ShowUninstDetails show
 
+Var UpdateMode
+Var CloseAttempts
+
 Page directory
 Page instfiles
 UninstPage uninstConfirm
 UninstPage instfiles
+
+Function CheckDccProcesses
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -WindowStyle Hidden -Command "if (Get-Process -Name DockerControlCenter,DCCRepoBuilder -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"'
+  Pop $0
+  Pop $1
+  Push $0
+FunctionEnd
+
+Function RequestGracefulClose
+  DetailPrint "Requesting graceful close of DCC processes."
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -WindowStyle Hidden -Command "Get-Process -Name DockerControlCenter,DCCRepoBuilder -ErrorAction SilentlyContinue | ForEach-Object { [void]$$_.CloseMainWindow() }"'
+  Pop $0
+  Pop $1
+FunctionEnd
+
+Function WaitForDccClose
+  StrCpy $CloseAttempts 0
+wait_for_dcc_close:
+  Call CheckDccProcesses
+  Pop $0
+  StrCmp $0 "0" processes_closed
+  IntOp $CloseAttempts $CloseAttempts + 1
+  IntCmp $CloseAttempts 30 wait_a_bit close_failed close_failed
+wait_a_bit:
+  Sleep 500
+  Goto wait_for_dcc_close
+processes_closed:
+  Push "0"
+  Return
+close_failed:
+  Push "1"
+FunctionEnd
+
+Function .onInit
+  StrCpy $UpdateMode "0"
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} "$0" "/DCCUPDATE=" $1
+  ${IfNot} ${Errors}
+    StrCmp $1 "1" 0 +2
+      StrCpy $UpdateMode "1"
+  ${EndIf}
+
+check_running:
+  Call CheckDccProcesses
+  Pop $0
+  StrCmp $0 "0" init_done
+  IfSilent silent_close interactive_close
+
+interactive_close:
+  MessageBox MB_ICONEXCLAMATION|MB_OKCANCEL|MB_DEFBUTTON1 "DCC jest uruchomione i musi zostać zamknięte.$\r$\n$\r$\nOK = Zamknij i kontynuuj$\r$\nAnuluj = Anuluj instalację." IDOK do_close IDCANCEL init_cancel
+
+silent_close:
+do_close:
+  Call RequestGracefulClose
+  Call WaitForDccClose
+  Pop $0
+  StrCmp $0 "0" init_done
+  IfSilent init_cancel close_retry
+
+close_retry:
+  MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "Nie udało się zamknąć wszystkich procesów DCC. Zamknij ręcznie DCC / DCC Repo Builder, a następnie wybierz Ponów próbę." IDRETRY check_running IDCANCEL init_cancel
+
+init_cancel:
+  Abort
+
+init_done:
+FunctionEnd
 
 Section "Install"
   SetOutPath "$InstDir"
   File "/oname=${APP_EXE}" "..\dist\DockerControlCenter.exe"
   File "/oname=${REPO_BUILDER_EXE}" "..\dist\DCCRepoBuilder.exe"
 
-  ; The build pipeline already executes --self-check on the exact EXE before
-  ; NSIS packages it. Running a PyInstaller one-file binary again immediately
-  ; after extraction can race with AV/temp scanning of _MEI\python312.dll and
-  ; produce a false installation failure. Verify the installed payload exists
-  ; here and leave runtime validation to the pre-package build check.
+  ; Runtime self-checks are executed on the exact PyInstaller binaries by the
+  ; build pipeline. Do not start one-file EXEs from inside NSIS while replacing
+  ; an installed version because antivirus/temp extraction can race _MEI files.
   IfFileExists "$InstDir\${APP_EXE}" app_payload_ready
     MessageBox MB_ICONSTOP "Docker Control Center executable was not installed correctly. Installation cannot continue."
     Abort
@@ -45,16 +116,10 @@ app_payload_ready:
     Abort
 repo_builder_payload_ready:
 
-  ; The internal SSH backend uses Paramiko, while interactive terminal actions
-  ; use the Windows OpenSSH client. A 32-bit NSIS process can be redirected away
-  ; from the real 64-bit System32 directory, so check Sysnative explicitly.
   ${If} ${RunningX64}
     IfFileExists "$WINDIR\Sysnative\OpenSSH\ssh.exe" openssh_ready
   ${EndIf}
   IfFileExists "$SYSDIR\OpenSSH\ssh.exe" openssh_ready
-
-  ; Interactive installs may elevate and install the Windows capability. Silent
-  ; updates must never wait forever on a hidden MessageBox/UAC prompt.
   IfSilent openssh_missing_silent openssh_missing_interactive
 
 openssh_missing_interactive:
@@ -73,7 +138,6 @@ openssh_missing_silent:
 
 openssh_ready:
   DetailPrint "OpenSSH Client detected."
-
 openssh_done:
 
   WriteRegStr HKCU "Software\${APP_ID}" "InstallDir" "$InstDir"
@@ -85,21 +149,49 @@ openssh_done:
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "UninstallString" '"$InstDir\Uninstall.exe"'
   WriteUninstaller "$InstDir\Uninstall.exe"
 
-  CreateDirectory "$SMPROGRAMS\${APP_NAME}"
-  CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$InstDir\${APP_EXE}"
-  CreateShortcut "$SMPROGRAMS\${APP_NAME}\DCC Repo Builder.lnk" "$InstDir\${REPO_BUILDER_EXE}"
-  CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$InstDir\${APP_EXE}"
+  ; Remove only DCC-owned legacy shortcuts during an upgrade. User-created and
+  ; pinned shortcuts are not deleted or rebuilt.
+  Delete "$SMPROGRAMS\Docker Control Center\Docker Control Center.lnk"
+  Delete "$SMPROGRAMS\Docker Control Center\DCC Repo Builder.lnk"
+  Delete "$SMPROGRAMS\Docker Control Center\Uninstall DCC.lnk"
+  RMDir "$SMPROGRAMS\Docker Control Center"
+  Delete "$DESKTOP\Docker Control Center.lnk"
 
-  IfSilent install_done
-  MessageBox MB_ICONINFORMATION|MB_OK "Docker Control Center ${APP_VERSION} was installed successfully."
+  CreateDirectory "$SMPROGRAMS\${START_MENU_DIR}"
+  Delete "$SMPROGRAMS\${START_MENU_DIR}\DCC - Docker Control Center.lnk"
+  Delete "$SMPROGRAMS\${START_MENU_DIR}\DCC Repo Builder.lnk"
+  Delete "$SMPROGRAMS\${START_MENU_DIR}\Uninstall DCC.lnk"
+  CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\DCC - Docker Control Center.lnk" "$InstDir\${APP_EXE}" "" "$InstDir\${APP_EXE}" 0
+  CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\DCC Repo Builder.lnk" "$InstDir\${REPO_BUILDER_EXE}" "" "$InstDir\${REPO_BUILDER_EXE}" 0
+  CreateShortcut "$SMPROGRAMS\${START_MENU_DIR}\Uninstall DCC.lnk" "$InstDir\Uninstall.exe" "" "$InstDir\Uninstall.exe" 0
+  Delete "$DESKTOP\DCC - Docker Control Center.lnk"
+  CreateShortcut "$DESKTOP\DCC - Docker Control Center.lnk" "$InstDir\${APP_EXE}" "" "$InstDir\${APP_EXE}" 0
+
+  ; Non-destructive shell refresh for shortcut/icon metadata.
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+
+  StrCmp $UpdateMode "1" launch_after_install
+  IfSilent install_done manual_launch_prompt
+
+manual_launch_prompt:
+  MessageBox MB_ICONINFORMATION|MB_YESNO|MB_DEFBUTTON1 "DCC ${APP_VERSION} zostało zainstalowane poprawnie.$\r$\n$\r$\nUruchomić DCC teraz?" IDYES launch_after_install IDNO install_done
+
+launch_after_install:
+  Exec '"$InstDir\${APP_EXE}"'
+
 install_done:
 SectionEnd
 
 Section "Uninstall"
-  Delete "$DESKTOP\${APP_NAME}.lnk"
-  Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
-  Delete "$SMPROGRAMS\${APP_NAME}\DCC Repo Builder.lnk"
-  RMDir "$SMPROGRAMS\${APP_NAME}"
+  Delete "$DESKTOP\DCC - Docker Control Center.lnk"
+  Delete "$DESKTOP\Docker Control Center.lnk"
+  Delete "$SMPROGRAMS\${START_MENU_DIR}\DCC - Docker Control Center.lnk"
+  Delete "$SMPROGRAMS\${START_MENU_DIR}\DCC Repo Builder.lnk"
+  Delete "$SMPROGRAMS\${START_MENU_DIR}\Uninstall DCC.lnk"
+  RMDir "$SMPROGRAMS\${START_MENU_DIR}"
+  Delete "$SMPROGRAMS\Docker Control Center\Docker Control Center.lnk"
+  Delete "$SMPROGRAMS\Docker Control Center\DCC Repo Builder.lnk"
+  RMDir "$SMPROGRAMS\Docker Control Center"
 
   Delete "$InstDir\${APP_EXE}"
   Delete "$InstDir\${REPO_BUILDER_EXE}"
@@ -108,4 +200,5 @@ Section "Uninstall"
 
   DeleteRegKey HKCU "Software\${APP_ID}"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 SectionEnd

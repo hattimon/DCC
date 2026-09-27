@@ -207,6 +207,7 @@ def lines(value: str) -> List[str]:
 class RepoBuilderWindow(QMainWindow):
     def __init__(self, language: Optional[str] = None, theme: Optional[str] = None):
         super().__init__()
+        self.setObjectName("repoBuilderWindow")
         self.app_settings = QSettings(dcc.APP_SETTINGS_ORG, dcc.APP_SETTINGS_NAME)
         self.lang = str(language or self.app_settings.value("language", "EN") or "EN").upper()
         if self.lang not in REPO_BUILDER_UI:
@@ -230,6 +231,8 @@ class RepoBuilderWindow(QMainWindow):
 
     def _apply_theme(self):
         base_theme = "light" if self.current_theme in {"day", "light"} else "dark"
+        palette = dcc.palette_for_theme(self.current_theme)
+        accent = dcc.effective_accent_color(self.current_theme, self.accent_color)
         extra_qss = dcc.gaming_stylesheet(
             self.current_theme,
             0.52,
@@ -238,6 +241,42 @@ class RepoBuilderWindow(QMainWindow):
             self.neon_enabled and self.neon_animate,
             self.accent_color,
         )
+        extra_qss += f"""
+        QMainWindow#repoBuilderWindow {{
+            background: {palette['solid0']};
+            color: {palette['fg']};
+        }}
+        QWidget#repoBuilderRoot,
+        QWidget#repoBuilderListPanel,
+        QWidget#repoBuilderTabPage {{
+            background: {palette['solid0']};
+            color: {palette['fg']};
+        }}
+        QTabWidget#repoBuilderTabs::pane {{
+            background: {palette['solid0']};
+            border: 1px solid {palette['border']};
+        }}
+        QTabWidget#repoBuilderTabs QTabBar::tab {{
+            background: {palette['solid1']};
+            color: {palette['fg']};
+            border: 1px solid {palette['border']};
+        }}
+        QTabWidget#repoBuilderTabs QTabBar::tab:selected {{
+            background: {palette['solid2']};
+            color: {palette['fg']};
+            border-color: {accent};
+        }}
+        QLabel#repoBuilderStatus {{
+            background: {palette['solid1']};
+            color: {palette['fg']};
+            border: 1px solid {palette['border']};
+            border-radius: 8px;
+            padding: 6px 9px;
+        }}
+        QSplitter#repoBuilderSplitter::handle {{
+            background: {palette['border']};
+        }}
+        """
         if hasattr(dcc.qdarktheme, "setup_theme"):
             dcc.qdarktheme.setup_theme(base_theme, additional_qss=extra_qss)
         else:
@@ -278,6 +317,7 @@ class RepoBuilderWindow(QMainWindow):
 
     def _build_ui(self):
         root = QWidget(self)
+        root.setObjectName("repoBuilderRoot")
         layout = QVBoxLayout(root)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
@@ -285,7 +325,8 @@ class RepoBuilderWindow(QMainWindow):
         repo_row = QHBoxLayout()
         self.repo_url = QLineEdit(DEFAULT_REPO_URL)
         self.repo_url.setPlaceholderText("GitHub repository URL")
-        self.repo_root = QLineEdit(str(Path(__file__).resolve().parent))
+        packaged = bool(getattr(sys, "_MEIPASS", "")) or bool(getattr(sys, "frozen", False))
+        self.repo_root = QLineEdit("" if packaged else str(Path(__file__).resolve().parent))
         self.repo_root.setPlaceholderText("Local repository checkout")
         self.btn_repo_browse = QPushButton("Local folder…")
         self.btn_repo_open = QPushButton("Open GitHub")
@@ -320,7 +361,9 @@ class RepoBuilderWindow(QMainWindow):
         layout.addLayout(file_row)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setObjectName("repoBuilderSplitter")
         left = QWidget()
+        left.setObjectName("repoBuilderListPanel")
         left_layout = QVBoxLayout(left)
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search applications…")
@@ -338,6 +381,7 @@ class RepoBuilderWindow(QMainWindow):
         splitter.addWidget(left)
 
         self.tabs = QTabWidget()
+        self.tabs.setObjectName("repoBuilderTabs")
         self.tabs.addTab(self._build_basic_tab(), "App / Aplikacja")
         self.tabs.addTab(self._build_store_tab(), "Store / Sklep")
         self.tabs.addTab(self._build_advanced_tab(), "Advanced")
@@ -348,6 +392,7 @@ class RepoBuilderWindow(QMainWindow):
         layout.addWidget(splitter, 1)
 
         self.status = QLabel("Ready. Changes stay local until you explicitly commit/push.")
+        self.status.setObjectName("repoBuilderStatus")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
         self.setCentralWidget(root)
@@ -370,6 +415,7 @@ class RepoBuilderWindow(QMainWindow):
 
     def _build_basic_tab(self) -> QWidget:
         tab = QWidget()
+        tab.setObjectName("repoBuilderTabPage")
         form = QFormLayout(tab)
         self.name = QLineEdit()
         self.image = QLineEdit()
@@ -406,6 +452,7 @@ class RepoBuilderWindow(QMainWindow):
 
     def _build_store_tab(self) -> QWidget:
         tab = QWidget()
+        tab.setObjectName("repoBuilderTabPage")
         form = QFormLayout(tab)
         self.store_description = QPlainTextEdit()
         self.store_description_en = QPlainTextEdit()
@@ -438,6 +485,7 @@ class RepoBuilderWindow(QMainWindow):
 
     def _build_advanced_tab(self) -> QWidget:
         tab = QWidget()
+        tab.setObjectName("repoBuilderTabPage")
         form = QFormLayout(tab)
         self.source_url = QLineEdit()
         self.docs_url = QLineEdit()
@@ -470,6 +518,7 @@ class RepoBuilderWindow(QMainWindow):
 
     def _build_ai_tab(self) -> QWidget:
         tab = QWidget()
+        tab.setObjectName("repoBuilderTabPage")
         layout = QVBoxLayout(tab)
         form = QFormLayout()
         self.ai_provider = QComboBox()
@@ -521,8 +570,27 @@ class RepoBuilderWindow(QMainWindow):
                 self.catalog_file.setText(saved_path.name)
                 self.load_catalog()
                 return
+        if getattr(sys, "_MEIPASS", ""):
+            bundled = dcc.BUNDLED_DEPLOYMENT_CATALOG_FILE
+            if bundled.is_file():
+                try:
+                    payload = json.loads(bundled.read_text(encoding="utf-8"))
+                    apps = payload.get("apps") if isinstance(payload, dict) else None
+                    if isinstance(apps, list):
+                        self.catalog = payload
+                        self.catalog_path = None
+                        self.current_index = -1
+                        self.refresh_app_list()
+                        self.status.setText(
+                            "Bundled catalog loaded read-only. Choose Local folder / Save As before saving."
+                            if self.lang == "EN"
+                            else "Wczytano katalog z pakietu tylko do odczytu. Przed zapisem wybierz Folder lokalny / Zapisz jako."
+                        )
+                        return
+                except Exception:
+                    pass
         candidate = Path(self.repo_root.text()).expanduser()
-        if (candidate / "dcc-catalog.json").is_file():
+        if self.repo_root.text().strip() and (candidate / "dcc-catalog.json").is_file():
             self.load_catalog()
 
     def choose_repo_root(self):
@@ -532,7 +600,10 @@ class RepoBuilderWindow(QMainWindow):
             self.load_catalog()
 
     def catalog_disk_path(self) -> Path:
-        return Path(self.repo_root.text().strip()).expanduser() / self.catalog_file.text().strip()
+        root = self.repo_root.text().strip()
+        if not root:
+            return Path()
+        return Path(root).expanduser() / self.catalog_file.text().strip()
 
     @staticmethod
     def _is_safe_catalog_path(path: Path) -> bool:
@@ -548,7 +619,25 @@ class RepoBuilderWindow(QMainWindow):
             return False
 
     def load_catalog(self):
+        if not self.repo_root.text().strip():
+            QMessageBox.information(
+                self,
+                "Local folder",
+                "Choose a permanent local repository folder first."
+                if self.lang == "EN"
+                else "Najpierw wybierz trwały lokalny folder repozytorium.",
+            )
+            return
         path = self.catalog_disk_path()
+        if not self._is_safe_catalog_path(path):
+            QMessageBox.warning(
+                self,
+                "Local folder",
+                "Choose a permanent local repository folder outside temporary or unpacked runtime folders."
+                if self.lang == "EN"
+                else "Wybierz trwały lokalny folder repozytorium poza folderami tymczasowymi lub rozpakowanym runtime.",
+            )
+            return
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
             apps = payload.get("apps") if isinstance(payload, dict) else None
@@ -556,8 +645,7 @@ class RepoBuilderWindow(QMainWindow):
                 raise ValueError("Catalog must contain an 'apps' array.")
             self.catalog = payload
             self.catalog_path = path
-            if self._is_safe_catalog_path(path):
-                self.app_settings.setValue("repo_builder/last_catalog_path", str(path.resolve()))
+            self.app_settings.setValue("repo_builder/last_catalog_path", str(path.resolve()))
             self.current_index = -1
             self.refresh_app_list()
             self.status.setText(f"Loaded {len(apps)} apps from {path}")
@@ -867,6 +955,8 @@ class RepoBuilderWindow(QMainWindow):
     def save_catalog(self):
         if not self._capture_valid_form():
             return False
+        if self.catalog_path is None and not self.repo_root.text().strip():
+            return self.save_catalog_as()
         path = self.catalog_path or self.catalog_disk_path()
         if not self._is_safe_catalog_path(path):
             return self.save_catalog_as()
@@ -875,7 +965,18 @@ class RepoBuilderWindow(QMainWindow):
     def save_catalog_as(self):
         if not self._capture_valid_form():
             return False
-        initial = self.catalog_path or self.catalog_disk_path()
+        initial = self.catalog_path
+        if initial is None and self.repo_root.text().strip():
+            candidate = self.catalog_disk_path()
+            if self._is_safe_catalog_path(candidate):
+                initial = candidate
+        if initial is None or not self._is_safe_catalog_path(initial):
+            documents = Path.home() / "Documents"
+            base = documents if documents.is_dir() else Path.home()
+            filename = Path(self.catalog_file.text().strip() or "dcc-catalog.json").name
+            if Path(filename).suffix.lower() != ".json":
+                filename = f"{filename}.json"
+            initial = base / filename
         selected, _filter = QFileDialog.getSaveFileName(
             self,
             "Save catalog as" if self.lang == "EN" else "Zapisz katalog jako",
@@ -1265,12 +1366,14 @@ def main() -> int:
     self_check = "--self-check" in sys.argv
     if self_check:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    dcc.set_windows_app_user_model_id(dcc.REPO_BUILDER_APP_USER_MODEL_ID)
     app = QApplication(sys.argv)
     app.setApplicationName("DCC Repo Builder")
     if sys.platform.startswith("linux") and hasattr(app, "setDesktopFileName"):
         app.setDesktopFileName("dcc-repo-builder")
-    if dcc.ICON_FILE.exists():
-        app.setWindowIcon(QIcon(str(dcc.ICON_FILE)))
+    runtime_icon = dcc.REPO_BUILDER_ICON_FILE if dcc.REPO_BUILDER_ICON_FILE.exists() else dcc.ICON_FILE
+    if runtime_icon.exists():
+        app.setWindowIcon(QIcon(str(runtime_icon)))
     window = RepoBuilderWindow()
     if self_check:
         errors = window.validate_catalog()

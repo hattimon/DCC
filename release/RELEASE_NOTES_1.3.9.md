@@ -1,46 +1,46 @@
 # Docker Control Center v1.3.9
 
-Docker Control Center 1.3.9 builds on the stable 1.3.8 updater and packaging flow, with a new theme-aware audio system plus the UI, Store, Repo Builder, icon and refresh improvements completed since 1.3.8.
+DCC 1.3.9 finalizes the UI, theme, audio, icon, refresh and packaging work built on top of the stable 1.3.8 updater flow.
 
 ## English
 
-- Added case-insensitive search inside container logs with next/previous result navigation that survives log refreshes.
-- Improved `Day` and `Light` theme readability and control surfaces.
-- Repo Builder now shares the DCC theme/accent settings and supports Save / Save As workflows.
-- Added the `New container` workflow improvements completed after 1.3.8.
-- Improved Application Store sizing and compact layout behavior.
-- Added and stabilized automatic container refresh with overlap protection.
-- Expanded the neon accent palette and fixed neon animation/accent persistence.
-- Added the final glass DCC icon and a consistent Windows/Linux icon pipeline, including the full Linux hicolor set.
-- Added theme-aware procedural audio for `Night`, `Black`, `Dark`, `Light` and `Day`.
-- The note button now enables/disables all DCC audio: ambient plus event sound effects.
-- Reordered the compact controls to note -> transparency toggle -> transparency slider.
-- Added event SFX for Docker start, stop, restart, pause/unpause, remove, container create/recreate/build success and errors.
-- All DCC audio is generated procedurally by the repository tool; no external recordings or stock samples are required.
-- Added package-aware audio resource resolution and validation for source and PyInstaller modes.
-- Preserved the 1.3.8 Windows updater handoff: DCC finishes the download, exits Qt, the hidden helper waits for the DCC PID to disappear, waits an additional delay, then starts the installer.
-- Preserved the NSIS safety changes: the installer does not terminate DCC and does not run installer-time `--self-check`.
-- Added release/update tests for `1.3.8 -> 1.3.9` and deterministic Windows installer asset selection.
+- Improved Application Store readability in `Light` and `Day`, including readable Categories and theme-derived surfaces without hard-coded dark backgrounds.
+- Completed `Light` / `Day` palettes in Repo Builder and prevented PyInstaller `_MEI...` extraction paths from being shown or persisted as a normal catalog location.
+- Container refresh now preserves vertical and horizontal scroll, current selection and expanded groups.
+- Column Magnet is enabled by default with a visible checkmark; table dividers use vertical `⋮` resize grips without fake data columns.
+- `View -> Theme -> SETTINGS` is the first theme-menu item, followed by a separator and the visual themes.
+- Added Theme Settings for visual theme, neon/accent, audio enabled, independent sound style, Master volume, Theme intro volume and Effects volume, with Save/Cancel rollback behavior.
+- Replaced continuous ambient playback with short one-shot intros. Intro plays on app start, visual-theme change when audio follows the theme, audio-profile change and audio OFF -> ON, then playback returns to silence.
+- Sound style is independent from the visual theme and supports `Auto`, `Night`, `Black`, `Dark`, `Light` and `Day`.
+- Default audio levels are Master 100%, Theme intro 35% and Effects 65%; legacy `ambient_volume` is migrated to `intro_volume` when needed.
+- Added five distinct procedural sound profiles: Night rock/metal guitar-like, Black electronic/neon/glass, Dark sci-fi, Light fresh/clean and Day mystical/fog/harbor.
+- Added 65 locally generated WAV assets: 13 required one-shot files for each of five profiles, with no downloaded samples or external recordings.
+- Container audio uses a baseline first snapshot, real stopped/running transitions, restart-request/restart-complete pairing, host reconnect sound and deduplication to avoid refresh spam.
+- Added separate final icons and Windows metadata for DCC and Repo Builder, stable AppUserModelIDs and non-destructive shell icon refresh.
+- Windows Start Menu entries are `DCC - Docker Control Center`, `DCC Repo Builder` and `Uninstall DCC`.
+- Manual NSIS install detects a running DCC and requests a graceful close with user confirmation; no forced `taskkill /F` path is used.
+- Preserved the updater handoff: wait for the DCC PID to exit, wait an additional 1200 ms, run the installer and relaunch DCC after a successful update.
+- Linux packaging includes both desktop entries, both icon sets and all audio assets.
 
 ## Polski
 
-- Dodano wyszukiwanie bez rozróżniania wielkości liter w logach kontenerów, nawigację następny/poprzedni wynik i zachowanie wyszukiwania po odświeżeniu logów.
-- Poprawiono czytelność motywów `Day` i `Light` oraz ich powierzchnie kontrolek.
-- Repo Builder korzysta ze wspólnych ustawień motywu/akcentu DCC i obsługuje Save / Save As.
-- Uwzględniono poprawki workflow `New container` wykonane po 1.3.8.
-- Poprawiono rozmiary i zwarty układ Application Store.
-- Dodano i ustabilizowano automatyczne odświeżanie kontenerów z ochroną przed nakładaniem odświeżeń.
-- Rozszerzono paletę neonowych akcentów oraz naprawiono zapamiętywanie animacji i akcentu.
-- Dodano finalną szklaną ikonę DCC i spójny pipeline ikon Windows/Linux, w tym pełny zestaw hicolor dla Linuksa.
-- Dodano proceduralne audio zależne od motywu dla `Night`, `Black`, `Dark`, `Light` i `Day`.
-- Przycisk nutki włącza/wyłącza całe audio DCC: ambient i dźwięki zdarzeń.
-- Zmieniono kolejność kompaktowych kontrolek na nutka -> przełącznik przezroczystości -> suwak przezroczystości.
-- Dodano SFX dla operacji Docker: start, stop, restart, pauza/wznowienie, usunięcie oraz powodzenie/błąd tworzenia, odtwarzania i budowania kontenera.
-- Wszystkie dźwięki DCC są generowane proceduralnie przez narzędzie z repozytorium; nie wymagają zewnętrznych nagrań ani stockowych sampli.
-- Dodano resolver i walidację audio działające zarówno ze źródeł, jak i w trybie PyInstaller.
-- Zachowano bezpieczny handoff updatera Windows z 1.3.8: DCC kończy pobieranie, zamyka Qt, ukryty helper czeka na zniknięcie PID DCC, odczekuje dodatkowo i dopiero uruchamia instalator.
-- Zachowano poprawki NSIS: instalator nie kończy procesu DCC i nie uruchamia `--self-check` podczas instalacji.
-- Dodano test ścieżki aktualizacji `1.3.8 -> 1.3.9` oraz jednoznacznego wyboru instalatora Windows.
+- Poprawiono czytelność Application Store w motywach `Light` i `Day`, w tym Kategorie/Categories i powierzchnie wynikające z palety motywu bez wymuszonych ciemnych teł.
+- Dokończono jasne palety Repo Buildera oraz zabezpieczenie przed pokazywaniem lub zapisywaniem tymczasowej ścieżki PyInstaller `_MEI...` jako normalnej lokalizacji katalogu.
+- Odświeżanie kontenerów zachowuje pionowy i poziomy scroll, zaznaczenie oraz rozwinięte grupy.
+- Magnes kolumn jest domyślnie włączony i ma czytelny checkmark; separatory nagłówków używają pionowych uchwytów `⋮` bez sztucznych kolumn danych.
+- `Widok -> Motyw -> USTAWIENIA` jest pierwszą pozycją menu motywu, nad separatorem i listą motywów.
+- Dodano Theme Settings dla motywu wizualnego, neonu/akcentu, włączenia audio, niezależnego stylu dźwięku oraz głośności Master, intro i efektów z obsługą Save/Cancel rollback.
+- Usunięto ciągły ambient loop. Audio używa krótkiego one-shot intro przy starcie aplikacji, zmianie motywu gdy profil jest Auto, zmianie profilu audio oraz przejściu audio OFF -> ON, po czym następuje cisza.
+- Styl audio jest niezależny od motywu wizualnego i obsługuje `Auto`, `Night`, `Black`, `Dark`, `Light` oraz `Day`.
+- Domyślne poziomy głośności: Master 100%, Theme intro 35%, Effects 65%; stare `ambient_volume` jest migrowane do `intro_volume` gdy potrzeba.
+- Dodano pięć odrębnych proceduralnych profili: Night rock/metal, Black electronic/neon/glass, Dark sci-fi, Light fresh/clean i Day mystical/fog/harbor.
+- Finalny pakiet zawiera 65 lokalnie generowanych plików WAV: 13 wymaganych one-shotów dla każdego z pięciu profili, bez zewnętrznych sampli i nagrań.
+- Logika audio kontenerów używa pierwszego snapshotu jako baseline, reaguje tylko na rzeczywiste przejścia stopped/running, paruje restart requested/completed, obsługuje host_connected i deduplikuje eventy.
+- Dodano osobne finalne ikony i metadane Windows dla DCC i Repo Buildera, stabilne AppUserModelID oraz niedestrukcyjne odświeżanie ikon powłoki.
+- Skróty Start Menu: `DCC - Docker Control Center`, `DCC Repo Builder` i `Uninstall DCC`.
+- Manualny instalator NSIS wykrywa uruchomione DCC i prosi o jego łagodne zamknięcie z potwierdzeniem użytkownika; nie używa wymuszonego `taskkill /F`.
+- Zachowano handoff updatera: oczekiwanie na zakończenie PID DCC, dodatkowe 1200 ms, uruchomienie instalatora i relaunch DCC po udanej aktualizacji.
+- Pakiet Linux zawiera oba wpisy desktop, oba zestawy ikon i komplet audio.
 
 ## Packages / Pakiety
 
