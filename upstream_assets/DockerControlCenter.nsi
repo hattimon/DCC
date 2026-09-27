@@ -4,6 +4,7 @@ RequestExecutionLevel user
 !include "LogicLib.nsh"
 !include "x64.nsh"
 !include "FileFunc.nsh"
+!include "nsDialogs.nsh"
 
 !define APP_NAME "DCC - Docker Control Center"
 !define APP_EXE "DockerControlCenter.exe"
@@ -25,9 +26,11 @@ ShowUninstDetails show
 
 Var UpdateMode
 Var CloseAttempts
+Var LaunchDccCheckbox
 
 Page directory
 Page instfiles
+Page custom LaunchDccPage LaunchDccLeave
 UninstPage uninstConfirm
 UninstPage instfiles
 
@@ -80,7 +83,13 @@ check_running:
   IfSilent silent_close interactive_close
 
 interactive_close:
-  MessageBox MB_ICONEXCLAMATION|MB_OKCANCEL|MB_DEFBUTTON1 "DCC jest uruchomione i musi zostać zamknięte.$\r$\n$\r$\nOK = Zamknij i kontynuuj$\r$\nAnuluj = Anuluj instalację." IDOK do_close IDCANCEL init_cancel
+  System::Call 'kernel32::GetUserDefaultUILanguage() i .r2'
+  IntCmp $2 1045 close_prompt_pl close_prompt_en close_prompt_en
+close_prompt_pl:
+  MessageBox MB_ICONEXCLAMATION|MB_OKCANCEL|MB_DEFBUTTON1 "DCC jest obecnie uruchomione. Aplikacja musi zostać zamknięta przed instalacją lub aktualizacją. Zamknąć DCC i kontynuować?" IDOK do_close IDCANCEL init_cancel
+  Goto init_cancel
+close_prompt_en:
+  MessageBox MB_ICONEXCLAMATION|MB_OKCANCEL|MB_DEFBUTTON1 "DCC is currently running. The application must be closed before installation or update. Close DCC and continue?" IDOK do_close IDCANCEL init_cancel
 
 silent_close:
 do_close:
@@ -91,7 +100,13 @@ do_close:
   IfSilent init_cancel close_retry
 
 close_retry:
-  MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "Nie udało się zamknąć wszystkich procesów DCC. Zamknij ręcznie DCC / DCC Repo Builder, a następnie wybierz Ponów próbę." IDRETRY check_running IDCANCEL init_cancel
+  System::Call 'kernel32::GetUserDefaultUILanguage() i .r2'
+  IntCmp $2 1045 close_retry_pl close_retry_en close_retry_en
+close_retry_pl:
+  MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "Nie udało się zamknąć DCC. Wybierz Ponów po zamknięciu aplikacji albo Anuluj instalację." IDRETRY check_running IDCANCEL init_cancel
+  Goto init_cancel
+close_retry_en:
+  MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "DCC could not be closed. Select Retry after closing the application, or Cancel installation." IDRETRY check_running IDCANCEL init_cancel
 
 init_cancel:
   Abort
@@ -103,6 +118,9 @@ Section "Install"
   SetOutPath "$InstDir"
   File "/oname=${APP_EXE}" "..\dist\DockerControlCenter.exe"
   File "/oname=${REPO_BUILDER_EXE}" "..\dist\DCCRepoBuilder.exe"
+  SetOutPath "$PLUGINSDIR"
+  File "..\packaging\windows\set_shortcut_app_id.ps1"
+  SetOutPath "$InstDir"
 
   ; Runtime self-checks are executed on the exact PyInstaller binaries by the
   ; build pipeline. Do not start one-file EXEs from inside NSIS while replacing
@@ -167,20 +185,56 @@ openssh_done:
   Delete "$DESKTOP\DCC - Docker Control Center.lnk"
   CreateShortcut "$DESKTOP\DCC - Docker Control Center.lnk" "$InstDir\${APP_EXE}" "" "$InstDir\${APP_EXE}" 0
 
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\set_shortcut_app_id.ps1" -MainShortcut "$SMPROGRAMS\${START_MENU_DIR}\DCC - Docker Control Center.lnk" -MainAppId "Hattimon.DCC" -RepoShortcut "$SMPROGRAMS\${START_MENU_DIR}\DCC Repo Builder.lnk" -RepoAppId "Hattimon.DCC.RepoBuilder"' $0
+  IntCmp $0 0 shortcut_ids_ready shortcut_ids_failed shortcut_ids_failed
+shortcut_ids_failed:
+  MessageBox MB_ICONSTOP "Windows could not assign DCC shortcut identities. Installation cannot continue."
+  Abort
+shortcut_ids_ready:
+  Delete "$PLUGINSDIR\set_shortcut_app_id.ps1"
+
   ; Non-destructive shell refresh for shortcut/icon metadata.
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 
   StrCmp $UpdateMode "1" launch_after_install
-  IfSilent install_done manual_launch_prompt
-
-manual_launch_prompt:
-  MessageBox MB_ICONINFORMATION|MB_YESNO|MB_DEFBUTTON1 "DCC ${APP_VERSION} zostało zainstalowane poprawnie.$\r$\n$\r$\nUruchomić DCC teraz?" IDYES launch_after_install IDNO install_done
+  Goto install_done
 
 launch_after_install:
   Exec '"$InstDir\${APP_EXE}"'
 
 install_done:
 SectionEnd
+
+Function LaunchDccPage
+  StrCmp $UpdateMode "1" launch_page_done
+  IfSilent launch_page_done
+  nsDialogs::Create 1018
+  Pop $0
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+  System::Call 'kernel32::GetUserDefaultUILanguage() i .r2'
+  IntCmp $2 1045 launch_label_pl launch_label_en launch_label_en
+launch_label_pl:
+  ${NSD_CreateCheckbox} 0 0 100% 12u "Uruchom DCC"
+  Goto launch_checkbox_ready
+launch_label_en:
+  ${NSD_CreateCheckbox} 0 0 100% 12u "Launch DCC"
+launch_checkbox_ready:
+  Pop $LaunchDccCheckbox
+  ${NSD_Check} $LaunchDccCheckbox
+  nsDialogs::Show
+  Return
+launch_page_done:
+  Abort
+FunctionEnd
+
+Function LaunchDccLeave
+  ${NSD_GetState} $LaunchDccCheckbox $0
+  ${If} $0 == ${BST_CHECKED}
+    Exec '"$InstDir\${APP_EXE}"'
+  ${EndIf}
+FunctionEnd
 
 Section "Uninstall"
   Delete "$DESKTOP\DCC - Docker Control Center.lnk"
