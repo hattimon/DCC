@@ -184,3 +184,18 @@ Ponizsze zrzuty pokazuja interfejs w jezyku angielskim.
 - `images/` - README screenshots
 - `icon.ico` / `icon.png` - application icons
 - `assets/audio/` - procedural theme ambient and Docker operation sound effects
+
+
+## Support the project / Wesprzyj projekt
+
+If DCC is useful to you, you can support its continued development on Ko-fi.
+
+Jeżeli DCC jest dla Ciebie przydatny, możesz wesprzeć dalszy rozwój projektu na Ko-fi.
+
+[https://ko-fi.com/hattimon](https://ko-fi.com/hattimon)
+
+## License
+
+DCC is licensed under the MIT License. See [LICENSE](LICENSE).
+
+Projekt DCC jest udostępniany na licencji MIT.
