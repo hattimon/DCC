@@ -71,7 +71,7 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
         with (
             patch.object(dcc.os, "name", "posix"),
             patch.object(dcc.shutil, "which", return_value="/usr/bin/id"),
-            patch.object(dcc.subprocess, "run", side_effect=[configured, active]),
+            patch.object(dcc, "run_external_process", side_effect=[configured, active]),
         ):
             configured_groups = dcc.MainWindow._linux_user_groups(stub, configured=True)
             active_groups = dcc.MainWindow._linux_user_groups(stub, configured=False)
@@ -123,7 +123,7 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
             patch.object(dcc.os, "name", "posix"),
             patch.dict(dcc.os.environ, {}, clear=True),
             patch.object(dcc.shutil, "which", side_effect=lambda name: "/usr/bin/docker" if name == "docker" else None),
-            patch.object(dcc.subprocess, "run", side_effect=[context_show, context_inspect]),
+            patch.object(dcc, "run_external_process", side_effect=[context_show, context_inspect]),
         ):
             endpoint, source = dcc.MainWindow._linux_docker_endpoint_info(stub, refresh=True)
 
@@ -251,7 +251,7 @@ class LinuxDockerGroupAndLanguageTests(unittest.TestCase):
         with (
             patch.object(dcc.os, "name", "posix"),
             patch.object(dcc.shutil, "which", side_effect=lambda name: "/usr/bin/systemctl" if name == "systemctl" else None),
-            patch.object(dcc.subprocess, "run", return_value=started) as run,
+            patch.object(dcc, "run_external_process", return_value=started) as run,
         ):
             result = dcc.MainWindow.try_start_docker_desktop(stub)
 

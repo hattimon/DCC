@@ -994,7 +994,7 @@ class RepoBuilderWindow(QMainWindow):
         return Path(self.repo_root.text().strip()).expanduser()
 
     def _run_git(self, args: List[str], check: bool = True) -> subprocess.CompletedProcess:
-        return subprocess.run(
+        return dcc.run_external_process(
             ["git"] + list(args),
             cwd=str(self.repo_path()),
             text=True,
@@ -1012,7 +1012,7 @@ class RepoBuilderWindow(QMainWindow):
             webbrowser.open("https://cli.github.com/")
             return
         try:
-            status = subprocess.run(
+            status = dcc.run_external_process(
                 ["gh", "auth", "status", "--hostname", "github.com"],
                 text=True,
                 capture_output=True,
@@ -1023,7 +1023,7 @@ class RepoBuilderWindow(QMainWindow):
             flags = 0
             if os.name == "nt":
                 flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
-            subprocess.Popen(
+            dcc.start_external_process(
                 ["gh", "auth", "login", "--hostname", "github.com", "--web", "--git-protocol", "https"],
                 cwd=str(self.repo_path()),
                 creationflags=flags,
@@ -1037,7 +1037,7 @@ class RepoBuilderWindow(QMainWindow):
             if show_error:
                 QMessageBox.warning(self, "GitHub CLI required", "Install GitHub CLI (gh), then use GitHub login. No token is stored by Repo Builder.")
             return False
-        result = subprocess.run(
+        result = dcc.run_external_process(
             ["gh", "auth", "status", "--hostname", "github.com"],
             cwd=str(self.repo_path()),
             text=True,

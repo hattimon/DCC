@@ -7,8 +7,9 @@ from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import QCoreApplication, QEvent, QRectF, QSettings, Qt, QTimer
+from PyQt6.QtCore import QCoreApplication, QEvent, QPoint, QRectF, QSettings, Qt, QTimer
 from PyQt6.QtGui import QColor, QPixmap
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QCheckBox, QHeaderView, QTableWidget, QTableWidgetItem, QWidget
 
 import DockerControlCenter as dcc
@@ -384,6 +385,206 @@ class UiImprovementTests(unittest.TestCase):
         self.assertEqual(header.sectionResizeMode(0), QHeaderView.ResizeMode.Interactive)
         self.assertEqual(header._grip_color.name().lower(), accent.name().lower())
         _dispose_widget(table)
+
+    def test_resize_grips_are_visible_in_the_rendered_header_and_keep_resize_sort(self):
+        table = QTableWidget(2, 4)
+        table.setHorizontalHeaderLabels(["Name", "Image", "Status", "Ports"])
+        header = dcc.ResizeGripHeader(Qt.Orientation.Horizontal, table)
+        table.setHorizontalHeader(header)
+        table.setStyleSheet(
+            "QHeaderView::section { background: #30343b; color: #eeeeee; "
+            "padding: 5px 10px 5px 6px; border: 0; }"
+        )
+        for column in range(table.columnCount()):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Interactive)
+            table.setColumnWidth(column, 120)
+        header.setSectionsClickable(True)
+        header.setGripColor("#ff334d")
+        header.setSortIndicatorShown(True)
+        header.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
+        table.resize(560, 160)
+        table.show()
+        self.app.processEvents()
+
+        def accent_pixels(section):
+            pixmap = header.viewport().grab()
+            self.assertIsInstance(pixmap, QPixmap)
+            image = pixmap.toImage()
+            boundary = header.sectionViewportPosition(section) + header.sectionSize(section)
+            center_y = header.height() // 2
+            hits = 0
+            for y in range(max(0, center_y - 8), min(image.height(), center_y + 9)):
+                for x in range(max(0, boundary - 8), min(image.width(), boundary)):
+                    color = image.pixelColor(x, y)
+                    if color.red() > 180 and color.green() < 130 and color.blue() < 150:
+                        hits += 1
+            return hits
+
+        self.assertGreaterEqual(accent_pixels(0), 18, "the first real header divider needs a visible accent grip")
+        self.assertLess(accent_pixels(3), 8, "the final visible section must not show a resize grip")
+
+        clicked = []
+        header.sectionClicked.connect(clicked.append)
+        click_x = header.sectionViewportPosition(1) + header.sectionSize(1) // 2
+        QTest.mouseClick(
+            header.viewport(),
+            Qt.MouseButton.LeftButton,
+            pos=QPoint(click_x, header.height() // 2),
+        )
+        self.assertEqual(clicked, [1])
+
+        old_width = header.sectionSize(0)
+        divider_x = header.sectionViewportPosition(0) + old_width - 1
+        middle_y = header.height() // 2
+        QTest.mousePress(header.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(divider_x, middle_y))
+        QTest.mouseMove(header.viewport(), QPoint(divider_x + 24, middle_y), delay=80)
+        QTest.mouseRelease(header.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(divider_x + 24, middle_y))
+        self.app.processEvents()
+        self.assertGreaterEqual(header.sectionSize(0), old_width + 18)
+        self.assertGreaterEqual(accent_pixels(0), 18, "the grip must follow the resized section boundary")
+        _dispose_widget(table)
+
+    def test_header_grips_render_with_contrast_in_all_five_themes(self):
+        table = QTableWidget(1, 3)
+        table.setHorizontalHeaderLabels(["Name", "Status", "CPU"])
+        header = dcc.ResizeGripHeader(Qt.Orientation.Horizontal, table)
+        table.setHorizontalHeader(header)
+        for column in range(table.columnCount()):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Interactive)
+            table.setColumnWidth(column, 110)
+        header.setStretchLastSection(False)
+        table.resize(390, 120)
+        table.show()
+
+        for theme in ("day", "light", "dark", "black", "night"):
+            colors = dcc.palette_for_theme(theme)
+            table.setStyleSheet(
+                "QHeaderView::section { background: %s; color: %s; padding: 4px 8px; border: 0; }"
+                % (colors["solid0"], colors["fg"])
+            )
+            grip_color = QColor(dcc.effective_accent_color(theme, "#33f0ff"))
+            header.setGripColor(grip_color.name())
+            QApplication.processEvents()
+
+            image = header.viewport().grab().toImage()
+            boundary = header.sectionViewportPosition(0) + header.sectionSize(0)
+            center_y = header.height() // 2
+            background = QColor(colors["solid0"])
+            hits = 0
+            for y in range(max(0, center_y - 8), min(image.height(), center_y + 9)):
+                for x in range(max(0, boundary - 8), min(image.width(), boundary)):
+                    color = image.pixelColor(x, y)
+                    if (
+                        abs(color.red() - grip_color.red()) <= 55
+                        and abs(color.green() - grip_color.green()) <= 55
+                        and abs(color.blue() - grip_color.blue()) <= 55
+                    ):
+                        hits += 1
+            self.assertGreaterEqual(hits, 12, f"{theme} needs a visible accent grip")
+            color_distance = (
+                abs(grip_color.red() - background.red())
+                + abs(grip_color.green() - background.green())
+                + abs(grip_color.blue() - background.blue())
+            )
+            self.assertGreater(color_distance, 100, f"{theme} accent should remain distinct from the header surface")
+            self.assertGreaterEqual(header.sectionSize(0), 24)
+            self.assertEqual(header.sectionResizeMode(0), QHeaderView.ResizeMode.Interactive)
+
+        _dispose_widget(table)
+
+    def test_frozen_child_processes_use_persistent_directory_and_clean_bootloader_state(self):
+        bundle = Path(r"C:\Users\Kosmo\AppData\Local\Temp\_MEI123456")
+        executable = Path(r"C:\Program Files\DCC\DockerControlCenter.exe")
+        base_environment = {
+            "PATH": os.pathsep.join((str(bundle), str(bundle / "bin"), r"C:\Windows\System32")),
+            "_PYI_APPLICATION_HOME_DIR": str(bundle),
+            "_PYI_PARENT_PROCESS_LEVEL": "1",
+            "PYINSTALLER_RESET_ENVIRONMENT": "1",
+            "KEEP_ME": "yes",
+        }
+
+        with (
+            patch.object(dcc.sys, "frozen", True, create=True),
+            patch.object(dcc.sys, "executable", str(executable)),
+            patch.object(dcc.sys, "_MEIPASS", str(bundle), create=True),
+        ):
+            self.assertEqual(dcc.application_working_directory(), executable.parent)
+            child_environment = dcc.external_process_environment(base_environment)
+            self.assertEqual(child_environment["PATH"], r"C:\Windows\System32")
+            self.assertEqual(child_environment["KEEP_ME"], "yes")
+            self.assertNotIn("_PYI_APPLICATION_HOME_DIR", child_environment)
+            self.assertNotIn("_PYI_PARENT_PROCESS_LEVEL", child_environment)
+            self.assertNotIn("PYINSTALLER_RESET_ENVIRONMENT", child_environment)
+
+            class FakeEnvironment:
+                values = dict(base_environment)
+
+                @classmethod
+                def systemEnvironment(cls):
+                    return cls()
+
+                def keys(self):
+                    return list(self.values)
+
+                def value(self, key):
+                    return self.values.get(key, "")
+
+                def remove(self, key):
+                    self.values.pop(key, None)
+
+                def insert(self, key, value):
+                    self.values[key] = value
+
+            class FakeProcess:
+                instance = None
+
+                def __init__(self):
+                    self.environment = None
+                    FakeProcess.instance = self
+
+                def setProgram(self, value):
+                    self.program = value
+
+                def setArguments(self, value):
+                    self.arguments = value
+
+                def setWorkingDirectory(self, value):
+                    self.working_directory = value
+
+                def setProcessEnvironment(self, value):
+                    self.environment = value
+
+                def startDetached(self):
+                    return True
+
+            with patch.object(dcc, "QProcess", FakeProcess), patch.object(dcc, "QProcessEnvironment", FakeEnvironment):
+                self.assertTrue(
+                    dcc.start_detached_process(
+                        str(executable), [], str(executable.parent), restart_frozen_application=True
+                    )
+                )
+            process = FakeProcess.instance
+            self.assertEqual(process.working_directory, str(executable.parent))
+            self.assertNotIn("_PYI_APPLICATION_HOME_DIR", process.environment.values)
+            self.assertEqual(process.environment.values["PYINSTALLER_RESET_ENVIRONMENT"], "1")
+
+    def test_theme_settings_intro_is_one_line_with_requested_section_spacing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings = QSettings(str(Path(tmp) / "dcc.ini"), QSettings.Format.IniFormat)
+            dialog = dcc.ThemeSettingsDialog(settings, dcc.TEXTS["PL"])
+            dialog.show()
+            self.app.processEvents()
+            intro_form = dialog.layout().itemAt(0).layout()
+            intro = intro_form.itemAt(0).widget()
+            form = intro_form.itemAt(1).layout()
+            visual_heading = form.itemAt(0).widget()
+            gap = visual_heading.y() - (intro.y() + intro.height())
+            self.assertEqual(intro.text(), "Ustawienia startowe i wygląd dla lokalnej integracji z Docker.")
+            self.assertFalse(intro.wordWrap())
+            self.assertLessEqual(intro.height(), intro.fontMetrics().lineSpacing() + 4)
+            self.assertGreaterEqual(gap, 8)
+            self.assertLessEqual(gap, 16)
+            _dispose_widget(dialog)
 
     def test_column_magnet_grips_and_scroll_state_contract_is_present(self):
         source = (ROOT / "DockerControlCenter.py").read_text(encoding="utf-8")

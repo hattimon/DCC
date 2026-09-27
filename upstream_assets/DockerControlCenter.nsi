@@ -1,4 +1,4 @@
-Unicode True
+﻿Unicode True
 ManifestDPIAware True
 RequestExecutionLevel user
 !include "LogicLib.nsh"
@@ -185,11 +185,28 @@ openssh_done:
   Delete "$DESKTOP\DCC - Docker Control Center.lnk"
   CreateShortcut "$DESKTOP\DCC - Docker Control Center.lnk" "$InstDir\${APP_EXE}" "" "$InstDir\${APP_EXE}" 0
 
-  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\set_shortcut_app_id.ps1" -MainShortcut "$SMPROGRAMS\${START_MENU_DIR}\DCC - Docker Control Center.lnk" -MainAppId "Hattimon.DCC" -RepoShortcut "$SMPROGRAMS\${START_MENU_DIR}\DCC Repo Builder.lnk" -RepoAppId "Hattimon.DCC.RepoBuilder"' $0
+  ClearErrors
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\set_shortcut_app_id.ps1" -MainShortcut "$SMPROGRAMS\${START_MENU_DIR}\DCC - Docker Control Center.lnk" -MainAppId "Hattimon.DCC" -RepoShortcut "$SMPROGRAMS\${START_MENU_DIR}\DCC Repo Builder.lnk" -RepoAppId "Hattimon.DCC.RepoBuilder" -LogPath "$InstDir\shortcut-appids.log"' $0
+  IfErrors shortcut_ids_helper_launch_failed
   IntCmp $0 0 shortcut_ids_ready shortcut_ids_failed shortcut_ids_failed
+  Goto shortcut_ids_ready
+shortcut_ids_helper_launch_failed:
+  StrCpy $0 -1
+  Goto shortcut_ids_failed
 shortcut_ids_failed:
-  MessageBox MB_ICONSTOP "Windows could not assign DCC shortcut identities. Installation cannot continue."
-  Abort
+  DetailPrint "WARNING: Shortcut AppUserModelIDs could not be assigned (exit code $0). Installation will continue."
+  FileOpen $1 "$InstDir\shortcut-appids.log" a
+  IfErrors shortcut_ids_warning_message
+  FileWrite $1 "NSIS: shortcut identity helper failed with exit code $0.$\r$\n"
+  FileClose $1
+shortcut_ids_warning_message:
+  System::Call 'kernel32::GetUserDefaultUILanguage() i .r2'
+  IntCmp $2 1045 shortcut_ids_warning_pl shortcut_ids_warning_en shortcut_ids_warning_en
+shortcut_ids_warning_pl:
+  MessageBox MB_ICONEXCLAMATION "Skróty utworzono, ale system Windows nie przypisał im identyfikatorów aplikacji. Instalacja będzie kontynuowana. Szczegóły zapisano w pliku shortcut-appids.log."
+  Goto shortcut_ids_ready
+shortcut_ids_warning_en:
+  MessageBox MB_ICONEXCLAMATION "The shortcuts were created, but Windows could not assign their application identities. Installation will continue. Details are in shortcut-appids.log."
 shortcut_ids_ready:
   Delete "$PLUGINSDIR\set_shortcut_app_id.ps1"
 

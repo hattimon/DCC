@@ -2,10 +2,34 @@ param(
     [Parameter(Mandatory = $true)][string]$MainShortcut,
     [Parameter(Mandatory = $true)][string]$MainAppId,
     [Parameter(Mandatory = $true)][string]$RepoShortcut,
-    [Parameter(Mandatory = $true)][string]$RepoAppId
+    [Parameter(Mandatory = $true)][string]$RepoAppId,
+    [string]$LogPath
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Write-ShortcutHelperLog([string]$Message) {
+    if ([string]::IsNullOrWhiteSpace($LogPath)) {
+        return
+    }
+    try {
+        $directory = Split-Path -Parent $LogPath
+        if ($directory -and -not (Test-Path -LiteralPath $directory)) {
+            New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        }
+        $stamp = [DateTime]::UtcNow.ToString('yyyy-MM-dd HH:mm:ss.fffZ')
+        Add-Content -LiteralPath $LogPath -Value "[$stamp] $Message" -Encoding UTF8
+    } catch {
+        [Console]::Error.WriteLine("Could not write shortcut identity log: $($_.Exception.Message)")
+    }
+}
+
+trap {
+    $message = $_.Exception.ToString()
+    Write-ShortcutHelperLog "ERROR: $message"
+    [Console]::Error.WriteLine($message)
+    exit 1
+}
 
 Add-Type -TypeDefinition @"
 using System;
@@ -50,6 +74,7 @@ public static class DccShortcutIdentity
     public static void Set(string shortcutPath, string appId)
     {
         object link = Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046")));
+        DccIPropertyStore store = null;
         IntPtr unknown = IntPtr.Zero;
         IntPtr storePointer = IntPtr.Zero;
         IntPtr appIdPointer = IntPtr.Zero;
@@ -59,9 +84,9 @@ public static class DccShortcutIdentity
             persist.Load(shortcutPath, 2);
             unknown = Marshal.GetIUnknownForObject(link);
             Guid propertyStoreId = PropertyStoreId;
-            int queryResult = Marshal.QueryInterface(unknown, in propertyStoreId, out storePointer);
+            int queryResult = Marshal.QueryInterface(unknown, ref propertyStoreId, out storePointer);
             Marshal.ThrowExceptionForHR(queryResult);
-            DccIPropertyStore store = (DccIPropertyStore)Marshal.GetObjectForIUnknown(storePointer);
+            store = (DccIPropertyStore)Marshal.GetObjectForIUnknown(storePointer);
             DccPropVariant value = new DccPropVariant { VariantType = 31 };
             appIdPointer = Marshal.StringToCoTaskMemUni(appId);
             value.StringValue = appIdPointer;
@@ -73,6 +98,7 @@ public static class DccShortcutIdentity
         finally
         {
             if (appIdPointer != IntPtr.Zero) Marshal.FreeCoTaskMem(appIdPointer);
+            if (store != null) Marshal.FinalReleaseComObject(store);
             if (storePointer != IntPtr.Zero) Marshal.Release(storePointer);
             if (unknown != IntPtr.Zero) Marshal.Release(unknown);
             if (link != null) Marshal.FinalReleaseComObject(link);
@@ -82,4 +108,6 @@ public static class DccShortcutIdentity
 "@
 
 [DccShortcutIdentity]::Set($MainShortcut, $MainAppId)
+Write-ShortcutHelperLog "Assigned '$MainAppId' to '$MainShortcut'."
 [DccShortcutIdentity]::Set($RepoShortcut, $RepoAppId)
+Write-ShortcutHelperLog "Assigned '$RepoAppId' to '$RepoShortcut'."

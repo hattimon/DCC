@@ -1,7 +1,7 @@
 import os
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -13,6 +13,104 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class Release139Tests(unittest.TestCase):
+    def test_external_process_run_resets_bundle_dll_path_only_during_spawn(self):
+        bundle = Path(r"C:\Users\Kosmo\AppData\Local\Temp\_MEI123456")
+        dll_path_changes = []
+        process = Mock()
+        process.args = ["tool.exe", "--version"]
+        process.communicate.return_value = ("tool 1.0\n", "")
+        process.poll.return_value = 0
+
+        def popen(*args, **kwargs):
+            self.assertEqual(dll_path_changes, [None])
+            self.assertNotIn("_PYI_PARENT_PROCESS_LEVEL", kwargs["env"])
+            self.assertNotIn(str(bundle), kwargs["env"]["PATH"])
+            self.assertEqual(kwargs["stdout"], dcc.subprocess.PIPE)
+            self.assertEqual(kwargs["stderr"], dcc.subprocess.PIPE)
+            return process
+
+        with (
+            patch.object(dcc, "_is_frozen_windows_application", return_value=True),
+            patch.object(dcc.sys, "frozen", True, create=True),
+            patch.object(dcc.sys, "_MEIPASS", str(bundle), create=True),
+            patch.dict(
+                dcc.os.environ,
+                {"PATH": f"{bundle};C:\\Windows\\System32", "_PYI_PARENT_PROCESS_LEVEL": "1"},
+                clear=True,
+            ),
+            patch.object(dcc, "_set_dll_search_directory", side_effect=dll_path_changes.append),
+            patch.object(dcc.subprocess, "Popen", side_effect=popen),
+        ):
+            result = dcc.run_external_process(
+                ["tool.exe", "--version"], capture_output=True, text=True, timeout=5, check=True
+            )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "tool 1.0\n")
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(dll_path_changes, [None, str(bundle)])
+
+    def test_external_process_popen_cleans_environment_and_restores_dll_path(self):
+        bundle = Path(r"C:\Users\Kosmo\AppData\Local\Temp\_MEI123456")
+        dll_path_changes = []
+        process = Mock()
+
+        def popen(*args, **kwargs):
+            self.assertEqual(dll_path_changes, [None])
+            self.assertNotIn("_PYI_PARENT_PROCESS_LEVEL", kwargs["env"])
+            self.assertNotIn(str(bundle), kwargs["env"]["PATH"])
+            return process
+
+        with (
+            patch.object(dcc, "_is_frozen_windows_application", return_value=True),
+            patch.object(dcc.sys, "frozen", True, create=True),
+            patch.object(dcc.sys, "_MEIPASS", str(bundle), create=True),
+            patch.dict(
+                dcc.os.environ,
+                {"PATH": f"{bundle};C:\\Windows\\System32", "_PYI_PARENT_PROCESS_LEVEL": "1"},
+                clear=True,
+            ),
+            patch.object(dcc, "_set_dll_search_directory", side_effect=dll_path_changes.append),
+            patch.object(dcc.subprocess, "Popen", side_effect=popen),
+        ):
+            result = dcc.start_external_process(["tool.exe", "--version"])
+
+        self.assertIs(result, process)
+        self.assertEqual(dll_path_changes, [None, str(bundle)])
+
+    def test_external_process_timeout_kills_and_drains_child(self):
+        process = Mock()
+        process.args = ["slow-tool.exe"]
+        process.communicate.side_effect = [
+            dcc.subprocess.TimeoutExpired(process.args, 0.01, output=b"partial"),
+            (b"complete", b""),
+        ]
+
+        with patch.object(dcc, "start_external_process", return_value=process):
+            with self.assertRaises(dcc.subprocess.TimeoutExpired) as caught:
+                dcc.run_external_process(process.args, capture_output=True, timeout=0.01)
+
+        process.kill.assert_called_once_with()
+        self.assertEqual(process.communicate.call_count, 2)
+        self.assertEqual(process.communicate.call_args_list[0].kwargs, {"input": None, "timeout": 0.01})
+        self.assertEqual(process.communicate.call_args_list[1].args, ())
+        self.assertEqual(caught.exception.output, b"complete")
+        self.assertEqual(caught.exception.stderr, b"")
+
+    def test_external_process_restores_bundle_dll_path_after_spawn_failure(self):
+        bundle = Path(r"C:\Users\Kosmo\AppData\Local\Temp\_MEI123456")
+        dll_path_changes = []
+
+        with (
+            patch.object(dcc, "_is_frozen_windows_application", return_value=True),
+            patch.object(dcc.sys, "_MEIPASS", str(bundle), create=True),
+            patch.object(dcc, "_set_dll_search_directory", side_effect=dll_path_changes.append),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "spawn failed"):
+                dcc._launch_with_system_dll_search_path(lambda: (_ for _ in ()).throw(RuntimeError("spawn failed")))
+
+        self.assertEqual(dll_path_changes, [None, str(bundle)])
+
     def test_release_version_metadata(self):
         self.assertEqual(dcc.APP_VERSION, "1.3.9")
         for path in (ROOT / "DockerControlCenter.nsi", ROOT / "upstream_assets" / "DockerControlCenter.nsi"):
@@ -66,6 +164,25 @@ class Release139Tests(unittest.TestCase):
             self.assertIn("DCC is currently running. The application must be closed before installation or update. Close DCC and continue?", nsi)
             self.assertIn("/DCCUPDATE=", nsi)
             self.assertIn("SHChangeNotify", nsi)
+
+    def test_nsis_source_is_utf8_and_shortcut_identity_failure_is_nonfatal(self):
+        root_nsi = ROOT / "DockerControlCenter.nsi"
+        build_nsi = ROOT / "upstream_assets" / "DockerControlCenter.nsi"
+        self.assertEqual(root_nsi.read_bytes(), build_nsi.read_bytes())
+        self.assertTrue(build_nsi.read_bytes().startswith(b"\xef\xbb\xbf"))
+        nsi = build_nsi.read_text(encoding="utf-8-sig")
+        self.assertIn("-LogPath \"$InstDir\\shortcut-appids.log\"", nsi)
+        self.assertIn("Skróty utworzono", nsi)
+        self.assertIn("Installation will continue.", nsi)
+        failed_block = nsi.split("shortcut_ids_failed:", 1)[1].split("shortcut_ids_ready:", 1)[0]
+        self.assertIn("DetailPrint", failed_block)
+        self.assertIn("FileWrite", failed_block)
+        self.assertNotIn("Abort", failed_block)
+
+        helper = (ROOT / "packaging" / "windows" / "set_shortcut_app_id.ps1").read_text(encoding="utf-8-sig")
+        self.assertIn("Marshal.QueryInterface(unknown, ref propertyStoreId, out storePointer)", helper)
+        self.assertNotIn("Marshal.QueryInterface(unknown, in propertyStoreId", helper)
+        self.assertIn("Write-ShortcutHelperLog", helper)
 
     def test_windows_identity_and_version_resources(self):
         source = (ROOT / "DockerControlCenter.py").read_text(encoding="utf-8")

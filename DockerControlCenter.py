@@ -13,6 +13,7 @@ import subprocess
 import shlex
 import sys
 import tempfile
+import threading
 import time
 import uuid
 import webbrowser
@@ -28,7 +29,7 @@ if os.name == 'nt':
 
 import docker
 import qdarktheme
-from PyQt6.QtCore import QEvent, QObject, QProcess, QPropertyAnimation, QRectF, QSettings, QSize, Qt, QThread, QTimer, QUrl, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QProcess, QProcessEnvironment, QPropertyAnimation, QRectF, QSettings, QSize, Qt, QThread, QTimer, QUrl, pyqtSignal
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 try:
     import paramiko
@@ -121,6 +122,140 @@ APP_DATA_DIR_NAME = "DockerControlCenter"
 MAIN_APP_USER_MODEL_ID = "Hattimon.DCC"
 REPO_BUILDER_APP_USER_MODEL_ID = "Hattimon.DCC.RepoBuilder"
 RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+_EXTERNAL_PROCESS_LAUNCH_LOCK = threading.RLock()
+
+
+def application_working_directory() -> Path:
+    """Return a persistent directory for child processes started by DCC."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def external_process_environment(base_environment: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """Keep one-file PyInstaller internals out of unrelated child processes."""
+    environment = dict(os.environ if base_environment is None else base_environment)
+    if not getattr(sys, "frozen", False):
+        return environment
+
+    for key in tuple(environment):
+        if key.upper().startswith("_PYI_") or key.upper() == "PYINSTALLER_RESET_ENVIRONMENT":
+            environment.pop(key, None)
+
+    bundle_path = str(getattr(sys, "_MEIPASS", "") or "").strip()
+    if bundle_path:
+        bundle_root = os.path.normcase(os.path.abspath(bundle_path))
+        path_key = next((key for key in environment if key.upper() == "PATH"), None)
+        if path_key:
+            retained = []
+            for entry in environment[path_key].split(os.pathsep):
+                candidate = entry.strip().strip('"')
+                if not candidate:
+                    retained.append(entry)
+                    continue
+                try:
+                    normalized = os.path.normcase(os.path.abspath(os.path.expandvars(candidate)))
+                    if os.path.commonpath((bundle_root, normalized)) == bundle_root:
+                        continue
+                except (OSError, ValueError):
+                    pass
+                retained.append(entry)
+            environment[path_key] = os.pathsep.join(retained)
+    return environment
+
+
+def _is_frozen_windows_application() -> bool:
+    return os.name == "nt" and bool(getattr(sys, "frozen", False))
+
+
+def _set_dll_search_directory(path: Optional[str]) -> None:
+    setter = ctypes.windll.kernel32.SetDllDirectoryW
+    setter.argtypes = [ctypes.c_wchar_p]
+    setter.restype = ctypes.c_int
+    if not setter(path):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+
+def _launch_with_system_dll_search_path(launch):
+    """Avoid passing PyInstaller's temporary DLL directory to child processes."""
+    if not _is_frozen_windows_application():
+        return launch()
+
+    bundle_directory = str(getattr(sys, "_MEIPASS", RESOURCE_DIR))
+    with _EXTERNAL_PROCESS_LAUNCH_LOCK:
+        _set_dll_search_directory(None)
+        try:
+            return launch()
+        finally:
+            _set_dll_search_directory(bundle_directory)
+
+
+def start_external_process(*popen_args, **popen_kwargs):
+    """Start a child with clean PyInstaller state and standard DLL lookup."""
+    popen_kwargs["env"] = external_process_environment(popen_kwargs.get("env"))
+    return _launch_with_system_dll_search_path(lambda: subprocess.Popen(*popen_args, **popen_kwargs))
+
+
+def run_external_process(*popen_args, input=None, capture_output=False, timeout=None, check=False, **popen_kwargs):
+    """Run a child while resetting the Windows DLL search path only at spawn."""
+    if input is not None:
+        if popen_kwargs.get("stdin") is not None:
+            raise ValueError("stdin and input arguments may not both be used.")
+        popen_kwargs["stdin"] = subprocess.PIPE
+    if capture_output:
+        if popen_kwargs.get("stdout") is not None or popen_kwargs.get("stderr") is not None:
+            raise ValueError("stdout and stderr arguments may not be used with capture_output.")
+        popen_kwargs["stdout"] = subprocess.PIPE
+        popen_kwargs["stderr"] = subprocess.PIPE
+
+    process = start_external_process(*popen_args, **popen_kwargs)
+    try:
+        stdout, stderr = process.communicate(input=input, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        process.kill()
+        stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(
+            process.args,
+            timeout,
+            output=stdout if stdout is not None else exc.output,
+            stderr=stderr if stderr is not None else exc.stderr,
+        ) from exc
+    except BaseException:
+        process.kill()
+        process.wait()
+        raise
+
+    completed = subprocess.CompletedProcess(process.args, process.poll(), stdout, stderr)
+    if check:
+        completed.check_returncode()
+    return completed
+
+
+def start_detached_process(
+    program: str,
+    arguments: List[str],
+    working_directory: str,
+    *,
+    restart_frozen_application: bool = False,
+) -> bool:
+    """Launch a detached process without carrying one-file worker state."""
+    process = QProcess()
+    process.setProgram(str(program))
+    process.setArguments([str(argument) for argument in arguments])
+    process.setWorkingDirectory(str(working_directory))
+    environment = QProcessEnvironment.systemEnvironment()
+    clean_environment = external_process_environment(
+        {entry: environment.value(entry) for entry in environment.keys()}
+    )
+    for entry in environment.keys():
+        if entry not in clean_environment:
+            environment.remove(entry)
+    for entry, value in clean_environment.items():
+        environment.insert(entry, value)
+    if restart_frozen_application and getattr(sys, "frozen", False):
+        environment.insert("PYINSTALLER_RESET_ENVIRONMENT", "1")
+    process.setProcessEnvironment(environment)
+    return bool(_launch_with_system_dll_search_path(process.startDetached))
 if os.name == "nt":
     USER_DATA_DIR = Path(os.getenv("APPDATA", str(Path.home()))) / APP_DATA_DIR_NAME
 else:
@@ -1197,7 +1332,7 @@ TEXTS = {
         "reset_failed": "Nie udało się wykonać resetu: {error}",
         "reset_restart_failed": "Reset został wykonany, ale DCC nie udało się uruchomić automatycznie ponownie. Uruchom aplikację ręcznie.",
         "app_settings_title": "Ustawienia aplikacji",
-        "app_settings_intro": "Ustawienia startowe i wyglądu dla lokalnej integracji z Docker.",
+        "app_settings_intro": "Ustawienia startowe i wygląd dla lokalnej integracji z Docker.",
         "app_settings_autostart_dd": "Uruchamiaj Docker Desktop w tle przy starcie DCC (tryb lokalny)",
         "app_settings_note": "Po włączeniu DCC sprawdza lokalny Docker przy starcie i automatycznie uruchamia Docker Desktop, jeśli potrzeba.",
         "app_settings_theme": "Motyw",
@@ -3326,7 +3461,7 @@ def detect_local_os_name() -> str:
 def launch_interactive_terminal(command: Optional[List[str]] = None, shell_command: str = ""):
     if os.name == "nt":
         argv = list(command or [])
-        subprocess.Popen(["cmd.exe", "/k"] + argv)
+        start_external_process(["cmd.exe", "/k"] + argv)
         return
 
     text = shell_command.strip()
@@ -3347,7 +3482,7 @@ def launch_interactive_terminal(command: Optional[List[str]] = None, shell_comma
     for binary, args in terminal_candidates:
         executable = shutil.which(binary)
         if executable:
-            subprocess.Popen([executable] + args)
+            start_external_process([executable] + args)
             return
     raise RuntimeError("No supported terminal emulator found (x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal or xterm).")
 
@@ -4319,29 +4454,51 @@ class ResizeGripHeader(QHeaderView):
 
     @staticmethod
     def _grip_dot_rects(rect) -> List[QRectF]:
-        x = rect.right() - 3.0
+        x = rect.right() - 2.0
         center_y = rect.center().y()
         return [
-            QRectF(x - 1.15, center_y + offset - 1.15, 2.3, 2.3)
+            QRectF(x - 2.0, center_y + offset - 2.0, 4.0, 4.0)
             for offset in (-4.0, 0.0, 4.0)
         ]
 
-    def paintSection(self, painter: QPainter, rect, logical_index: int):
-        super().paintSection(painter, rect, logical_index)
-        if (
-            not rect.isValid()
-            or logical_index < 0
-            or self.visualIndex(logical_index) >= self.count() - 1
-        ):
-            return
-        painter.save()
-        grip_color = QColor(self._grip_color)
-        grip_color.setAlpha(210)
+    def _has_following_visible_section(self, logical_index: int) -> bool:
+        visual_index = self.visualIndex(logical_index)
+        if visual_index < 0:
+            return False
+        for next_visual_index in range(visual_index + 1, self.count()):
+            next_logical_index = self.logicalIndex(next_visual_index)
+            if (
+                next_logical_index >= 0
+                and not self.isSectionHidden(next_logical_index)
+                and self.sectionSize(next_logical_index) > 0
+            ):
+                return True
+        return False
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(grip_color)
-        for dot_rect in self._grip_dot_rects(rect):
-            painter.drawEllipse(dot_rect)
-        painter.restore()
+        painter.setBrush(QColor(self._grip_color))
+        for logical_index in range(self.count()):
+            if self.isSectionHidden(logical_index) or not self._has_following_visible_section(logical_index):
+                continue
+            boundary = self.sectionViewportPosition(logical_index) + self.sectionSize(logical_index)
+            section_rect = QRectF(
+                self.sectionViewportPosition(logical_index),
+                0,
+                self.sectionSize(logical_index),
+                self.viewport().height(),
+            )
+            if not event.rect().intersects(section_rect.toRect()):
+                continue
+            marker_rect = QRectF(boundary - 6.0, 0, 6.0, self.viewport().height())
+            if not event.rect().intersects(marker_rect.toRect()):
+                continue
+            for dot_rect in self._grip_dot_rects(QRectF(boundary - 1.0, 0, 1.0, self.viewport().height())):
+                painter.drawEllipse(dot_rect)
+        painter.end()
 
 
 class VisibleCheckBox(NativeCheckBox):
@@ -4875,9 +5032,13 @@ class ThemeSettingsDialog(QDialog):
         self.resize(720, 620)
 
         layout = QVBoxLayout(self)
+        intro_form_layout = QVBoxLayout()
+        intro_form_layout.setContentsMargins(0, 0, 0, 0)
+        intro_form_layout.setSpacing(10)
         intro = QLabel(self.texts["app_settings_intro"])
-        intro.setWordWrap(True)
-        layout.addWidget(intro)
+        intro.setWordWrap(False)
+        intro.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        intro_form_layout.addWidget(intro)
 
         form = QFormLayout()
         visual_heading = QLabel(f"<b>{self.texts['theme_settings_visual_section']}</b>")
@@ -4970,7 +5131,8 @@ class ThemeSettingsDialog(QDialog):
         form.addRow(self.texts["audio_master_volume"], master_row)
         form.addRow(self.texts["audio_intro_volume"], intro_row)
         form.addRow(self.texts["audio_effects_volume"], effects_row)
-        layout.addLayout(form)
+        intro_form_layout.addLayout(form)
+        layout.addLayout(intro_form_layout)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
@@ -7520,7 +7682,7 @@ class WslDockerClient:
             base = f"{cli_name} {docker_args}"
             command = ["wsl.exe", "-d", self.distro, "sh", "-lc", base]
             try:
-                result = subprocess.run(
+                result = run_external_process(
                     command,
                     capture_output=True,
                     text=True,
@@ -10428,12 +10590,15 @@ class MainWindow(QMainWindow):
         if getattr(sys, "frozen", False):
             program = sys.executable
             arguments = list(sys.argv[1:])
-            working_directory = str(Path(sys.executable).resolve().parent)
         else:
             program = sys.executable
             arguments = [str(Path(__file__).resolve()), *sys.argv[1:]]
-            working_directory = str(Path(__file__).resolve().parent)
-        started, _pid = QProcess.startDetached(program, arguments, working_directory)
+        started = start_detached_process(
+            program,
+            arguments,
+            str(application_working_directory()),
+            restart_frozen_application=True,
+        )
         if not started:
             QMessageBox.warning(self, self.texts["msg_warning"], self.texts["reset_restart_failed"])
             return
@@ -10535,18 +10700,25 @@ class MainWindow(QMainWindow):
         else:
             commands.append(["/usr/bin/dcc-repo-builder"])
             commands.append([str(executable_dir / "dcc-repo-builder")])
-        for path in (
-            Path(__file__).resolve().parent / "RepoBuilder.py",
-            RESOURCE_DIR / "RepoBuilder.py",
-        ):
-            if path.is_file():
-                commands.append([sys.executable, str(path)])
+        if not getattr(sys, "frozen", False):
+            for path in (
+                Path(__file__).resolve().parent / "RepoBuilder.py",
+                RESOURCE_DIR / "RepoBuilder.py",
+            ):
+                if path.is_file():
+                    commands.append([sys.executable, str(path)])
         for command in commands:
             executable = Path(command[0]) if os.path.isabs(command[0]) else None
             if executable is not None and not executable.exists():
                 continue
             try:
-                subprocess.Popen(command, cwd=str(Path(__file__).resolve().parent), creationflags=CREATE_NO_WINDOW)
+                start_external_process(
+                    command,
+                    cwd=str(application_working_directory()),
+                    env=external_process_environment(),
+                    close_fds=True,
+                    creationflags=CREATE_NO_WINDOW,
+                )
                 return
             except Exception:
                 continue
@@ -10774,7 +10946,7 @@ class MainWindow(QMainWindow):
                         self.texts["info_update_linux_auth_title"],
                         self.texts["info_update_linux_auth"],
                     )
-                    subprocess.Popen(["xdg-open", package_path], cwd=str(Path(path).parent))
+                    start_external_process(["xdg-open", package_path], cwd=str(Path(path).parent))
                     self.statusBar().showMessage(self.texts["info_update_linux_installing"])
                     return
                 else:
@@ -10867,7 +11039,7 @@ try {
         )
 
         creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        subprocess.Popen(
+        start_external_process(
             [
                 powershell,
                 "-NoProfile",
@@ -11046,7 +11218,7 @@ try {
             self.wsl_combo.addItem(self.texts["wsl_none"])
             return
         try:
-            result = subprocess.run(["wsl.exe", "-l", "-q"], capture_output=True, timeout=10)
+            result = run_external_process(["wsl.exe", "-l", "-q"], capture_output=True, timeout=10)
             stdout = self.decode_wsl_output(result.stdout)
             stderr = self.decode_wsl_output(result.stderr)
             if result.returncode != 0:
@@ -11472,7 +11644,7 @@ try {
         return docker.DockerClient(base_url=profile.resolved_base_url(), timeout=DOCKER_HTTP_TIMEOUT)
 
     def _run_subprocess_stream(self, command: List[str], emit_line):
-        process = subprocess.Popen(
+        process = start_external_process(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -11925,7 +12097,7 @@ try {
         dpkg_query = shutil.which("dpkg-query")
         if dpkg_query:
             try:
-                result = subprocess.run(
+                result = run_external_process(
                     [dpkg_query, "-W", "-f=${Status}", "docker-desktop"],
                     capture_output=True,
                     text=True,
@@ -11957,7 +12129,7 @@ try {
         systemctl = shutil.which("systemctl")
         if systemctl:
             try:
-                result = subprocess.run(
+                result = run_external_process(
                     [systemctl, "--user", "is-active", "--quiet", "docker-desktop"],
                     capture_output=True,
                     text=True,
@@ -12070,7 +12242,7 @@ try {
         docker_cli = shutil.which("docker")
         if not endpoint and docker_cli:
             try:
-                context_result = subprocess.run(
+                context_result = run_external_process(
                     [docker_cli, "context", "show"],
                     capture_output=True,
                     text=True,
@@ -12080,7 +12252,7 @@ try {
                 )
                 context_name = context_result.stdout.strip() if context_result.returncode == 0 else ""
                 if context_name:
-                    inspect_result = subprocess.run(
+                    inspect_result = run_external_process(
                         [docker_cli, "context", "inspect", context_name],
                         capture_output=True,
                         text=True,
@@ -12155,7 +12327,7 @@ try {
                 return set()
             command.append(username)
         try:
-            result = subprocess.run(
+            result = run_external_process(
                 command,
                 capture_output=True,
                 text=True,
@@ -12203,7 +12375,12 @@ try {
             return False
         try:
             program, arguments, working_directory = self._linux_docker_group_relaunch_command()
-            started, _pid = QProcess.startDetached(program, arguments, working_directory)
+            started = start_detached_process(
+                program,
+                arguments,
+                working_directory,
+                restart_frozen_application=True,
+            )
         except Exception:
             return False
         if not started:
@@ -12400,12 +12577,12 @@ try {
             candidate = self.docker_desktop_path()
             if candidate is not None:
                 try:
-                    subprocess.Popen([str(candidate)])
+                    start_external_process([str(candidate)])
                     return True
                 except Exception:
                     pass
             try:
-                subprocess.Popen("start \"\" \"docker-desktop:\"", shell=True, creationflags=CREATE_NO_WINDOW)
+                start_external_process("start \"\" \"docker-desktop:\"", shell=True, creationflags=CREATE_NO_WINDOW)
                 return True
             except Exception:
                 return False
@@ -12415,7 +12592,7 @@ try {
         systemctl = shutil.which("systemctl")
         if systemctl:
             try:
-                result = subprocess.run(
+                result = run_external_process(
                     [systemctl, "--user", "start", "docker-desktop"],
                     capture_output=True,
                     text=True,
@@ -12430,7 +12607,7 @@ try {
         candidate = self.linux_docker_desktop_path()
         if candidate is not None:
             try:
-                subprocess.Popen(
+                start_external_process(
                     [str(candidate)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
@@ -12700,7 +12877,16 @@ try {
             return
         if not profile.tunnel_command.strip():
             raise RuntimeError("Brak komendy tunelu dla tego profilu.")
-        self.tunnel_process = subprocess.Popen(profile.tunnel_command, cwd=str(PROFILE_FILE.parent), creationflags=CREATE_NO_WINDOW, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+        self.tunnel_process = start_external_process(
+            profile.tunnel_command,
+            cwd=str(PROFILE_FILE.parent),
+            env=external_process_environment(),
+            close_fds=True,
+            creationflags=CREATE_NO_WINDOW,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            shell=True,
+        )
 
     def start_profile_connection(self):
         profile = self.selected_profile()
@@ -13020,10 +13206,16 @@ try {
         if os.name != "nt":
             launch_interactive_terminal(shell_command=command)
             return
+        arguments = ["powershell.exe", "-NoExit"]
         if command:
-            subprocess.Popen(["powershell.exe", "-NoExit", "-Command", command])
-        else:
-            subprocess.Popen(["powershell.exe", "-NoExit"])
+            arguments.extend(["-Command", command])
+        start_external_process(
+            arguments,
+            cwd=str(application_working_directory()),
+            env=external_process_environment(),
+            close_fds=True,
+            creationflags=CREATE_NO_WINDOW,
+        )
 
     def open_infra_terminal(self):
         if self.current_backend == "remote":
@@ -13104,7 +13296,7 @@ try {
             commands.extend([["reboot"], ["shutdown", "-r", "now"]])
         for cmd in commands:
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=6)
+                result = run_external_process(cmd, capture_output=True, text=True, timeout=6)
                 if result.returncode == 0:
                     return True
             except Exception:
@@ -13123,13 +13315,13 @@ try {
         ]
         for cmd in commands:
             try:
-                result = subprocess.run(["wsl.exe", "-d", distro, "sh", "-lc", cmd], capture_output=True, text=True, timeout=8)
+                result = run_external_process(["wsl.exe", "-d", distro, "sh", "-lc", cmd], capture_output=True, text=True, timeout=8)
                 if result.returncode == 0:
                     return True
             except Exception:
                 continue
         try:
-            result = subprocess.run(["wsl.exe", "-t", distro], capture_output=True, text=True, timeout=8)
+            result = run_external_process(["wsl.exe", "-t", distro], capture_output=True, text=True, timeout=8)
             if result.returncode == 0:
                 return True
         except Exception:
