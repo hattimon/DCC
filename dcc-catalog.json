@@ -174,8 +174,8 @@
       "homepage_url": "https://dozzle.dev/",
       "icon_text": "🛠",
       "upstream_repo": "amir20/dozzle",
-      "latest_release": "v11.1.1",
-      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.1.1",
+      "latest_release": "v11.1.2",
+      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.1.2",
       "icon_url": "catalog/media/icons/dozzle.png"
     },
     {
@@ -230,8 +230,8 @@
       "homepage_url": "https://changedetection.io/",
       "icon_text": "📊",
       "upstream_repo": "dgtlmoon/changedetection.io",
-      "latest_release": "0.60.7",
-      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.7",
+      "latest_release": "0.60.8",
+      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.8",
       "icon_url": "catalog/media/icons/changedetection-io.png"
     },
     {
@@ -1812,8 +1812,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.152.0",
-      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.152.0",
+      "latest_release": "v1.153.0",
+      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.153.0",
       "icon_url": "catalog/media/icons/victoriametrics.png"
     },
     {
