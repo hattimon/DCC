@@ -1853,8 +1853,8 @@
       "security_exposure": "reverse_proxy_required",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v2.36.1",
-      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.36.1",
+      "latest_release": "v2.37.0",
+      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.37.0",
       "icon_url": "catalog/media/icons/audiobookshelf.png"
     },
     {
