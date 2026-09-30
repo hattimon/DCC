@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.34.4",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.34.4",
+      "latest_release": "v0.35.0",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.35.0",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -84,8 +84,8 @@
       "homepage_url": "https://nocodb.com/",
       "icon_text": "⚙",
       "upstream_repo": "nocodb/nocodb",
-      "latest_release": "2026.09.0",
-      "latest_release_url": "https://github.com/nocodb/nocodb/releases/tag/2026.09.0",
+      "latest_release": "2026.09.1",
+      "latest_release_url": "https://github.com/nocodb/nocodb/releases/tag/2026.09.1",
       "icon_url": "catalog/media/icons/nocodb.png"
     },
     {
@@ -174,8 +174,8 @@
       "homepage_url": "https://dozzle.dev/",
       "icon_text": "🛠",
       "upstream_repo": "amir20/dozzle",
-      "latest_release": "v11.1.2",
-      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.1.2",
+      "latest_release": "v11.1.3",
+      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.1.3",
       "icon_url": "catalog/media/icons/dozzle.png"
     },
     {
@@ -917,8 +917,8 @@
       "homepage_url": "https://about.gitea.com/",
       "icon_text": "🛠",
       "upstream_repo": "go-gitea/gitea",
-      "latest_release": "v1.27.3",
-      "latest_release_url": "https://github.com/go-gitea/gitea/releases/tag/v1.27.3",
+      "latest_release": "v28.0.0",
+      "latest_release_url": "https://github.com/go-gitea/gitea/releases/tag/v28.0.0",
       "icon_url": "catalog/media/icons/gitea.png"
     },
     {
@@ -1853,8 +1853,8 @@
       "security_exposure": "reverse_proxy_required",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v2.37.0",
-      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.37.0",
+      "latest_release": "v2.37.1",
+      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.37.1",
       "icon_url": "catalog/media/icons/audiobookshelf.png"
     },
     {
