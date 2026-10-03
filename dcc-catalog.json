@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.35.0",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.35.0",
+      "latest_release": "v0.35.1",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.35.1",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -202,8 +202,8 @@
       "homepage_url": "https://beszel.dev/",
       "icon_text": "📊",
       "upstream_repo": "henrygd/beszel",
-      "latest_release": "v0.20.0",
-      "latest_release_url": "https://github.com/henrygd/beszel/releases/tag/v0.20.0",
+      "latest_release": "v0.21.0",
+      "latest_release_url": "https://github.com/henrygd/beszel/releases/tag/v0.21.0",
       "icon_url": "catalog/media/icons/beszel-hub.png"
     },
     {
@@ -1405,8 +1405,8 @@
       "homepage_url": "https://vikunja.io/",
       "icon_text": "✅",
       "upstream_repo": "go-vikunja/vikunja",
-      "latest_release": "v2.6.0",
-      "latest_release_url": "https://github.com/go-vikunja/vikunja/releases/tag/v2.6.0",
+      "latest_release": "v2.7.0",
+      "latest_release_url": "https://github.com/go-vikunja/vikunja/releases/tag/v2.7.0",
       "icon_url": "catalog/media/icons/vikunja.png"
     },
     {
@@ -1461,8 +1461,8 @@
       "homepage_url": "https://actualbudget.org/",
       "icon_text": "💰",
       "upstream_repo": "actualbudget/actual",
-      "latest_release": "v26.9.0",
-      "latest_release_url": "https://github.com/actualbudget/actual/releases/tag/v26.9.0",
+      "latest_release": "v26.10.0",
+      "latest_release_url": "https://github.com/actualbudget/actual/releases/tag/v26.10.0",
       "icon_url": "catalog/media/icons/actual-budget.png"
     },
     {
