@@ -112,8 +112,8 @@
       "homepage_url": "https://www.stirlingpdf.com/",
       "icon_text": "🧰",
       "upstream_repo": "Stirling-Tools/Stirling-PDF",
-      "latest_release": "v3.0.2",
-      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.0.2",
+      "latest_release": "v3.1.0",
+      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.1.0",
       "icon_url": "catalog/media/icons/stirling-pdf.png"
     },
     {
@@ -174,8 +174,8 @@
       "homepage_url": "https://dozzle.dev/",
       "icon_text": "🛠",
       "upstream_repo": "amir20/dozzle",
-      "latest_release": "v11.2.0",
-      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.2.0",
+      "latest_release": "v11.3.0",
+      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.3.0",
       "icon_url": "catalog/media/icons/dozzle.png"
     },
     {
@@ -943,8 +943,8 @@
       "homepage_url": "https://jellyfin.org/",
       "icon_text": "🎬",
       "upstream_repo": "jellyfin/jellyfin",
-      "latest_release": "v12.1",
-      "latest_release_url": "https://github.com/jellyfin/jellyfin/releases/tag/v12.1",
+      "latest_release": "v12.2",
+      "latest_release_url": "https://github.com/jellyfin/jellyfin/releases/tag/v12.2",
       "icon_url": "catalog/media/icons/jellyfin.png"
     },
     {
@@ -1343,8 +1343,8 @@
       "homepage_url": "https://github.com/dani-garcia/vaultwarden",
       "icon_text": "🔐",
       "upstream_repo": "dani-garcia/vaultwarden",
-      "latest_release": "1.37.3",
-      "latest_release_url": "https://github.com/dani-garcia/vaultwarden/releases/tag/1.37.3",
+      "latest_release": "1.37.4",
+      "latest_release_url": "https://github.com/dani-garcia/vaultwarden/releases/tag/1.37.4",
       "icon_url": "catalog/media/icons/vaultwarden.png"
     },
     {
@@ -1597,8 +1597,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.19.1",
-      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.19.1",
+      "latest_release": "v1.19.2",
+      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.19.2",
       "icon_url": "catalog/media/icons/qdrant.png"
     },
     {
