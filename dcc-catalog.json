@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.35.1",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.35.1",
+      "latest_release": "v0.40.0",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.0",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -917,8 +917,8 @@
       "homepage_url": "https://about.gitea.com/",
       "icon_text": "🛠",
       "upstream_repo": "go-gitea/gitea",
-      "latest_release": "v28.0.0",
-      "latest_release_url": "https://github.com/go-gitea/gitea/releases/tag/v28.0.0",
+      "latest_release": "v28.1.0",
+      "latest_release_url": "https://github.com/go-gitea/gitea/releases/tag/v28.1.0",
       "icon_url": "catalog/media/icons/gitea.png"
     },
     {
