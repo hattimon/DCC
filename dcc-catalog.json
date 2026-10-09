@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.40.1",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.1",
+      "latest_release": "v0.40.2",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.2",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
