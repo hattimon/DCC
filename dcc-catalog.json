@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.40.2",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.2",
+      "latest_release": "v0.40.3",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.3",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -174,8 +174,8 @@
       "homepage_url": "https://dozzle.dev/",
       "icon_text": "🛠",
       "upstream_repo": "amir20/dozzle",
-      "latest_release": "v11.3.0",
-      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.3.0",
+      "latest_release": "v11.3.1",
+      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.3.1",
       "icon_url": "catalog/media/icons/dozzle.png"
     },
     {
@@ -630,8 +630,8 @@
       "homepage_url": "https://openwebui.com/",
       "icon_text": "💬",
       "upstream_repo": "open-webui/open-webui",
-      "latest_release": "v0.11.4",
-      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.11.4",
+      "latest_release": "v0.12.0",
+      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.12.0",
       "icon_url": "catalog/media/icons/open-webui.png"
     },
     {
