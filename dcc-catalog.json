@@ -230,8 +230,8 @@
       "homepage_url": "https://changedetection.io/",
       "icon_text": "📊",
       "upstream_repo": "dgtlmoon/changedetection.io",
-      "latest_release": "0.60.8",
-      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.8",
+      "latest_release": "0.60.9",
+      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.9",
       "icon_url": "catalog/media/icons/changedetection-io.png"
     },
     {
@@ -1766,8 +1766,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v4.5.7",
-      "latest_release_url": "https://github.com/nicolargo/glances/releases/tag/v4.5.7",
+      "latest_release": "v4.5.8",
+      "latest_release_url": "https://github.com/nicolargo/glances/releases/tag/v4.5.8",
       "icon_url": "catalog/media/icons/glances.png"
     },
     {
