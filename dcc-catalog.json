@@ -1266,8 +1266,8 @@
       "homepage_url": "https://ntfy.sh/",
       "icon_text": "🔔",
       "upstream_repo": "binwiederhier/ntfy",
-      "latest_release": "v2.29.0",
-      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.29.0",
+      "latest_release": "v2.30.0",
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.30.0",
       "icon_url": "catalog/media/icons/ntfy.png"
     },
     {
@@ -1812,8 +1812,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.153.0",
-      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.153.0",
+      "latest_release": "v1.154.0",
+      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.154.0",
       "icon_url": "catalog/media/icons/victoriametrics.png"
     },
     {
@@ -1989,7 +1989,9 @@
         "Open the container UI on the port selected by DCC (8090 by default). For a local installation: http://localhost:8090/.",
         "New installation: username admin, password admin. Change the password after first login. An existing volume preserves your account and password.",
         "The Android TV client is available from the UI at /download/cinema-hub.apk. Enter the container host address and port on your TV."
-      ]
+      ],
+      "latest_release": "v1.3.5",
+      "latest_release_url": "https://github.com/hattimon/CINEMA-HUB/releases/tag/v1.3.5"
     }
   ]
 }
