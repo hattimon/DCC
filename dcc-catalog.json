@@ -1949,6 +1949,46 @@
       ],
       "latest_release": "v1.0.0",
       "latest_release_url": "https://github.com/hattimon/SmartWAN-Manager/releases/tag/v1.0.0"
+    },
+    {
+      "name": "Cinema Hub",
+      "image": "ghcr.io/hattimon/cinema-hub:1.3.5",
+      "category": "Media 🎬",
+      "description": "Prywatny panel filmów i seriali z własnymi źródłami mediów oraz klientem Android TV.",
+      "default_name": "cinema-hub",
+      "container_port": "8090",
+      "host_port": "8090",
+      "extra": "-v cinema-state:/data --shm-size=512m --security-opt=no-new-privileges:true --restart unless-stopped",
+      "command": "",
+      "notes": "Instalacja przyciskiem w DCC, bez ręcznej konfiguracji parametrów. Przy pierwszym logowaniu użyj admin / admin i zmień hasło. Działa na Windows z Docker Desktop (kontenery Linux), serwerach Linux amd64 oraz Raspberry Pi z systemem ARM64. Dane są przechowywane w wolumenie cinema-state.",
+      "lightweight": false,
+      "category_en": "Media 🎬",
+      "description_en": "Private movie and TV series hub with your own media sources and an Android TV client.",
+      "notes_en": "Install using the DCC button without manually configuring parameters. On first login use admin / admin and change the password. Runs on Windows with Docker Desktop (Linux containers), Linux amd64 servers and Raspberry Pi with an ARM64 OS. Data is stored in the cinema-state volume.",
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "aarch64",
+        "arm64"
+      ],
+      "source_url": "https://github.com/hattimon/CINEMA-HUB",
+      "docs_url": "https://github.com/hattimon/CINEMA-HUB/blob/main/docs/INSTALL.md",
+      "icon_text": "🎬",
+      "upstream_repo": "hattimon/CINEMA-HUB",
+      "compose_required": false,
+      "post_install_hints": [
+        "Otwórz panel kontenera na porcie wybranym przez DCC (domyślnie 8090). Przy lokalnej instalacji: http://localhost:8090/.",
+        "Nowa instalacja: login admin, hasło admin. Zmień hasło po pierwszym logowaniu. Istniejący wolumen zachowuje Twoje konto i hasło.",
+        "Klient Android TV jest dostępny w panelu pod /download/cinema-hub.apk. Na telewizorze wpisz adres i port hosta kontenera."
+      ],
+      "post_install_hints_en": [
+        "Open the container UI on the port selected by DCC (8090 by default). For a local installation: http://localhost:8090/.",
+        "New installation: username admin, password admin. Change the password after first login. An existing volume preserves your account and password.",
+        "The Android TV client is available from the UI at /download/cinema-hub.apk. Enter the container host address and port on your TV."
+      ]
     }
   ]
 }
