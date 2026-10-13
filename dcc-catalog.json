@@ -1976,6 +1976,7 @@
       ],
       "source_url": "https://github.com/hattimon/CINEMA-HUB",
       "docs_url": "https://github.com/hattimon/CINEMA-HUB/blob/main/docs/INSTALL.md",
+      "homepage_url": "https://hattimon.github.io/CINEMA-HUB/",
       "icon_text": "🎬",
       "upstream_repo": "hattimon/CINEMA-HUB",
       "compose_required": false,
