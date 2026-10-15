@@ -348,8 +348,8 @@
       "homepage_url": "https://nodejs.org/",
       "icon_text": "💻",
       "upstream_repo": "nodejs/node",
-      "latest_release": "v26.11.1",
-      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.11.1",
+      "latest_release": "v26.12.0",
+      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.12.0",
       "icon_url": "catalog/media/icons/nodejs.png"
     },
     {
@@ -630,8 +630,8 @@
       "homepage_url": "https://openwebui.com/",
       "icon_text": "💬",
       "upstream_repo": "open-webui/open-webui",
-      "latest_release": "v0.12.0",
-      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.12.0",
+      "latest_release": "v0.12.2",
+      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.12.2",
       "icon_url": "catalog/media/icons/open-webui.png"
     },
     {
