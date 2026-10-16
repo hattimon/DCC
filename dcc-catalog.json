@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.40.4",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.4",
+      "latest_release": "v0.40.5",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.5",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -112,8 +112,8 @@
       "homepage_url": "https://www.stirlingpdf.com/",
       "icon_text": "🧰",
       "upstream_repo": "Stirling-Tools/Stirling-PDF",
-      "latest_release": "v3.1.0",
-      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.1.0",
+      "latest_release": "v3.2.0",
+      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.2.0",
       "icon_url": "catalog/media/icons/stirling-pdf.png"
     },
     {
@@ -1266,8 +1266,8 @@
       "homepage_url": "https://ntfy.sh/",
       "icon_text": "🔔",
       "upstream_repo": "binwiederhier/ntfy",
-      "latest_release": "v2.30.0",
-      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.30.0",
+      "latest_release": "v2.31.0",
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.31.0",
       "icon_url": "catalog/media/icons/ntfy.png"
     },
     {
