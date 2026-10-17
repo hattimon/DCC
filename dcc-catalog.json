@@ -630,8 +630,8 @@
       "homepage_url": "https://openwebui.com/",
       "icon_text": "💬",
       "upstream_repo": "open-webui/open-webui",
-      "latest_release": "v0.12.2",
-      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.12.2",
+      "latest_release": "v0.12.3",
+      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.12.3",
       "icon_url": "catalog/media/icons/open-webui.png"
     },
     {
@@ -1266,8 +1266,8 @@
       "homepage_url": "https://ntfy.sh/",
       "icon_text": "🔔",
       "upstream_repo": "binwiederhier/ntfy",
-      "latest_release": "v2.31.0",
-      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.31.0",
+      "latest_release": "v2.31.1",
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.31.1",
       "icon_url": "catalog/media/icons/ntfy.png"
     },
     {
