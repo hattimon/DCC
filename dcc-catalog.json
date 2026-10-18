@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.40.5",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.5",
+      "latest_release": "v0.40.6",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.6",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -1050,8 +1050,8 @@
       ],
       "icon_url": "catalog/media/icons/pi-hole.png",
       "upstream_repo": "pi-hole/docker-pi-hole",
-      "latest_release": "2026.09.0",
-      "latest_release_url": "https://github.com/pi-hole/docker-pi-hole/releases/tag/2026.09.0"
+      "latest_release": "2026.10.0",
+      "latest_release_url": "https://github.com/pi-hole/docker-pi-hole/releases/tag/2026.10.0"
     },
     {
       "name": "Home Assistant",
