@@ -179,6 +179,68 @@
       "icon_url": "catalog/media/icons/dozzle.png"
     },
     {
+      "name": "DCC Container Updater",
+      "image": "ghcr.io/hattimon/dcc-container-updater:latest",
+      "category": "Aktualizacje 🔄",
+      "description": "Panel WWW do sprawdzania i ręcznego aktualizowania wybranych kontenerów Docker z zachowaniem ich konfiguracji oraz wolumenów.",
+      "store_description": "Zeskanuj host Docker, sprawdź dostępność nowszych obrazów i wybierz kontenery do aktualizacji. Panel pobiera obraz przed wymianą kontenera, odtwarza jego konfigurację i zachowuje podłączone wolumeny. Działa jako osobny kontener na Docker Desktop z kontenerami Linux, serwerach Linux i Raspberry Pi 64-bit.",
+      "default_name": "dcc-container-updater",
+      "container_port": "8788",
+      "host_port": "8788",
+      "extra": "-v /var/run/docker.sock:/var/run/docker.sock -v dcc_updater_data:/data --label com.hattimon.dcc-updater=true --cap-drop=ALL --security-opt=no-new-privileges:true --restart unless-stopped",
+      "command": "",
+      "notes": "Wymaga dostępu do socketu Docker, co daje uprawnienia administratora hosta. Po instalacji otwórz http://<adres-hosta>:8788. Pierwsze hasło znajdziesz w logach kontenera; zmień je po zalogowaniu. Panel działa z kontenerami Linux na Docker Desktop, Linux amd64 i Raspberry Pi ARM64. Kontenery Compose, Swarm i z niestandardową siecią są pomijane.",
+      "lightweight": true,
+      "category_en": "Updates 🔄",
+      "description_en": "Web panel for checking and manually updating selected Docker containers while preserving their configuration and volumes.",
+      "store_description_en": "Scan a Docker host, check for newer images and select which containers to update. The panel pulls the image before replacing a container, recreates its configuration and keeps its attached volumes. It runs as a separate container on Docker Desktop in Linux-container mode, Linux servers and 64-bit Raspberry Pi.",
+      "features": [
+        "Skanowanie kontenerów i wykrywanie nowszych obrazów.",
+        "Zaznaczanie wybranych kontenerów i aktualizacja przyciskiem.",
+        "Odtwarzanie konfiguracji kontenera oraz zachowanie wolumenów i bind mountów.",
+        "Działa na Docker Desktop w trybie kontenerów Linux oraz na Linux amd64 i Raspberry Pi ARM64.",
+        "Kontenery Compose, Swarm i korzystające z niestandardowych sieci są pomijane."
+      ],
+      "features_en": [
+        "Scan containers and detect newer images.",
+        "Select individual containers and update them with one button.",
+        "Recreate container settings while preserving volumes and bind mounts.",
+        "Runs on Docker Desktop in Linux-container mode, Linux amd64 and Raspberry Pi ARM64.",
+        "Compose, Swarm and custom-network containers are skipped."
+      ],
+      "notes_en": "Requires the Docker socket, which grants administrator-level access to the host. After installation open http://<host-address>:8788. The initial password is in the container logs; change it after signing in. Supports Linux containers on Docker Desktop, Linux amd64 and Raspberry Pi ARM64. Compose, Swarm and custom-network containers are skipped.",
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "x86_64",
+        "amd64",
+        "aarch64",
+        "arm64"
+      ],
+      "source_url": "https://github.com/hattimon/DCC/tree/main/apps/container-updater",
+      "docs_url": "https://github.com/hattimon/DCC/tree/main/apps/container-updater",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/main/apps/container-updater",
+      "icon_text": "🔄",
+      "post_install_hints": [
+        "Otwórz http://<adres-hosta>:8788 (jeżeli port jest zajęty, użyj portu hosta wybranego przez DCC).",
+        "Początkowe hasło administratora jest zapisane w logach kontenera. Zmień je w panelu po pierwszym logowaniu.",
+        "Panel ma dostęp administratora do Dockera. Ogranicz go do zaufanej sieci; przed dostępem spoza LAN skonfiguruj HTTPS i kontrolę dostępu."
+      ],
+      "post_install_hints_en": [
+        "Open http://<host-address>:8788 (if that port is occupied, use the host port selected by DCC).",
+        "The initial administrator password is printed in the container logs. Change it in the panel after the first sign-in.",
+        "The panel has administrator-level Docker access. Restrict it to a trusted network; configure HTTPS and access controls before exposing it beyond your LAN."
+      ],
+      "credential_patterns": [
+        {
+          "label": "Początkowe hasło panelu",
+          "label_en": "Initial panel password",
+          "regex": "DCC_UPDATER_INITIAL_CREDENTIALS username=admin password=(?P<value>[A-Za-z0-9_-]+)"
+        }
+      ]
+    },
+    {
       "name": "Beszel Hub",
       "image": "henrygd/beszel:latest",
       "category": "Monitoring 📊",
