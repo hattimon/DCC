@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import os
 import secrets
 import threading
@@ -15,7 +16,7 @@ import docker
 from flask import Flask, jsonify, make_response, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from updater import UpdateService
+from updater import UpdateService, normalized_repository
 
 
 class JobManager:
@@ -74,17 +75,73 @@ def _atomic_write(path: Path, value: str) -> None:
     temporary.replace(path)
 
 
+class AutoUpdateStore:
+    """Persist opt-in startup updates by stable container name and image repository."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._lock = threading.RLock()
+
+    def _read(self) -> dict[str, str]:
+        if not self.path.exists():
+            return {}
+        payload = json.loads(self.path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Nieprawidłowy format ustawień automatycznych aktualizacji.")
+        containers = payload.get("containers", {})
+        if not isinstance(containers, dict):
+            raise ValueError("Nieprawidłowy format ustawień automatycznych aktualizacji.")
+        return {
+            str(name): str(repository)
+            for name, repository in containers.items()
+            if isinstance(name, str) and isinstance(repository, str) and name and repository
+        }
+
+    def snapshot(self) -> dict[str, str]:
+        with self._lock:
+            try:
+                return self._read()
+            except (OSError, ValueError) as exc:
+                logging.getLogger(__name__).warning(
+                    "Could not read DCC updater startup-update settings (%s); automatic updates are treated as disabled.",
+                    type(exc).__name__,
+                )
+                return {}
+
+    def is_enabled(self, name: str, image: str) -> bool:
+        repository = normalized_repository(image) if image else ""
+        return bool(repository and self.snapshot().get(name) == repository)
+
+    def set(self, name: str, image: str, enabled: bool) -> dict[str, str]:
+        with self._lock:
+            containers = self._read()
+            if enabled:
+                repository = normalized_repository(image)
+                if not name or not image or not repository:
+                    raise ValueError("Nie można zapisać automatycznej aktualizacji bez nazwy i obrazu kontenera.")
+                containers[name] = repository
+            else:
+                containers.pop(name, None)
+            _atomic_write(
+                self.path,
+                json.dumps({"schema": 1, "containers": containers}, ensure_ascii=False, indent=2) + "\n",
+            )
+            return containers
+
+
 def create_app(
     data_dir: str | Path | None = None,
     service_factory: Callable[[], UpdateService] | None = None,
     *,
     print_credentials: bool = True,
+    startup_auto_updates: bool = False,
 ) -> Flask:
     app = Flask(__name__, template_folder="templates")
     data_path = Path(data_dir or os.environ.get("DCC_UPDATER_DATA", "/data"))
     data_path.mkdir(parents=True, exist_ok=True)
     password_path = data_path / "admin_password_hash"
     secret_path = data_path / "secret_key"
+    auto_update_store = AutoUpdateStore(data_path / "auto_update_containers.json")
 
     if not secret_path.exists():
         _atomic_write(secret_path, secrets.token_urlsafe(48))
@@ -108,12 +165,86 @@ def create_app(
     app.extensions["dcc_updater_jobs"] = manager
     app.extensions["dcc_updater_data_dir"] = data_path
     app.extensions["dcc_updater_initial_password"] = initial_password
+    app.extensions["dcc_updater_auto_updates"] = auto_update_store
 
     def get_service() -> UpdateService:
         if service_factory:
             return service_factory()
         client = docker.from_env(timeout=30)
         return UpdateService(client, wait_seconds=int(os.environ.get("DCC_UPDATER_HEALTH_TIMEOUT", "60")))
+
+    def annotate_auto_update_state(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        enabled = auto_update_store.snapshot()
+        for item in results:
+            name = str(item.get("name") or "")
+            image = str(item.get("current_image") or "")
+            repository = normalized_repository(image) if image else ""
+            item["auto_update_on_startup"] = bool(name and repository and enabled.get(name) == repository)
+        return results
+
+    def run_startup_auto_updates(progress: Callable[[str], None]) -> dict[str, Any]:
+        enabled = auto_update_store.snapshot()
+        if not enabled:
+            progress("Automatyczne aktualizacje nie są włączone dla żadnego kontenera.")
+            return {"updates": [], "containers": []}
+
+        service = None
+        scanned: list[dict[str, Any]] = []
+        deadline = time.monotonic() + max(30, min(int(os.environ.get("DCC_UPDATER_DOCKER_WAIT", "180")), 600))
+        while True:
+            try:
+                service = get_service()
+                scanned = service.scan(progress)
+                break
+            except Exception as exc:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Docker nie uruchomił się przed upływem limitu oczekiwania.") from exc
+                progress("Oczekiwanie na gotowość Docker po restarcie hosta…")
+                time.sleep(3)
+
+        by_name = {str(item.get("name") or ""): item for item in scanned}
+        queued: list[dict[str, Any]] = []
+        for name, repository in enabled.items():
+            item = by_name.get(name)
+            if not item or normalized_repository(str(item.get("current_image") or "")) != repository:
+                continue
+            if item.get("supported") and item.get("update_available"):
+                queued.append(item)
+
+        if not queued:
+            progress("Kolejka automatyczna zakończona: brak dostępnych aktualizacji.")
+            return {"updates": [], "containers": annotate_auto_update_state(scanned)}
+
+        progress(f"Kolejka automatyczna: {len(queued)} kontenerów; aktualizacja po jednym kontenerze naraz.")
+        outcomes = service.update_selected([str(item["id"]) for item in queued], progress)
+        progress("Kolejka zakończona. Ponowne skanowanie kontenerów…")
+        updated = annotate_auto_update_state(service.scan(progress))
+        return {"updates": outcomes, "containers": updated}
+
+    def schedule_startup_auto_updates() -> threading.Thread:
+        try:
+            delay = max(0, min(int(os.environ.get("DCC_UPDATER_STARTUP_DELAY", "12")), 300))
+        except ValueError:
+            delay = 12
+
+        def wait_for_queue() -> None:
+            time.sleep(delay)
+            while True:
+                started, _state = manager.start("auto_update", run_startup_auto_updates)
+                if started:
+                    return
+                # Startup work waits behind any scan or manual update already in progress.
+                time.sleep(1)
+
+        thread = threading.Thread(target=wait_for_queue, name="dcc-updater-startup-queue", daemon=True)
+        thread.start()
+        return thread
+
+    def validate_container_name(value: Any) -> str:
+        name = str(value or "").strip().lstrip("/")
+        if not name or len(name) > 128 or any(char in name for char in "\r\n\0"):
+            raise ValueError("Nieprawidłowa nazwa kontenera.")
+        return name
 
     login_attempts: dict[str, list[float]] = {}
 
@@ -207,7 +338,7 @@ def create_app(
     @app.post("/api/scan")
     def scan():
         def work(progress):
-            return get_service().scan(progress)
+            return annotate_auto_update_state(get_service().scan(progress))
 
         started, state = manager.start("scan", work)
         return jsonify(state), (202 if started else 409)
@@ -226,11 +357,49 @@ def create_app(
             service = get_service()
             outcomes = service.update_selected(ids, progress)
             progress("Ponowne sprawdzanie stanu kontenerów…")
-            containers_after = service.scan(progress)
+            containers_after = annotate_auto_update_state(service.scan(progress))
             return {"updates": outcomes, "containers": containers_after}
 
         started, state = manager.start("update", work)
         return jsonify(state), (202 if started else 409)
+
+    @app.post("/api/auto-update")
+    def set_auto_update():
+        payload = request.get_json(silent=True) or {}
+        try:
+            name = validate_container_name(payload.get("name"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        enabled = payload.get("enabled")
+        if not isinstance(enabled, bool):
+            return jsonify({"error": "Pole enabled musi mieć wartość true albo false."}), 400
+
+        image = ""
+        if enabled:
+            container_id = str(payload.get("container_id") or "").strip()
+            if not container_id or len(container_id) > 128:
+                return jsonify({"error": "Brak prawidłowego identyfikatora kontenera."}), 400
+            try:
+                service = get_service()
+                container = service.client.containers.get(container_id)
+            except Exception:
+                return jsonify({"error": "Kontener nie jest już dostępny. Odśwież skan."}), 404
+            name = str(getattr(container, "name", "") or "").lstrip("/")
+            if service._is_self(container):
+                return jsonify({"error": "Panel aktualizujący nie może aktualizować samego siebie."}), 400
+            reason = service._unsupported_reason(container)
+            if reason:
+                return jsonify({"error": reason}), 400
+            image = str((container.attrs.get("Config") or {}).get("Image") or "")
+            if not image:
+                return jsonify({"error": "Kontener nie ma obrazu, dla którego można włączyć aktualizacje."}), 400
+
+        try:
+            auto_update_store.set(name, image, enabled)
+        except Exception as exc:
+            return jsonify({"error": f"Nie udało się zapisać ustawienia ({type(exc).__name__})."}), 500
+        message = "Automatyczna aktualizacja przy starcie została włączona." if enabled else "Automatyczna aktualizacja przy starcie została wyłączona."
+        return jsonify({"name": name, "enabled": enabled, "message": message})
 
     @app.post("/api/password")
     def change_password():
@@ -245,7 +414,9 @@ def create_app(
         _atomic_write(password_path, generate_password_hash(new_password, method="scrypt"))
         return jsonify({"message": "Hasło zostało zmienione."})
 
+    if startup_auto_updates:
+        app.extensions["dcc_updater_startup_thread"] = schedule_startup_auto_updates()
     return app
 
 
-app = create_app()
+app = create_app(startup_auto_updates=os.environ.get("DCC_UPDATER_AUTO_UPDATE_ON_START", "0") == "1")

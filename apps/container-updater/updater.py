@@ -14,6 +14,19 @@ from typing import Any, Callable
 DCC_CATALOG_URL = "https://raw.githubusercontent.com/hattimon/DCC/main/dcc-catalog.json"
 SELF_LABEL = "com.hattimon.dcc-updater"
 SUPPORTED_NETWORK_MODES = {"default", "bridge", "host", "none"}
+CONFIG_UPDATE_FIELDS = {
+    "command", "hostname", "user", "stdin_open", "tty", "ports", "environment",
+    "volumes", "network_disabled", "entrypoint", "working_dir", "domainname",
+    "mac_address", "labels", "stop_signal", "healthcheck", "stop_timeout", "runtime",
+}
+HOST_CONFIG_UPDATE_FIELDS = {
+    "Binds", "Mounts", "PortBindings", "RestartPolicy", "Tmpfs", "VolumesFrom",
+    "Memory", "MemoryReservation", "MemorySwap", "NanoCpus", "CpuShares", "CpuQuota",
+    "CpuPeriod", "CpusetCpus", "CpusetMems", "PidsLimit", "ShmSize", "ReadonlyRootfs",
+    "SecurityOpt", "CapAdd", "CapDrop", "Init", "Ulimits", "LogConfig", "Dns",
+    "DnsSearch", "ExtraHosts", "GroupAdd", "Sysctls", "UsernsMode", "OomKillDisable",
+    "OomScoreAdj",
+}
 
 
 def image_reference(reference: str) -> tuple[str, str]:
@@ -70,6 +83,7 @@ class UpdateCandidate:
     target_image: str
     source: str
     message: str
+    update_instructions: dict[str, Any] | None = None
 
 
 class UpdateService:
@@ -94,6 +108,16 @@ class UpdateService:
             return apps, None
         except Exception as exc:  # registry checks can still run if GitHub is unavailable
             return [], f"Nie udało się pobrać katalogu DCC: {type(exc).__name__}"
+
+    @staticmethod
+    def _catalog_update_instructions(image: str, apps: list[dict[str, Any]]) -> dict[str, Any] | None:
+        image_repo = normalized_repository(image)
+        for app in apps:
+            if normalized_repository(str(app.get("image", ""))) != image_repo:
+                continue
+            instructions = app.get("update_instructions")
+            return copy.deepcopy(instructions) if isinstance(instructions, dict) else None
+        return None
 
     @staticmethod
     def _is_self(container: Any) -> bool:
@@ -124,6 +148,102 @@ class UpdateService:
             return "Kontener używa niestandardowej lub wielokrotnej sieci Docker."
         return None
 
+    @staticmethod
+    def _host_port_bindings(host_config: dict[str, Any]) -> list[tuple[str, str, str]]:
+        output: list[tuple[str, str, str]] = []
+        bindings = host_config.get("PortBindings") or {}
+        if not isinstance(bindings, dict):
+            return output
+        for container_port, raw_entries in bindings.items():
+            protocol = str(container_port).rsplit("/", 1)[-1].lower() if "/" in str(container_port) else "tcp"
+            entries = raw_entries if isinstance(raw_entries, list) else [raw_entries]
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                host_port = str(entry.get("HostPort") or "").strip()
+                if not host_port or host_port == "0":
+                    continue
+                host_ip = str(entry.get("HostIp") or "").strip().lower()
+                output.append((host_ip, host_port, protocol))
+        return output
+
+    @classmethod
+    def _container_host_port_bindings(cls, container: Any) -> list[tuple[str, str, str]]:
+        """Return configured and currently published bindings, without duplicates."""
+        attrs = getattr(container, "attrs", {}) or {}
+        bindings = cls._host_port_bindings(attrs.get("HostConfig") or {})
+        seen = set(bindings)
+        runtime_ports = (attrs.get("NetworkSettings") or {}).get("Ports") or {}
+        if isinstance(runtime_ports, dict):
+            for container_port, entries in runtime_ports.items():
+                protocol = str(container_port).rsplit("/", 1)[-1].lower() if "/" in str(container_port) else "tcp"
+                for entry in entries or []:
+                    if not isinstance(entry, dict):
+                        continue
+                    host_port = str(entry.get("HostPort") or "").strip()
+                    if not host_port or host_port == "0":
+                        continue
+                    binding = (str(entry.get("HostIp") or "").strip().lower(), host_port, protocol)
+                    if binding not in seen:
+                        bindings.append(binding)
+                        seen.add(binding)
+        return bindings
+
+    @staticmethod
+    def _ports_overlap(left: str, right: str) -> bool:
+        def span(value: str) -> tuple[int, int] | None:
+            match = re.fullmatch(r"(\d+)(?:-(\d+))?", value)
+            if not match:
+                return None
+            start = int(match.group(1))
+            end = int(match.group(2) or start)
+            return min(start, end), max(start, end)
+
+        left_span, right_span = span(left), span(right)
+        if left_span and right_span:
+            return left_span[0] <= right_span[1] and right_span[0] <= left_span[1]
+        return left.lower() == right.lower()
+
+    @staticmethod
+    def _host_ips_overlap(left: str, right: str) -> bool:
+        wildcards = {"", "0.0.0.0", "::", "::0", "0:0:0:0:0:0:0:0"}
+        return left in wildcards or right in wildcards or left == right
+
+    def _port_conflict_reason(
+        self,
+        container: Any,
+        instructions: dict[str, Any] | None,
+        all_containers: list[Any] | None,
+    ) -> str | None:
+        host = copy.deepcopy(container.attrs.get("HostConfig") or {})
+        overrides = (instructions or {}).get("host_config") or {}
+        if isinstance(overrides, dict):
+            host.update(overrides)
+        proposed = self._host_port_bindings(host)
+        if not proposed and not (isinstance(overrides, dict) and "PortBindings" in overrides):
+            proposed = self._container_host_port_bindings(container)
+        if not proposed:
+            return None
+
+        own_id = str(getattr(container, "id", ""))
+        for other in all_containers or []:
+            if str(getattr(other, "id", "")) == own_id:
+                continue
+            for address, port, protocol in self._container_host_port_bindings(other):
+                for proposed_address, proposed_port, proposed_protocol in proposed:
+                    if (
+                        protocol == proposed_protocol
+                        and self._ports_overlap(port, proposed_port)
+                        and self._host_ips_overlap(address, proposed_address)
+                    ):
+                        other_name = str(getattr(other, "name", "nieznany")).lstrip("/")
+                        ip_label = proposed_address or "*"
+                        return (
+                            f"Konflikt portu hosta {ip_label}:{proposed_port}/{proposed_protocol} "
+                            f"z kontenerem {other_name}. Portów nie zmieniono; popraw mapowanie przed aktualizacją."
+                        )
+        return None
+
     def _catalog_candidate(self, image: str, apps: list[dict[str, Any]]) -> UpdateCandidate | None:
         matches = [
             app for app in apps
@@ -134,6 +254,7 @@ class UpdateService:
         current_repo, current_tag = image_reference(image)
         current_version = version_tuple(current_tag)
         app = matches[0]
+        instructions = self._catalog_update_instructions(image, apps)
         target = str(app["image"])
         _target_repo, target_tag = image_reference(target)
         target_version = version_tuple(target_tag)
@@ -147,7 +268,13 @@ class UpdateService:
             if current_version and not target_version and release_version:
                 if compare_versions(release_version, current_version) <= 0:
                     return UpdateCandidate(False, target, "katalog DCC", "Zainstalowana wersja nie jest starsza od katalogowej.")
-            return UpdateCandidate(True, target, "katalog DCC", f"Katalog DCC wskazuje obraz {target}.")
+            return UpdateCandidate(
+                True,
+                target,
+                "katalog DCC",
+                f"Katalog DCC wskazuje obraz {target}.",
+                instructions,
+            )
         return None
 
     def _registry_digest(self, image: str, local_image: Any) -> tuple[bool | None, str]:
@@ -179,7 +306,13 @@ class UpdateService:
         except Exception as exc:
             return None, f"Nie udało się sprawdzić rejestru: {type(exc).__name__}"
 
-    def inspect_container(self, container: Any, apps: list[dict[str, Any]], catalog_error: str | None = None) -> dict[str, Any]:
+    def inspect_container(
+        self,
+        container: Any,
+        apps: list[dict[str, Any]],
+        catalog_error: str | None = None,
+        all_containers: list[Any] | None = None,
+    ) -> dict[str, Any]:
         attrs = container.attrs
         config = attrs.get("Config") or {}
         current = str(config.get("Image") or "")
@@ -193,6 +326,7 @@ class UpdateService:
             "source": "",
             "status": str((attrs.get("State") or {}).get("Status") or getattr(container, "status", "unknown")),
             "message": "",
+            "has_update_instructions": bool(self._catalog_update_instructions(current, apps)) if current else False,
         }
         if self._is_self(container):
             result.update(supported=False, message="To jest panel aktualizujący; pominięto aktualizację samego panelu.")
@@ -207,11 +341,16 @@ class UpdateService:
 
         candidate = self._catalog_candidate(current, apps)
         if candidate and candidate.available:
+            conflict = self._port_conflict_reason(container, candidate.update_instructions, all_containers)
+            if conflict:
+                result.update(supported=False, source=candidate.source, message=conflict)
+                return result
             result.update(
                 update_available=True,
                 target_image=candidate.target_image,
                 source=candidate.source,
                 message=candidate.message,
+                has_update_instructions=bool(candidate.update_instructions),
             )
             return result
         if candidate:
@@ -224,6 +363,11 @@ class UpdateService:
             local_image = getattr(container, "image", None)
         available, digest_message = self._registry_digest(current, local_image)
         if available is True:
+            instructions = self._catalog_update_instructions(current, apps)
+            conflict = self._port_conflict_reason(container, instructions, all_containers)
+            if conflict:
+                result.update(supported=False, source=result["source"] or "digest rejestru", message=conflict)
+                return result
             result.update(
                 update_available=True,
                 target_image=current,
@@ -244,7 +388,7 @@ class UpdateService:
             if progress:
                 progress(f"Sprawdzanie kontenera {index}/{len(containers)}: {getattr(container, 'name', container.id)}")
             try:
-                results.append(self.inspect_container(container, apps, catalog_error))
+                results.append(self.inspect_container(container, apps, catalog_error, containers))
             except Exception as exc:
                 results.append({
                     "id": str(container.id),
@@ -259,7 +403,12 @@ class UpdateService:
                 })
         return results
 
-    def _create_config(self, container: Any, target_image: str) -> dict[str, Any]:
+    def _create_config(
+        self,
+        container: Any,
+        target_image: str,
+        update_instructions: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         attrs = container.attrs
         config = attrs.get("Config") or {}
         host = copy.deepcopy(attrs.get("HostConfig") or {})
@@ -303,28 +452,43 @@ class UpdateService:
         if mounts:
             host["Mounts"] = mounts
 
+        instructions = update_instructions or {}
+        if not isinstance(instructions, dict) or set(instructions) - {"config", "host_config"}:
+            raise ValueError("Instrukcje aktualizacji muszą zawierać wyłącznie config i host_config.")
+        config_overrides = instructions.get("config") or {}
+        host_overrides = instructions.get("host_config") or {}
+        if not isinstance(config_overrides, dict) or set(config_overrides) - CONFIG_UPDATE_FIELDS:
+            raise ValueError("Instrukcje aktualizacji zawierają nieobsługiwane pola config.")
+        if not isinstance(host_overrides, dict) or set(host_overrides) - HOST_CONFIG_UPDATE_FIELDS:
+            raise ValueError("Instrukcje aktualizacji zawierają nieobsługiwane lub niebezpieczne pola host_config.")
+        host.update(copy.deepcopy(host_overrides))
+
+        create_options = {
+            "image": target_image,
+            "command": config.get("Cmd"),
+            "hostname": config.get("Hostname"),
+            "user": config.get("User"),
+            "detach": True,
+            "stdin_open": bool(config.get("OpenStdin")),
+            "tty": bool(config.get("Tty")),
+            "ports": config.get("ExposedPorts"),
+            "environment": config.get("Env"),
+            "volumes": config.get("Volumes"),
+            "network_disabled": bool(config.get("NetworkDisabled")),
+            "entrypoint": config.get("Entrypoint"),
+            "working_dir": config.get("WorkingDir"),
+            "domainname": config.get("Domainname"),
+            "host_config": host,
+            "mac_address": config.get("MacAddress"),
+            "labels": config.get("Labels"),
+            "stop_signal": config.get("StopSignal"),
+            "healthcheck": config.get("Healthcheck"),
+            "stop_timeout": config.get("StopTimeout"),
+            "runtime": config.get("Runtime"),
+        }
+        create_options.update(copy.deepcopy(config_overrides))
         return self.client.api.create_container_config(
-            image=target_image,
-            command=config.get("Cmd"),
-            hostname=config.get("Hostname"),
-            user=config.get("User"),
-            detach=True,
-            stdin_open=bool(config.get("OpenStdin")),
-            tty=bool(config.get("Tty")),
-            ports=config.get("ExposedPorts"),
-            environment=config.get("Env"),
-            volumes=config.get("Volumes"),
-            network_disabled=bool(config.get("NetworkDisabled")),
-            entrypoint=config.get("Entrypoint"),
-            working_dir=config.get("WorkingDir"),
-            domainname=config.get("Domainname"),
-            host_config=host,
-            mac_address=config.get("MacAddress"),
-            labels=config.get("Labels"),
-            stop_signal=config.get("StopSignal"),
-            healthcheck=config.get("Healthcheck"),
-            stop_timeout=config.get("StopTimeout"),
-            runtime=config.get("Runtime"),
+            **create_options,
         )
 
     def _wait_until_healthy(self, container: Any) -> None:
@@ -347,18 +511,44 @@ class UpdateService:
         if has_healthcheck:
             raise RuntimeError("Przekroczono czas oczekiwania na stan healthy.")
 
-    def update_one(self, container: Any, target_image: str) -> str:
+    @staticmethod
+    def _is_docker_port_conflict(error: Exception) -> bool:
+        message = str(error).lower()
+        return any(marker in message for marker in (
+            "port is already allocated",
+            "address already in use",
+            "port is already in use",
+            "bind: cannot assign requested address",
+        ))
+
+    def update_one(
+        self,
+        container: Any,
+        target_image: str,
+        update_instructions: dict[str, Any] | None = None,
+    ) -> str:
         if self._is_self(container):
             raise RuntimeError("Aktualizacja samego panelu nie jest obsługiwana.")
         reason = self._unsupported_reason(container)
         if reason:
             raise RuntimeError(reason)
 
+        # Validate and build the replacement config while the original is still running.
+        raw_config = self._create_config(container, target_image, update_instructions)
         # Pull first: a registry or network failure leaves the running service untouched.
         self.client.images.pull(target_image)
         original_name = str(getattr(container, "name", "")).lstrip("/")
         was_running = str((container.attrs.get("State") or {}).get("Status")) == "running"
-        backup_name = f"dcc-backup-{str(container.id)[:10]}"
+        existing_names = {
+            str(getattr(item, "name", "")).lstrip("/")
+            for item in self.client.containers.list(all=True)
+        }
+        base_backup_name = f"dcc-backup-{str(container.id)[:10]}"
+        backup_name = base_backup_name
+        suffix = 1
+        while backup_name in existing_names:
+            suffix += 1
+            backup_name = f"{base_backup_name}-{suffix}"
         try:
             if was_running:
                 container.stop(timeout=15)
@@ -373,7 +563,6 @@ class UpdateService:
 
         replacement = None
         try:
-            raw_config = self._create_config(container, target_image)
             created = self.client.api.create_container_from_config(raw_config, name=original_name)
             replacement = self.client.containers.get(created["Id"])
             if was_running:
@@ -385,6 +574,7 @@ class UpdateService:
             except Exception as exc:
                 return f"Zaktualizowano do {target_image}; stary kontener pozostał jako kopia {backup_name} ({type(exc).__name__})."
         except Exception as exc:
+            port_conflict = self._is_docker_port_conflict(exc)
             if replacement is not None:
                 try:
                     replacement.stop(timeout=5)
@@ -399,8 +589,13 @@ class UpdateService:
                 if was_running:
                     container.start()
             except Exception as rollback_exc:
+                reason = "Docker wykrył konflikt portu" if port_conflict else "Aktualizacja nie powiodła się"
                 raise RuntimeError(
-                    f"Aktualizacja nie powiodła się ({type(exc).__name__}); przywrócenie starego kontenera wymaga interwencji ({type(rollback_exc).__name__})."
+                    f"{reason} ({type(exc).__name__}); przywrócenie starego kontenera wymaga interwencji ({type(rollback_exc).__name__})."
+                ) from exc
+            if port_conflict:
+                raise RuntimeError(
+                    "Docker wykrył zajęty port podczas uruchamiania nowego kontenera; przywrócono poprzedni kontener."
                 ) from exc
             raise RuntimeError(f"Aktualizacja nie powiodła się; przywrócono poprzedni kontener ({type(exc).__name__}).") from exc
 
@@ -408,20 +603,26 @@ class UpdateService:
         self,
         container_ids: list[str],
         progress: Callable[[str], None] | None = None,
-    ) -> list[dict[str, str]]:
+    ) -> list[dict[str, Any]]:
         apps, catalog_error = self._catalog()
         output = []
         for index, container_id in enumerate(container_ids, start=1):
             try:
                 container = self.client.containers.get(container_id)
-                current = self.inspect_container(container, apps, catalog_error)
+                all_containers = self.client.containers.list(all=True)
+                current = self.inspect_container(container, apps, catalog_error, all_containers)
                 if not current["supported"] or not current["update_available"]:
-                    output.append({"name": current["name"], "result": current["message"] or "Brak dostępnej aktualizacji."})
+                    output.append({
+                        "name": current["name"],
+                        "result": current["message"] or "Brak dostępnej aktualizacji.",
+                        "ok": False,
+                    })
                     continue
                 if progress:
                     progress(f"Aktualizowanie {index}/{len(container_ids)}: {current['name']}")
-                message = self.update_one(container, current["target_image"])
-                output.append({"name": current["name"], "result": message})
+                instructions = self._catalog_update_instructions(current["current_image"], apps)
+                message = self.update_one(container, current["target_image"], instructions)
+                output.append({"name": current["name"], "result": message, "ok": True})
             except Exception as exc:
-                output.append({"name": str(container_id)[:12], "result": str(exc)})
+                output.append({"name": str(container_id)[:12], "result": str(exc), "ok": False})
         return output

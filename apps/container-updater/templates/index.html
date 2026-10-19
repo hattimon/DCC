@@ -22,11 +22,12 @@
       <button id="update" class="primary" disabled>Aktualizuj zaznaczone</button>
       <span class="grow"></span><span id="count" class="small">Kontenery: —</span>
     </div>
+    <p class="small">Automatyczna aktualizacja jest domyślnie wyłączona. Włącz ją osobno przy kontenerach, które mają być sprawdzane po restarcie hosta lub tego panelu. Kolejka aktualizuje jeden kontener naraz.</p>
     <div id="status" class="status" role="status">Ładowanie panelu…</div>
     <div id="progress" class="progress"></div>
     <div class="table-wrap"><table>
-      <thead><tr><th><input id="select-all" type="checkbox" aria-label="Zaznacz wszystkie aktualizacje"></th><th>Kontener</th><th>Status</th><th>Obecny obraz</th><th>Obraz docelowy</th><th>Informacja</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="6" class="empty">Rozpocznij skanowanie kontenerów.</td></tr></tbody>
+      <thead><tr><th><input id="select-all" type="checkbox" aria-label="Zaznacz wszystkie aktualizacje"></th><th>Kontener</th><th>Auto po restarcie</th><th>Status</th><th>Obecny obraz</th><th>Obraz docelowy</th><th>Informacja</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="empty">Rozpocznij skanowanie kontenerów.</td></tr></tbody>
     </table></div>
     <details class="settings"><summary>Zmień hasło panelu</summary>
       <form id="password-form" class="password-grid">
@@ -46,10 +47,10 @@
     let pollTimer = null;
     const esc = value => String(value ?? '');
     function showStatus(message, kind='') { statusBox.textContent = message; statusBox.className = `status ${kind}`; }
-    function setBusy(busy) { progress.classList.toggle('active', busy); document.getElementById('scan').disabled = busy; updateButton.disabled = busy || !document.querySelector('.pick:checked'); document.getElementById('select-updates').disabled = busy; }
+    function setBusy(busy) { progress.classList.toggle('active', busy); document.getElementById('scan').disabled = busy; updateButton.disabled = busy || !document.querySelector('.pick:checked'); document.getElementById('select-updates').disabled = busy; document.querySelectorAll('.auto-update').forEach(check => { check.disabled = busy || check.dataset.supported !== 'true'; }); }
     function render(items) {
       document.getElementById('count').textContent = `Kontenery: ${items.length}`;
-      if (!items.length) { rows.innerHTML = '<tr><td colspan="6" class="empty">Nie znaleziono kontenerów.</td></tr>'; setBusy(false); return; }
+      if (!items.length) { rows.innerHTML = '<tr><td colspan="7" class="empty">Nie znaleziono kontenerów.</td></tr>'; setBusy(false); return; }
       rows.replaceChildren();
       for (const item of items) {
         const tr = document.createElement('tr');
@@ -58,18 +59,30 @@
           const check = document.createElement('input'); check.type='checkbox'; check.className='pick'; check.value=esc(item.id); check.setAttribute('aria-label',`Wybierz ${esc(item.name)}`); check.addEventListener('change', updateSelection); checkCell.append(check);
         }
         const nameCell = document.createElement('td'); const name=document.createElement('div'); name.className='name'; name.textContent=esc(item.name); const state=document.createElement('div'); state.className='small'; state.textContent=esc(item.status); nameCell.append(name,state);
+        const autoCell = document.createElement('td');
+        if (item.supported) {
+          const auto = document.createElement('input'); auto.type='checkbox'; auto.className='auto-update'; auto.checked=!!item.auto_update_on_startup; auto.dataset.supported='true'; auto.setAttribute('aria-label',`Automatycznie aktualizuj ${esc(item.name)} po restarcie`); auto.addEventListener('change',()=>setAutoUpdate(auto,item)); autoCell.append(auto);
+        } else {
+          const unavailable=document.createElement('span'); unavailable.className='small'; unavailable.textContent='Niedostępne'; autoCell.append(unavailable);
+        }
         const badgeCell = document.createElement('td'); const badge=document.createElement('span'); badge.className=`badge ${item.update_available && item.supported?'update':item.supported?'current':'skip'}`; badge.textContent=item.update_available&&item.supported?'Dostępna aktualizacja':item.supported?'Aktualny / sprawdź digest':'Pominięto'; badgeCell.append(badge);
         const currentCell=document.createElement('td'); currentCell.className='image'; currentCell.textContent=esc(item.current_image);
         const targetCell=document.createElement('td'); targetCell.className='image'; targetCell.textContent=esc(item.update_available?item.target_image:'—');
-        const infoCell=document.createElement('td'); infoCell.className='detail'; infoCell.textContent=esc([item.source,item.message].filter(Boolean).join(' · '));
-        tr.append(checkCell,nameCell,badgeCell,currentCell,targetCell,infoCell); rows.append(tr);
+        const infoCell=document.createElement('td'); infoCell.className='detail'; infoCell.textContent=esc([item.source,item.message,item.has_update_instructions?'Zastosowane zostaną jawne instrukcje aktualizacji z katalogu.':''].filter(Boolean).join(' · '));
+        tr.append(checkCell,nameCell,autoCell,badgeCell,currentCell,targetCell,infoCell); rows.append(tr);
       }
       document.getElementById('select-all').checked=false; updateSelection();
     }
     function updateSelection() { const available=[...document.querySelectorAll('.pick')]; const selected=available.filter(x=>x.checked).length; updateButton.disabled=selected===0||!!pollTimer; updateButton.textContent=selected?`Aktualizuj zaznaczone (${selected})`:'Aktualizuj zaznaczone'; }
     async function api(path, options={}) {
       const response=await fetch(path,{...options,headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,...(options.headers||{})}});
-      const body=await response.json().catch(()=>({})); if(response.status===401){location.href='/login';throw new Error('Sesja wygasła.')} if(!response.ok) throw new Error(body.error||`Błąd HTTP ${response.status}`); return body;
+      const body=await response.json().catch(()=>({})); if(response.status===401){location.href='/login';throw new Error('Sesja wygasła.')} if(!response.ok){const error=new Error(body.error||`Błąd HTTP ${response.status}`);error.status=response.status;throw error;} return body;
+    }
+    async function setAutoUpdate(check,item) {
+      const enabled=check.checked; check.disabled=true;
+      try { const result=await api('/api/auto-update',{method:'POST',body:JSON.stringify({name:item.name,container_id:item.id,enabled})}); showStatus(result.message,'ok'); }
+      catch(error) { check.checked=!enabled; showStatus(error.message,'error'); }
+      finally { check.disabled=!!pollTimer; }
     }
     async function poll() {
       try {
@@ -77,22 +90,22 @@
         if(['queued','running'].includes(job.status)){showStatus(job.progress||'Praca…');setBusy(true);return;}
         clearInterval(pollTimer); pollTimer=null; setBusy(false);
         if(job.status==='done'){
-          if(job.kind==='update'&&job.results&&job.results.updates){
-            const summary=job.results.updates.map(x=>`${x.name}: ${x.result}`).join(' | '); showStatus(summary||'Aktualizowanie zakończone.','ok'); render(job.results.containers||[]);
+          if(['update','auto_update'].includes(job.kind)&&job.results&&job.results.updates){
+            const summary=job.results.updates.map(x=>`${x.name}: ${x.result}`).join(' | '); const hasFailures=job.results.updates.some(x=>x.ok===false); showStatus(summary||(job.kind==='auto_update'?'Kolejka automatyczna zakończona.':'Aktualizowanie zakończone.'),hasFailures?'error':'ok'); render(job.results.containers||[]);
           } else { showStatus(`Skanowanie zakończone. ${job.results?.length||0} kontenerów.`,'ok'); render(job.results||[]); }
         } else if(job.status==='error'){showStatus(job.progress||'Zadanie nie powiodło się.','error');}
       } catch(error){clearInterval(pollTimer);pollTimer=null;setBusy(false);showStatus(error.message,'error');}
     }
-    async function startJob(path, payload) {
+    async function startJob(path, payload, joinExisting=false) {
       try { const job=await api(path,{method:'POST',body:payload?JSON.stringify(payload):undefined}); if(job.status==='queued'||job.status==='running'){showStatus(job.progress);setBusy(true);pollTimer=setInterval(poll,1200);poll();} }
-      catch(error){showStatus(error.message,'error');}
+      catch(error){if(error.status===409&&joinExisting){try{const job=await api('/api/job');if(['queued','running'].includes(job.status)){showStatus(job.progress||'Inne zadanie jest w kolejce.');setBusy(true);pollTimer=setInterval(poll,1200);poll();return;}}catch(_ignored){}}showStatus(error.message,'error');}
     }
-    document.getElementById('scan').addEventListener('click',()=>startJob('/api/scan'));
+    document.getElementById('scan').addEventListener('click',()=>startJob('/api/scan',undefined,true));
     document.getElementById('select-updates').addEventListener('click',()=>{document.querySelectorAll('.pick').forEach(x=>x.checked=true);updateSelection();});
     document.getElementById('select-all').addEventListener('change',event=>{document.querySelectorAll('.pick').forEach(x=>x.checked=event.target.checked);updateSelection();});
     updateButton.addEventListener('click',()=>{const ids=[...document.querySelectorAll('.pick:checked')].map(x=>x.value);if(ids.length&&confirm(`Zaktualizować ${ids.length} zaznaczonych kontenerów?`))startJob('/api/update',{container_ids:ids});});
     document.getElementById('password-form').addEventListener('submit',async event=>{event.preventDefault();try{const result=await api('/api/password',{method:'POST',body:JSON.stringify({old_password:document.getElementById('old-password').value,new_password:document.getElementById('new-password').value})});showStatus(result.message,'ok');event.target.reset();}catch(error){showStatus(error.message,'error');}});
-    startJob('/api/scan');
+    startJob('/api/scan',undefined,true);
   </script>
 </body>
 </html>
