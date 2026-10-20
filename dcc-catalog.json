@@ -174,8 +174,8 @@
       "homepage_url": "https://dozzle.dev/",
       "icon_text": "🛠",
       "upstream_repo": "amir20/dozzle",
-      "latest_release": "v11.3.2",
-      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.3.2",
+      "latest_release": "v11.3.3",
+      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.3.3",
       "icon_url": "catalog/media/icons/dozzle.png"
     },
     {
@@ -242,7 +242,10 @@
           "label_en": "Initial panel password",
           "regex": "DCC_UPDATER_INITIAL_CREDENTIALS username=admin password=(?P<value>[A-Za-z0-9_-]+)"
         }
-      ]
+      ],
+      "upstream_repo": "hattimon/DCC",
+      "latest_release": "v1.3.10",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/v1.3.10"
     },
     {
       "name": "Beszel Hub",
@@ -1878,8 +1881,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.154.0",
-      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.154.0",
+      "latest_release": "v1.154.1",
+      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.154.1",
       "icon_url": "catalog/media/icons/victoriametrics.png"
     },
     {
