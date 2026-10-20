@@ -2021,7 +2021,7 @@
     },
     {
       "name": "Cinema Hub",
-      "image": "ghcr.io/hattimon/cinema-hub:1.3.7",
+      "image": "ghcr.io/hattimon/cinema-hub:1.3.8",
       "category": "Media 🎬",
       "description": "Prywatny panel filmów i seriali z własnymi źródłami mediów oraz klientem Android TV.",
       "default_name": "cinema-hub",
@@ -2061,8 +2061,8 @@
         "New installation: username admin, password admin. Change the password after first login. An existing volume preserves your account and password.",
         "The Android TV client is available from the UI at /download/cinema-hub.apk. Enter the container host address and port on your TV."
       ],
-      "latest_release": "v1.3.7",
-      "latest_release_url": "https://github.com/hattimon/CINEMA-HUB/releases/tag/v1.3.7"
+      "latest_release": "v1.3.8",
+      "latest_release_url": "https://github.com/hattimon/CINEMA-HUB/releases/tag/v1.3.8"
     }
   ]
 }
