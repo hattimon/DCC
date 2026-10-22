@@ -484,11 +484,25 @@ class UpdateService:
         ]
         if not any(normalized_repository(str(reference)) == normalized_repository(SELF_IMAGE) for reference in references):
             raise RuntimeError("Przypięty obraz nie pochodzi z repozytorium DCC Container Updater.")
+        # Keep the repository visible to existing DCC installations while still
+        # using immutable content. Config.Image=sha256:<id> loses store identity.
+        pinned_reference = None
+        for reference in sorted(set(str(value) for value in (getattr(image, "attrs", {}).get("RepoDigests") or []))):
+            if (normalized_repository(reference) != normalized_repository(SELF_IMAGE)
+                    or not re.fullmatch(r"[^@\s]+@sha256:[0-9a-fA-F]{64}", reference)):
+                continue
+            resolved = self.client.images.get(reference)
+            if str(getattr(resolved, "id", "")) == target_image_id:
+                pinned_reference = reference
+                break
+        if not pinned_reference:
+            raise RuntimeError("Brak przypiętej nazwy repozytorium dla obrazu panelu; działający kontener pozostawiono bez zmian.")
         return self.update_one(
             container,
-            target_image_id,
+            pinned_reference,
             _allow_self=True,
             _image_already_pulled=True,
+            _expected_image_id=target_image_id,
         )
 
     @staticmethod
@@ -1573,6 +1587,7 @@ class UpdateService:
         *,
         _allow_self: bool = False,
         _image_already_pulled: bool = False,
+        _expected_image_id: str | None = None,
     ) -> str:
         if self._is_self(container) and not _allow_self:
             raise RuntimeError("Aktualizacja samego panelu nie jest obsługiwana.")
@@ -1615,6 +1630,8 @@ class UpdateService:
         try:
             created = self.client.api.create_container_from_config(raw_config, name=original_name)
             replacement = self.client.containers.get(created["Id"])
+            if _expected_image_id and str(replacement.attrs.get("Image") or "") != _expected_image_id:
+                raise RuntimeError("Nowy kontener nie używa przypiętego obrazu aktualizacji; wycofano podmianę.")
             if was_running:
                 replacement.start()
                 self._wait_until_healthy(replacement)

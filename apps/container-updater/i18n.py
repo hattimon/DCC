@@ -229,6 +229,8 @@ STRINGS = {
 
 # Only diagnostic fields are translated; image references, names and settings are untouched.
 DIAGNOSTICS = {
+    "Brak przypiętej nazwy repozytorium dla obrazu panelu; działający kontener pozostawiono bez zmian.": "The panel image has no verified immutable repository reference; the running container was left unchanged.",
+    "Nowy kontener nie używa przypiętego obrazu aktualizacji; wycofano podmianę.": "The replacement container does not use the pinned update image; the replacement was rolled back.",
     "Nieprawidłowy adres rejestru.": "Invalid registry address.",
     "Podaj nazwę hosta rejestru, np. ghcr.io lub docker.io, bez ścieżki.": "Enter a registry hostname such as ghcr.io or docker.io, without a path.",
     "Nieprawidłowy port rejestru.": "Invalid registry port.",

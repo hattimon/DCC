@@ -1,4 +1,5 @@
 import sys
+import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from updater import SELF_IMAGE, SELF_LABEL, SELF_UPDATE_HELPER_LABEL, UpdateServ
 
 OLD_ID = "sha256:" + "a" * 64
 NEW_ID = "sha256:" + "b" * 64
+NEW_REFERENCE = "ghcr.io/hattimon/dcc-container-updater@sha256:" + "d" * 64
 
 
 class SelfUpdateTests(unittest.TestCase):
@@ -50,7 +52,7 @@ class SelfUpdateTests(unittest.TestCase):
         })
         self.new_image = SimpleNamespace(id=NEW_ID, attrs={
             "RepoTags": [SELF_IMAGE],
-            "RepoDigests": ["ghcr.io/hattimon/dcc-container-updater@sha256:new"],
+            "RepoDigests": [NEW_REFERENCE],
             "Os": "linux",
             "Architecture": "arm64",
         })
@@ -74,7 +76,7 @@ class SelfUpdateTests(unittest.TestCase):
             def get(_self, image):
                 if image in {OLD_ID, SELF_IMAGE}:
                     return _self.outer.old_image if image == OLD_ID else _self.outer.new_image
-                if image == NEW_ID:
+                if image in {NEW_ID, NEW_REFERENCE}:
                     return _self.outer.new_image
                 raise KeyError(image)
 
@@ -184,12 +186,61 @@ class SelfUpdateTests(unittest.TestCase):
         self.assertEqual(result, "updated")
         update_one.assert_called_once_with(
             self.container,
-            NEW_ID,
+            NEW_REFERENCE,
             _allow_self=True,
             _image_already_pulled=True,
+            _expected_image_id=NEW_ID,
         )
         with self.assertRaisesRegex(ValueError, "identyfikator obrazu"):
             self.service.replace_self_from_helper(self.container.id, "--invalid")
+
+    def test_helper_will_not_replace_panel_without_a_verified_immutable_named_reference(self):
+        self.new_image.attrs['RepoDigests']=[]
+        with patch.object(self.service,'update_one') as replace:
+            with self.assertRaisesRegex(RuntimeError,'Brak przypiętej nazwy'):
+                self.service.replace_self_from_helper(self.container.id,NEW_ID)
+            replace.assert_not_called()
+        self.container.stop.assert_not_called()
+
+    def test_helper_rejects_digest_resolving_to_an_unexpected_image(self):
+        original_get=self.client.images.get
+        def resolve(reference):
+            return self.old_image if reference==NEW_REFERENCE else original_get(reference)
+        with patch.object(self.client.images,'get',side_effect=resolve), patch.object(self.service,'update_one') as replace:
+            with self.assertRaisesRegex(RuntimeError,'Brak przypiętej nazwy'):
+                self.service.replace_self_from_helper(self.container.id,NEW_ID)
+            replace.assert_not_called()
+
+    def test_wrong_replacement_image_is_rolled_back_before_it_can_start(self):
+        self.container.rename=Mock()
+        self.container.start=Mock()
+        self.container.remove=Mock()
+        replacement=SimpleNamespace(attrs={'Image':OLD_ID},start=Mock(),stop=Mock(),remove=Mock())
+        self.client.api.create_container_from_config=Mock(return_value={'Id':'replacement-id'})
+        original_get=self.client.containers.get
+        with patch.object(self.client.containers,'get',side_effect=lambda value:replacement if value=='replacement-id' else original_get(value)), \
+                patch.object(self.service,'_create_config',return_value={}):
+            with self.assertRaises(RuntimeError):
+                self.service.update_one(self.container,NEW_REFERENCE,_allow_self=True,_image_already_pulled=True,_expected_image_id=NEW_ID)
+        replacement.start.assert_not_called()
+        replacement.remove.assert_called_once_with(v=False)
+        self.container.start.assert_called_once()
+        self.assertEqual(self.container.rename.call_args.args[0],self.container.name)
+        self.container.remove.assert_not_called()
+
+    def test_named_digest_is_recognised_by_existing_desktop_store_matching(self):
+        source=Path(__file__).resolve().parents[3]/'DockerControlCenter.py'
+        if not source.exists():self.skipTest('Desktop source is not included in standalone app checkout')
+        names={'normalize_container_image','container_image_name','template_matches_container'}
+        module=ast.parse(source.read_text(encoding='utf-8-sig'))
+        functions=ast.Module(body=[node for node in module.body if isinstance(node,ast.FunctionDef) and node.name in names],type_ignores=[])
+        scope={'ImageTemplate':SimpleNamespace}
+        exec(compile(functions,str(source),'exec'),scope)
+        template=SimpleNamespace(image=SELF_IMAGE,default_name='dcc-container-updater')
+        running=SimpleNamespace(name=template.default_name,attrs={'Config':{'Image':NEW_ID}})
+        self.assertFalse(scope['template_matches_container'](template,running))
+        running.attrs['Config']['Image']=NEW_REFERENCE
+        self.assertTrue(scope['template_matches_container'](template,running))
 
     def test_manual_container_update_cannot_enable_self_replacement(self):
         with self.assertRaisesRegex(RuntimeError, "samego panelu"):

@@ -66,6 +66,8 @@ Secrets are stored only in `/data/notifications.json` with restrictive file perm
 
 ## Appearance, sound and host identification
 
+Self-updates recreate the panel using its verified `repository@sha256:digest` reference rather than a bare image ID. This preserves recognition by the existing desktop DCC store without relying on a mutable `latest` tag. The replacement's actual image ID must match the selected update before it starts; a mismatch triggers rollback. A panel previously created with a bare ID regains its store identity on its next successful self-update, after refreshing DCC's container list.
+
 The header identifies the Docker daemon's host name, operating system/version, architecture and Docker version, with CPU/RAM information. It uses a cached, read-only daemon query, independently of registry scans. Docker Desktop exposes its virtual-machine environment; the physical Windows/macOS version is not guessed from it. Unavailable host information does not block the rest of the panel.
 
 Blocked, unchecked and unavailable containers are hidden by default. **Show all** reveals them with their diagnostics and remembers that choice. Up-to-date supported containers and the updater itself remain visible; filtering the list does not change scan results, schedules, reports or update permissions.
