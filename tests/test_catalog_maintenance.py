@@ -147,8 +147,9 @@ class CatalogMaintenanceTests(unittest.TestCase):
         catalog_path = Path(__file__).resolve().parents[1] / "dcc-catalog.json"
         payload = json.loads(catalog_path.read_text(encoding="utf-8"))
         app = next(item for item in payload["apps"] if item.get("upstream_repo") == "hattimon/CINEMA-HUB")
-        self.assertEqual(app["latest_release"], "v1.3.7")
-        self.assertEqual(app["image"], "ghcr.io/hattimon/cinema-hub:1.3.7")
+        self.assertRegex(app["latest_release"], r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+        self.assertEqual(app["image"], f"ghcr.io/hattimon/cinema-hub:{app['latest_release'][1:]}")
+        self.assertTrue(app["latest_release_url"].endswith(f"/releases/tag/{app['latest_release']}"))
         self.assertEqual(app["release_tag_pattern"], r"v[0-9]+\.[0-9]+\.[0-9]+")
         self.assertEqual(app["image_tag_from_release"], "strip-v")
 

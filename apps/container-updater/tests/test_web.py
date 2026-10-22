@@ -50,8 +50,8 @@ class WebSecurityTests(unittest.TestCase):
         panel = self.client.get("/")
         self.assertEqual(panel.status_code, 200)
         self.assertIn(b"Docker", panel.data)
-        self.assertIn("Compose wymaga ręcznej aktualizacji".encode(), panel.data)
-        self.assertIn("Tylko ręcznie (Compose)".encode(), panel.data)
+        self.assertIn(b"Compose services require manual review", panel.data)
+        self.assertIn(b'lang="en"', panel.data)
 
     def test_api_post_requires_csrf_token(self):
         password = self.app.extensions["dcc_updater_initial_password"]
@@ -60,13 +60,86 @@ class WebSecurityTests(unittest.TestCase):
         response = self.client.post("/api/scan")
         self.assertEqual(response.status_code, 400)
 
+    def test_language_defaults_to_english_and_last_selection_survives_logout_and_new_session(self):
+        self.assertIn(b'lang="en"', self.client.get('/login').data)
+        csrf = self._csrf()
+        self.assertEqual(self.client.post('/language', data={'language': 'pl'}).status_code, 400)
+        self.client.post('/language', data={'language': 'pl', 'csrf_token': csrf})
+        self.client.post('/login', data={'csrf_token': csrf, 'password': self.app.extensions['dcc_updater_initial_password']})
+        self.assertIn(b'lang="pl"', self.client.get('/').data)
+        self.client.post('/logout', data={'csrf_token': self._csrf('/')})
+        fresh_client = self.app.test_client()
+        self.assertIn(b'lang="pl"', fresh_client.get('/login').data)
+        self.assertEqual((Path(self.temp.name) / 'language').read_text(), 'pl')
+
+    def test_english_diagnostics_do_not_translate_container_names_or_image_references(self):
+        from i18n import localize_payload
+        payload = {'name': 'Obraz jest aktualny.', 'current_image': 'rejestr:latest',
+                   'message': 'Obraz jest aktualny.', 'source': 'digest rejestru',
+                   'updates': [{'result': 'Brak dostępnej aktualizacji.'}]}
+        localized = localize_payload(payload, 'en')
+        self.assertEqual(localized['name'], payload['name'])
+        self.assertEqual(localized['current_image'], payload['current_image'])
+        self.assertEqual(localized['message'], 'The image is up to date.')
+        self.assertEqual(localized['updates'][0]['result'], 'No update is available.')
+        self.assertEqual(localize_payload(payload, 'pl'), payload)
+
+    def test_panel_update_decision_blocks_scan_then_defer_releases_startup_auto_queue(self):
+        calls = []
+
+        class Service:
+            client = SimpleNamespace(ping=lambda: None)
+
+            def check_self_update(self, _progress):
+                calls.append('check')
+                return {'checked': True, 'supported': True, 'update_available': True}
+
+            def scan(self, _progress):
+                calls.append('scan')
+                return [{'id': 'one', 'name': 'generic', 'current_image': 'example/service:latest',
+                         'supported': True, 'update_available': True}]
+
+            def update_selected(self, ids, _progress):
+                calls.append(('update', ids))
+                return [{'name': 'generic', 'ok': True, 'result': 'updated'}]
+
+        with patch.dict(os.environ, {'DCC_UPDATER_STARTUP_DELAY': '300'}):
+            app = create_app(self.temp.name, service_factory=Service, print_credentials=False,
+                             startup_auto_updates=True)
+        app.extensions['dcc_updater_auto_updates'].set('generic', 'example/service:latest', True)
+        client = app.test_client()
+        with client.session_transaction() as state:
+            state.update(authenticated=True, csrf_token='test-token')
+        headers = {'X-CSRF-Token': 'test-token'}
+
+        def wait():
+            manager = app.extensions['dcc_updater_jobs']
+            deadline = time.monotonic() + 2
+            while manager.snapshot()['status'] in {'queued', 'running'} and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertEqual(manager.snapshot()['status'], 'done')
+            return manager.snapshot()
+
+        self.assertEqual(client.post('/api/self-update/check', json={}, headers=headers).status_code, 202)
+        wait()
+        self.assertEqual(calls, ['check'])
+        self.assertEqual(client.post('/api/scan', json={}, headers=headers).status_code, 409)
+        self.assertEqual(calls, ['check'])
+        self.assertEqual(client.post('/api/scan', json={'defer_panel_update': True}, headers=headers).status_code, 202)
+        result = wait()['results']
+        self.assertEqual(calls, ['check', 'scan', ('update', ['one']), 'scan'])
+        self.assertTrue(result['updates'][0]['ok'])
+        self.assertEqual(client.post('/api/scan', json={}, headers=headers).status_code, 202)
+        wait()
+        self.assertEqual(calls.count(('update', ['one'])), 1)
+
     def test_panel_exposes_manual_self_update_controls(self):
         password = self.app.extensions["dcc_updater_initial_password"]
         csrf = self._csrf()
         self.client.post("/login", data={"csrf_token": csrf, "password": password})
         response = self.client.get("/")
-        self.assertIn("Sprawdź aktualizację panelu".encode(), response.data)
-        self.assertIn("Aktualizuj panel".encode(), response.data)
+        self.assertIn(b"Check panel update", response.data)
+        self.assertIn(b"Update panel", response.data)
 
     def test_self_update_actions_require_authentication_and_csrf(self):
         self.assertEqual(self.client.post("/api/self-update/check").status_code, 401)
@@ -213,7 +286,20 @@ class WebSecurityTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertEqual(manager.snapshot()["status"], "done")
 
-    def test_startup_checks_and_updates_panel_even_when_other_auto_updates_are_off(self):
+    def test_job_results_remain_bound_to_their_id_when_another_browser_starts_a_job(self):
+        manager = JobManager()
+        first_started, first = manager.start('scan', lambda _progress: ['original result'])
+        self.assertTrue(first_started)
+        deadline = time.monotonic() + 2
+        while manager.snapshot()['status'] != 'done' and time.monotonic() < deadline:
+            time.sleep(.01)
+        second_started, second = manager.start('self_update_check', lambda _progress: {'checked': True})
+        self.assertTrue(second_started)
+        self.assertEqual(manager.snapshot(first['id'])['results'], ['original result'])
+        self.assertEqual(first['instance'], second['instance'])
+        self.assertNotEqual(first['instance'], JobManager().snapshot()['instance'])
+
+    def test_startup_checks_panel_and_waits_for_decision_without_updating_or_scanning(self):
         checked = threading.Event()
         calls = []
 
@@ -252,7 +338,7 @@ class WebSecurityTests(unittest.TestCase):
             )
             self.assertTrue(checked.wait(2))
 
-        self.assertEqual(calls, ["ping", "check", "start"])
+        self.assertEqual(calls, ["ping", "check"])
 
 
 if __name__ == "__main__":

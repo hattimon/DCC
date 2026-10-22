@@ -17,24 +17,35 @@ from flask import Flask, jsonify, make_response, redirect, render_template, requ
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from updater import UpdateService, normalized_repository
+from i18n import localize_payload, strings, translate_text
 
 
 class JobManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
-        self._state: dict[str, Any] = {"id": None, "kind": None, "status": "idle", "progress": "", "results": []}
+        self.instance = secrets.token_urlsafe(12)
+        self._history: dict[str, dict[str, Any]] = {}
+        self._state: dict[str, Any] = {"id": None, "instance": self.instance, "kind": None, "status": "idle", "progress": "", "results": []}
 
-    def snapshot(self) -> dict[str, Any]:
+    def snapshot(self, job_id: str | None = None) -> dict[str, Any]:
         with self._lock:
-            return json.loads(json.dumps(self._state))
+            state = self._state if job_id is None or self._state["id"] == job_id else self._history.get(job_id)
+            if state is None:
+                raise KeyError(job_id)
+            return json.loads(json.dumps(state))
 
     def start(self, kind: str, work: Callable[[Callable[[str], None]], Any]) -> tuple[bool, dict[str, Any]]:
         with self._lock:
             if self._state["status"] in {"queued", "running"}:
                 return False, self.snapshot()
+            if self._state["id"]:
+                self._history[self._state["id"]] = self.snapshot()
+                if len(self._history) > 20:
+                    self._history.pop(next(iter(self._history)))
             job_id = secrets.token_urlsafe(12)
             self._state = {
                 "id": job_id,
+                "instance": self.instance,
                 "kind": kind,
                 "status": "queued",
                 "progress": "Zadanie oczekuje na wykonanie.",
@@ -143,6 +154,23 @@ def create_app(
     password_path = data_path / "admin_password_hash"
     secret_path = data_path / "secret_key"
     auto_update_store = AutoUpdateStore(data_path / "auto_update_containers.json")
+    language_path = data_path / "language"
+    language_lock = threading.RLock()
+
+    def current_language() -> str:
+        selected = session.get("language")
+        if selected in {"en", "pl"}:
+            return selected
+        try:
+            saved = language_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            saved = "en"
+        return saved if saved in {"en", "pl"} else "en"
+
+    @app.context_processor
+    def language_context():
+        language = current_language()
+        return {"lang": language, "ui": strings(language), "translate": lambda text: translate_text(text, language)}
 
     if not secret_path.exists():
         _atomic_write(secret_path, secrets.token_urlsafe(48))
@@ -167,6 +195,18 @@ def create_app(
     app.extensions["dcc_updater_data_dir"] = data_path
     app.extensions["dcc_updater_initial_password"] = initial_password
     app.extensions["dcc_updater_auto_updates"] = auto_update_store
+    startup_lock = threading.RLock()
+    startup_state = {
+        "scheduled": startup_auto_updates or startup_self_update,
+        "auto_updates_pending": startup_auto_updates,
+        "awaiting_panel_decision": False,
+        "panel_update_started": False,
+    }
+
+    def finish_startup(result: dict[str, Any]) -> dict[str, Any]:
+        with startup_lock:
+            startup_state["auto_updates_pending"] = False
+        return result
 
     def get_service() -> UpdateService:
         if service_factory:
@@ -190,7 +230,9 @@ def create_app(
             )
         return results
 
-    def run_startup_auto_updates(progress: Callable[[str], None]) -> dict[str, Any]:
+    def run_startup_auto_updates(
+        progress: Callable[[str], None], *, skip_panel_check: bool = False, scan_all: bool = False,
+    ) -> dict[str, Any]:
         service = None
         deadline = time.monotonic() + max(30, min(int(os.environ.get("DCC_UPDATER_DOCKER_WAIT", "180")), 600))
         while True:
@@ -208,28 +250,31 @@ def create_app(
                 progress("Oczekiwanie na gotowość Docker po restarcie hosta…")
                 time.sleep(3)
 
-        if startup_self_update:
+        if startup_self_update and not skip_panel_check:
             try:
                 self_update = service.check_self_update(progress)
-                if self_update.get("update_available") and self_update.get("supported", True):
-                    self_update = service.start_self_update(progress)
-                    if self_update.get("started"):
-                        progress(self_update.get("message", "Aktualizacja panelu została uruchomiona."))
-                        return {"self_update": self_update, "updates": [], "containers": []}
-                elif self_update.get("update_available"):
-                    progress(self_update.get("message", "Aktualizacja panelu wymaga ręcznej obsługi."))
+                if self_update.get("update_available"):
+                    with startup_lock:
+                        startup_state["awaiting_panel_decision"] = True
+                    progress("Dostępna aktualizacja panelu. Otwórz panel i wybierz Aktualizuj albo Nie teraz.")
+                    return {
+                        "self_update": self_update,
+                        "awaiting_panel_decision": True,
+                        "updates": [],
+                        "containers": [],
+                    }
                 elif not self_update.get("checked"):
                     progress(self_update.get("message", "Nie udało się sprawdzić aktualizacji panelu; obecny panel działa dalej."))
             except Exception as exc:
                 progress(f"Nie udało się sprawdzić aktualizacji panelu ({type(exc).__name__}); obecny panel działa dalej.")
 
-        if not startup_auto_updates:
-            return {"updates": [], "containers": []}
+        if not startup_auto_updates and not scan_all:
+            return finish_startup({"updates": [], "containers": []})
 
-        enabled = auto_update_store.snapshot()
-        if not enabled:
+        enabled = auto_update_store.snapshot() if startup_auto_updates else {}
+        if not enabled and not scan_all:
             progress("Panel sprawdzony; automatyczne aktualizacje innych kontenerów nie są włączone.")
-            return {"updates": [], "containers": []}
+            return finish_startup({"updates": [], "containers": []})
 
         scanned = service.scan(progress)
 
@@ -244,13 +289,13 @@ def create_app(
 
         if not queued:
             progress("Kolejka automatyczna zakończona: brak dostępnych aktualizacji.")
-            return {"updates": [], "containers": annotate_auto_update_state(scanned)}
+            return finish_startup({"updates": [], "containers": annotate_auto_update_state(scanned)})
 
         progress(f"Kolejka automatyczna: {len(queued)} kontenerów; aktualizacja po jednym kontenerze naraz.")
         outcomes = service.update_selected([str(item["id"]) for item in queued], progress)
         progress("Kolejka zakończona. Ponowne skanowanie kontenerów…")
         updated = annotate_auto_update_state(service.scan(progress))
-        return {"updates": outcomes, "containers": updated}
+        return finish_startup({"updates": outcomes, "containers": updated})
 
     def schedule_startup_auto_updates() -> threading.Thread:
         try:
@@ -264,8 +309,18 @@ def create_app(
 
         def wait_for_queue() -> None:
             time.sleep(delay)
+            def startup_work(progress):
+                with startup_lock:
+                    if not startup_state["scheduled"]:
+                        return {"updates": [], "containers": []}
+                    startup_state["scheduled"] = False
+                return run_startup_auto_updates(progress)
+
             while True:
-                started, _state = manager.start("auto_update", run_startup_auto_updates)
+                with startup_lock:
+                    if not startup_state["scheduled"]:
+                        return
+                started, _state = manager.start("auto_update", startup_work)
                 if started:
                     return
                 # Startup work waits behind any scan or manual update already in progress.
@@ -299,7 +354,7 @@ def create_app(
 
     @app.before_request
     def protect_routes():
-        if request.endpoint in {"health", "login", "static"}:
+        if request.endpoint in {"health", "login", "static", "set_language"}:
             return None
         if not authenticated():
             if request.path.startswith("/api/"):
@@ -311,6 +366,8 @@ def create_app(
 
     @app.after_request
     def security_headers(response):
+        if response.is_json:
+            response.set_data(app.json.dumps(localize_payload(response.get_json(), current_language())))
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
@@ -330,7 +387,7 @@ def create_app(
         token = csrf_token()
         if request.method == "POST":
             if not csrf_valid():
-                return make_response("Nieprawidłowy token bezpieczeństwa. Odśwież stronę.", 400)
+                return make_response(translate_text("Nieprawidłowy token bezpieczeństwa. Odśwież stronę.", current_language()), 400)
             now = time.time()
             remote = request.remote_addr or "unknown"
             attempts = [stamp for stamp in login_attempts.get(remote, []) if now - stamp < 600]
@@ -341,16 +398,33 @@ def create_app(
                 password = request.form.get("password", "")
                 stored_hash = password_path.read_text(encoding="utf-8").strip()
                 if check_password_hash(stored_hash, password):
+                    language = current_language()
                     session.clear()
                     session["authenticated"] = True
+                    session["language"] = language
                     session["csrf_token"] = secrets.token_urlsafe(32)
                     session.permanent = True
+                    with language_lock:
+                        _atomic_write(language_path, language)
                     login_attempts.pop(remote, None)
                     return redirect(url_for("index"))
                 attempts.append(now)
                 login_attempts[remote] = attempts
                 message = "Nieprawidłowe hasło."
         return render_template("login.html", csrf_token=token, message=message)
+
+    @app.post("/language")
+    def set_language():
+        if not csrf_valid():
+            return translate_text("Nieprawidłowy token bezpieczeństwa. Odśwież stronę.", current_language()), 400
+        language = request.form.get("language")
+        if language not in {"en", "pl"}:
+            return "Unsupported language", 400
+        session["language"] = language
+        if authenticated():
+            with language_lock:
+                _atomic_write(language_path, language)
+        return redirect(url_for("index" if authenticated() else "login"))
 
     @app.post("/logout")
     def logout():
@@ -368,11 +442,31 @@ def create_app(
 
     @app.get("/api/job")
     def job():
-        return jsonify(manager.snapshot())
+        try:
+            return jsonify(manager.snapshot(request.args.get("id")))
+        except KeyError:
+            return jsonify({"error": "Wynik zadania wygasł. Odśwież stan kontenerów."}), 404
 
     @app.post("/api/scan")
     def scan():
+        payload = request.get_json(silent=True) or {}
+        defer_panel_update = payload.get("defer_panel_update") is True
+        with startup_lock:
+            if startup_state["panel_update_started"]:
+                return jsonify({"error": "Trwa aktualizacja panelu. Poczekaj na jego ponowne uruchomienie."}), 409
+            if startup_state["awaiting_panel_decision"] and not defer_panel_update:
+                return jsonify({"error": "Najpierw wybierz Aktualizuj panel albo Nie teraz."}), 409
+
         def work(progress):
+            with startup_lock:
+                if startup_state["panel_update_started"]:
+                    raise RuntimeError("Trwa aktualizacja panelu. Poczekaj na jego ponowne uruchomienie.")
+                if startup_state["awaiting_panel_decision"] and not defer_panel_update:
+                    raise RuntimeError("Najpierw wybierz Aktualizuj panel albo Nie teraz.")
+                startup_state["awaiting_panel_decision"] = False
+                resume_startup = startup_state["auto_updates_pending"]
+            if resume_startup:
+                return run_startup_auto_updates(progress, skip_panel_check=True, scan_all=True)
             return annotate_auto_update_state(get_service().scan(progress))
 
         started, state = manager.start("scan", work)
@@ -381,7 +475,12 @@ def create_app(
     @app.post("/api/self-update/check")
     def check_self_update():
         def work(progress):
+            with startup_lock:
+                startup_state["scheduled"] = False
+                startup_state["awaiting_panel_decision"] = False
             result = get_service().check_self_update(progress)
+            with startup_lock:
+                startup_state["awaiting_panel_decision"] = bool(result.get("update_available"))
             progress(result.get("message", "Sprawdzanie aktualizacji panelu zakończone."))
             return result
 
@@ -392,6 +491,9 @@ def create_app(
     def update_self():
         def work(progress):
             result = get_service().start_self_update(progress)
+            with startup_lock:
+                startup_state["awaiting_panel_decision"] = False
+                startup_state["panel_update_started"] = bool(result.get("started"))
             progress(result.get("message", "Aktualizacja panelu zakończona."))
             return result
 

@@ -1080,6 +1080,14 @@ class UpdateService:
             "status": str((attrs.get("State") or {}).get("Status") or getattr(container, "status", "unknown")),
             "message": "",
             "check_error": False,
+            "is_panel": self._is_self(container),
+            "is_compose": compose,
+            "persistent_mounts": sorted({
+                str(mount.get("Destination") or "")
+                for mount in attrs.get("Mounts") or []
+                if mount.get("Type") in {"volume", "bind"}
+                and mount.get("Destination") and mount.get("Destination") != "/var/run/docker.sock"
+            }),
             "has_update_instructions": bool(self._catalog_update_instructions(current, apps)) if current else False,
         }
         if self._is_self(container):
@@ -1153,6 +1161,7 @@ class UpdateService:
             else:
                 instructions = self._catalog_update_instructions(current, apps)
                 blocker = self._port_conflict_reason(container, instructions, all_containers)
+            blocker = runtime_blocker or blocker
             result.update(
                 update_available=True,
                 target_image=target,
@@ -1313,7 +1322,8 @@ class UpdateService:
 
     def _wait_until_healthy(self, container: Any) -> None:
         deadline = time.monotonic() + self.wait_seconds
-        has_healthcheck = bool((container.attrs.get("Config") or {}).get("Healthcheck"))
+        healthcheck = (container.attrs.get("Config") or {}).get("Healthcheck") or {}
+        has_healthcheck = bool(healthcheck and healthcheck.get("Test") != ["NONE"])
         while time.monotonic() <= deadline:
             container.reload()
             state = container.attrs.get("State") or {}

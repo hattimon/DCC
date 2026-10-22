@@ -125,6 +125,29 @@ class ContainerSafetyTests(unittest.TestCase):
         result = service.inspect_container(container, [])
         self.assertFalse(result["supported"])
 
+    def test_registry_update_never_bypasses_runtime_blocker_and_reports_storage(self):
+        service = UpdateService(SimpleNamespace(), catalog_loader=lambda: [])
+        container = self._container(
+            HostConfig={"NetworkMode": "service-net", "AutoRemove": False},
+            NetworkSettings={"Networks": {"service-net": {}}},
+            Mounts=[{"Type": "volume", "Destination": "/data"},
+                    {"Type": "bind", "Destination": "/config"}],
+        )
+        with patch.object(service, '_registry_digest', return_value=(True, 'new image')):
+            result = service.inspect_container(container, [])
+        self.assertTrue(result['update_available'])
+        self.assertFalse(result['supported'])
+        self.assertFalse(result['auto_update_supported'])
+        self.assertEqual(result['persistent_mounts'], ['/config', '/data'])
+        self.assertIn('sieć', result['message'])
+
+    def test_explicitly_disabled_healthcheck_uses_running_startup_check(self):
+        service = UpdateService(SimpleNamespace(), catalog_loader=lambda: [], wait_seconds=1)
+        container = self._container(Config={'Healthcheck': {'Test': ['NONE']}})
+        container.reload = lambda: None
+        with patch('updater.time.monotonic', side_effect=[0, 0, 1]), patch('updater.time.sleep'):
+            service._wait_until_healthy(container)
+
     def test_digest_only_config_uses_a_unique_local_tag_for_registry_checks(self):
         local_image = SimpleNamespace(attrs={
             "RepoTags": ["ghcr.io/example/rss-bridge:latest"],

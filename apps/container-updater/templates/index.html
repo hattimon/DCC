@@ -1,120 +1,19 @@
+{% from '_shared.html' import icon, language_picker, footer %}
 <!doctype html>
-<html lang="pl">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="csrf-token" content="{{ csrf_token }}">
-  <title>DCC Container Updater</title>
-  <style>
-    :root{color-scheme:dark;--bg:#101116;--panel:#191a21;--panel2:#20212a;--line:#414351;--accent:#ff405b;--text:#f3f3f6;--muted:#b6b7c2;--green:#72d6a0;--yellow:#ffd27a}
-    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 15% 0,#28202a,var(--bg) 42%);font:14px/1.5 system-ui,Segoe UI,sans-serif;color:var(--text)}button,input{font:inherit}header{padding:22px clamp(16px,4vw,54px);display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid var(--line);background:#101116bb;position:sticky;top:0;z-index:2;backdrop-filter:blur(12px)}h1{font-size:22px;margin:0}.brand{color:var(--accent);font-size:11px;font-weight:800;letter-spacing:.1em}.subtitle{color:var(--muted);margin:3px 0 0}.head-actions{display:flex;gap:9px;align-items:center}button{border:1px solid var(--line);background:#20212a;color:var(--text);padding:9px 14px;border-radius:10px;cursor:pointer}button:hover:not(:disabled){border-color:var(--accent)}button.primary{background:var(--accent);border-color:var(--accent);color:#1c1015;font-weight:750}button:disabled{opacity:.45;cursor:not-allowed}.link-button{border:0;background:none;color:var(--muted);text-decoration:underline;padding:5px;cursor:pointer}main{width:min(1500px,100%);margin:0 auto;padding:24px clamp(14px,3vw,38px) 50px}.notice{display:flex;gap:12px;align-items:flex-start;padding:13px 15px;background:#3a2920;border:1px solid #765039;border-radius:12px;color:#ffe4c5;margin-bottom:18px}.notice strong{color:#fff}.toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin:16px 0}.grow{flex:1}.status{min-height:24px;color:var(--muted);margin:10px 2px}.status.error{color:#ff9eaa}.status.ok{color:var(--green)}.progress{height:3px;background:transparent;border-radius:9px;overflow:hidden}.progress.active{background:linear-gradient(90deg,transparent,var(--accent),transparent);background-size:200% 100%;animation:move 1.5s linear infinite}@keyframes move{to{background-position:-200% 0}}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:#15161bcc}table{width:100%;border-collapse:collapse;min-width:900px}th,td{text-align:left;padding:12px 13px;border-bottom:1px solid #30313a;vertical-align:top}th{font-size:12px;color:var(--muted);font-weight:650;background:#20212a;position:sticky;top:0;z-index:1}tr:last-child td{border-bottom:0}.image{font:12px/1.5 ui-monospace,Consolas,monospace;overflow-wrap:anywhere;color:#e1e1ea}.name{font-weight:700}.badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:11px;color:var(--muted);white-space:nowrap}.badge.update{border-color:#8d3c4a;color:#ff9eaa;background:#431c25}.badge.current{border-color:#356a53;color:var(--green);background:#172c23}.badge.skip{color:var(--yellow)}.detail{font-size:12px;color:var(--muted);max-width:380px;margin-top:4px}.empty{padding:30px!important;text-align:center;color:var(--muted)}.settings{margin-top:25px;border:1px solid var(--line);border-radius:14px;background:#171820;padding:16px}.settings summary{cursor:pointer;font-weight:700}.password-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;margin-top:13px}.field label{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}.field input{width:100%;padding:10px;background:#0f1016;border:1px solid var(--line);border-radius:9px;color:var(--text)}.foot{color:var(--muted);font-size:12px;margin:15px 2px}.small{font-size:12px;color:var(--muted)}@media(max-width:650px){header{align-items:flex-start;flex-direction:column}.head-actions{width:100%}.head-actions button{flex:1}.password-grid{grid-template-columns:1fr}.settings button{width:100%}}
-  </style>
-</head>
+<html lang="{{ lang }}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="{{ csrf_token }}"><title>DCC Container Updater</title><link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"><link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}"></head>
 <body>
-  <header>
-    <div><div class="brand">DCC · CONTAINER UPDATER</div><h1>Aktualizacje kontenerów Docker</h1><p class="subtitle">Sprawdź obrazy i wybierz kontenery do aktualizacji.</p></div>
-    <div class="head-actions"><button id="check-self">Sprawdź aktualizację panelu</button><button id="update-self" class="primary" hidden disabled>Aktualizuj panel</button><button id="scan">Skanuj kontenery</button><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="link-button">Wyloguj</button></form></div>
-  </header>
+  <header class="header"><div class="header-inner"><div class="brand"><span class="brand-mark">{{ icon('cube') }}</span><span><strong>DCC</strong><span class="brand-divider"></span>Container Updater</span></div><div class="head-actions">{{ language_picker(ui, lang, csrf_token) }}<form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="quiet" type="submit">{{ ui.logout }}</button></form></div></div></header>
   <main>
-    <div class="notice"><span aria-hidden="true">⚠</span><div><strong>Dostęp do Dockera daje uprawnienia administratora hosta.</strong> Chroń to hasło, udostępniaj panel tylko z zaufanej sieci i nie wystawiaj go bez HTTPS do Internetu.</div></div>
-    <div class="toolbar">
-      <button id="select-updates">Zaznacz dostępne aktualizacje</button>
-      <button id="update" class="primary" disabled>Aktualizuj zaznaczone</button>
-      <span class="grow"></span><span id="count" class="small">Kontenery: —</span>
-    </div>
-    <p class="small">Automatyczna aktualizacja jest domyślnie wyłączona. Włącz ją przy wybranych kontenerach; kolejka aktualizuje jeden naraz. Compose wymaga ręcznej aktualizacji; blokujemy jawne zależności, współdzielone wolumeny i sieci Docker. Aktualizacja pojedynczej usługi może spowodować krótką przerwę — zależności spoza Dockera sprawdź ręcznie.</p>
-    <div id="status" class="status" role="status">Ładowanie panelu…</div>
-    <div id="progress" class="progress"></div>
-    <div class="table-wrap"><table>
-      <thead><tr><th><input id="select-all" type="checkbox" aria-label="Zaznacz wszystkie aktualizacje"></th><th>Kontener</th><th>Auto po restarcie</th><th>Status</th><th>Obecny obraz</th><th>Obraz docelowy</th><th>Informacja</th></tr></thead>
-      <tbody id="rows"><tr><td colspan="7" class="empty">Rozpocznij skanowanie kontenerów.</td></tr></tbody>
-    </table></div>
-    <details class="settings"><summary>Zmień hasło panelu</summary>
-      <form id="password-form" class="password-grid">
-        <div class="field"><label for="old-password">Obecne hasło</label><input id="old-password" type="password" autocomplete="current-password" required></div>
-        <div class="field"><label for="new-password">Nowe hasło (min. 14 znaków)</label><input id="new-password" type="password" autocomplete="new-password" minlength="14" required></div>
-        <button type="submit">Zapisz hasło</button>
-      </form>
-    </details>
-    <p class="foot">Aktualizacje pobierają nowy obraz przed zatrzymaniem usługi. Panel zachowuje ustawienia kontenera i montowania danych, a po błędzie próbuje przywrócić poprzedni kontener.</p>
+    <section class="page-heading"><div><h1>{{ ui.title }}</h1><p class="subtitle">{{ ui.subtitle }}</p></div><div class="actions"><button id="check-self">{{ icon('refresh') }}{{ ui.check_panel }}</button><button id="update-self" class="primary" hidden disabled>{{ icon('download') }}{{ ui.update_panel }}</button><button id="scan">{{ icon('search') }}{{ ui.scan }}</button></div></section>
+    <div class="notice">{{ icon('shield') }}<p><strong>{{ ui.security_title }}</strong> {{ ui.security_detail }}</p></div>
+    <section class="summary" aria-label="{{ ui.containers }}"><div><span>{{ ui.containers }}</span><strong id="count">—</strong></div><div><span>{{ ui.available }}</span><strong id="available-count" class="accent">—</strong></div><div><span>{{ ui.auto_enabled }}</span><strong id="auto-count">—</strong></div></section>
+    <div class="toolbar"><label class="search">{{ icon('search') }}<input id="filter" type="search" placeholder="{{ ui.search }}" aria-label="{{ ui.search }}"></label><div class="actions"><button id="select-updates">{{ ui.select_updates }}</button><button id="update" class="primary" disabled>{{ icon('download') }}<span id="update-label">{{ ui.update_selected }}</span></button></div></div>
+    <p class="hint">{{ ui.auto_hint }}</p><p id="startup-warning" class="status error" role="status" hidden></p>
+    <div class="status-line"><div id="status" class="status" role="status" aria-live="polite">{{ ui.loading }}</div><div id="progress" class="progress" aria-hidden="true"></div></div>
+    <div class="table-wrap"><table><colgroup><col class="col-check"><col class="col-name"><col class="col-auto"><col class="col-status"><col class="col-image"><col class="col-image"><col class="col-detail"></colgroup><thead><tr><th><input id="select-all" type="checkbox" aria-label="{{ ui.select_all }}"></th><th>{{ ui.container }}</th><th>{{ ui.auto_enabled }}</th><th>{{ ui.status }}</th><th>{{ ui.current_image }}</th><th>{{ ui.target_image }}</th><th>{{ ui.details }}</th></tr></thead><tbody id="rows"><tr><td colspan="7" class="empty">{{ ui.waiting }}</td></tr></tbody></table></div>
+    <details class="settings"><summary>{{ icon('lock') }}{{ ui.password_title }}</summary><form id="password-form" class="password-grid"><div class="field"><label for="old-password">{{ ui.old_password }}</label><input id="old-password" type="password" autocomplete="current-password" required></div><div class="field"><label for="new-password">{{ ui.new_password }}</label><input id="new-password" type="password" autocomplete="new-password" minlength="14" required></div><button type="submit">{{ ui.save_password }}</button></form></details>
+    <p class="data-note">{{ ui.data_footer }}</p>{{ footer(ui) }}
   </main>
-  <script>
-    const csrf = document.querySelector('meta[name="csrf-token"]').content;
-    const rows = document.getElementById('rows');
-    const statusBox = document.getElementById('status');
-    const progress = document.getElementById('progress');
-    const updateButton = document.getElementById('update');
-    let pollTimer = null;
-    let selfUpdateRequested = false;
-    const esc = value => String(value ?? '');
-    function showStatus(message, kind='') { statusBox.textContent = message; statusBox.className = `status ${kind}`; }
-    function setBusy(busy) { progress.classList.toggle('active', busy); document.getElementById('scan').disabled = busy; document.getElementById('check-self').disabled = busy; document.getElementById('update-self').disabled = busy || document.getElementById('update-self').hidden; updateButton.disabled = busy || !document.querySelector('.pick:checked'); document.getElementById('select-updates').disabled = busy; document.querySelectorAll('.auto-update').forEach(check => { check.disabled = busy || check.dataset.supported !== 'true'; }); }
-    function render(items) {
-      document.getElementById('count').textContent = `Kontenery: ${items.length}`;
-      if (!items.length) { rows.innerHTML = '<tr><td colspan="7" class="empty">Nie znaleziono kontenerów.</td></tr>'; setBusy(false); return; }
-      rows.replaceChildren();
-      for (const item of items) {
-        const tr = document.createElement('tr');
-        const checkCell = document.createElement('td');
-        if (item.update_available && item.supported) {
-          const check = document.createElement('input'); check.type='checkbox'; check.className='pick'; check.value=esc(item.id); check.setAttribute('aria-label',`Wybierz ${esc(item.name)}`); check.addEventListener('change', updateSelection); checkCell.append(check);
-        }
-        const nameCell = document.createElement('td'); const name=document.createElement('div'); name.className='name'; name.textContent=esc(item.name); const state=document.createElement('div'); state.className='small'; state.textContent=esc(item.status); nameCell.append(name,state);
-        const autoCell = document.createElement('td');
-        if (item.auto_update_supported ?? item.supported) {
-          const auto = document.createElement('input'); auto.type='checkbox'; auto.className='auto-update'; auto.checked=!!item.auto_update_on_startup; auto.dataset.supported='true'; auto.setAttribute('aria-label',`Automatycznie aktualizuj ${esc(item.name)} po restarcie`); auto.addEventListener('change',()=>setAutoUpdate(auto,item)); autoCell.append(auto);
-        } else {
-          const unavailable=document.createElement('span'); unavailable.className='small'; unavailable.textContent=item.auto_update_supported===false&&item.supported?'Tylko ręcznie (Compose)':'Niedostępne'; unavailable.title=esc(item.message); autoCell.append(unavailable);
-        }
-        const badgeCell = document.createElement('td'); const badge=document.createElement('span'); badge.className=`badge ${item.update_available && item.supported?'update':item.check_error?'skip':item.supported?'current':'skip'}`; badge.textContent=item.update_available&&item.supported?'Dostępna aktualizacja':item.check_error?'Nie sprawdzono':item.supported?'Aktualny / sprawdź digest':'Pominięto'; badge.title=esc(item.message); badgeCell.append(badge);
-        const currentCell=document.createElement('td'); currentCell.className='image'; currentCell.textContent=esc(item.current_image);
-        const targetCell=document.createElement('td'); targetCell.className='image'; targetCell.textContent=esc(item.update_available?item.target_image:'—');
-        const infoCell=document.createElement('td'); infoCell.className='detail'; infoCell.textContent=esc([item.source,item.message,item.has_update_instructions?'Zastosowane zostaną jawne instrukcje aktualizacji z katalogu.':'',item.last_result].filter(Boolean).join(' · '));
-        tr.append(checkCell,nameCell,autoCell,badgeCell,currentCell,targetCell,infoCell); rows.append(tr);
-      }
-      document.getElementById('select-all').checked=false; updateSelection();
-    }
-    function updateSelection() { const available=[...document.querySelectorAll('.pick')]; const selected=available.filter(x=>x.checked).length; updateButton.disabled=selected===0||!!pollTimer; updateButton.textContent=selected?`Aktualizuj zaznaczone (${selected})`:'Aktualizuj zaznaczone'; }
-    async function api(path, options={}) {
-      const response=await fetch(path,{...options,headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,...(options.headers||{})}});
-      const body=await response.json().catch(()=>({})); if(response.status===401){location.href='/login';throw new Error('Sesja wygasła.')} if(!response.ok){const error=new Error(body.error||`Błąd HTTP ${response.status}`);error.status=response.status;throw error;} return body;
-    }
-    async function setAutoUpdate(check,item) {
-      const enabled=check.checked; check.disabled=true;
-      try { const result=await api('/api/auto-update',{method:'POST',body:JSON.stringify({name:item.name,container_id:item.id,enabled})}); showStatus(result.message,'ok'); }
-      catch(error) { check.checked=!enabled; showStatus(error.message,'error'); }
-      finally { check.disabled=!!pollTimer; }
-    }
-    async function poll() {
-      try {
-        const job=await api('/api/job',{method:'GET'});
-        if(job.results?.self_update?.started){selfUpdateRequested=true;showStatus(job.results.self_update.message||'Panel uruchamia się ponownie po aktualizacji.','ok');setTimeout(()=>location.reload(),30000);return;}
-        if(selfUpdateRequested&&job.kind!=='self_update'){location.reload();return;}
-        if(['queued','running'].includes(job.status)){showStatus(job.progress||'Praca…');setBusy(true);return;}
-        clearInterval(pollTimer); pollTimer=null; setBusy(false);
-        if(job.status==='done'){
-          if(job.kind==='self_update_check'){
-            const result=job.results||{}; const available=!!result.update_available&&result.supported!==false; document.getElementById('update-self').hidden=!available; document.getElementById('update-self').disabled=!available; showStatus(result.message||'Sprawdzenie aktualizacji panelu zakończone.',result.checked?'ok':'error');
-          } else if(job.kind==='self_update'){
-            const result=job.results||{}; if(result.started){selfUpdateRequested=true;showStatus(result.message||'Panel uruchamia się ponownie po aktualizacji.','ok');setTimeout(()=>location.reload(),30000);}else{selfUpdateRequested=false;document.getElementById('update-self').hidden=!result.update_available;document.getElementById('update-self').disabled=!result.update_available;showStatus(result.message||'Nie uruchomiono aktualizacji panelu.',result.checked?'ok':'error');}
-          } else if(['update','auto_update'].includes(job.kind)&&job.results&&job.results.updates){
-            const outcomes=job.results.updates; const succeeded=outcomes.filter(x=>x.ok===true).length; const failed=outcomes.length-succeeded; const hasFailures=failed>0; const byName=new Map(outcomes.map(x=>[x.name,x.result])); const containers=(job.results.containers||[]).map(item=>({...item,last_result:byName.get(item.name)||''})); const title=job.kind==='auto_update'?'Kolejka automatyczna zakończona.':'Aktualizacja zakończona.'; showStatus(`${title} Powodzenia: ${succeeded}; błędy lub blokady: ${failed}. Szczegóły są przy kontenerach.`,hasFailures?'error':'ok'); render(containers);
-          } else { showStatus(`Skanowanie zakończone. ${job.results?.length||0} kontenerów.`,'ok'); render(job.results||[]); }
-        } else if(job.status==='error'){showStatus(job.progress||'Zadanie nie powiodło się.','error');}
-      } catch(error){if(selfUpdateRequested){showStatus('Panel uruchamia się ponownie po aktualizacji…','ok');return;}clearInterval(pollTimer);pollTimer=null;setBusy(false);showStatus(error.message,'error');}
-    }
-    async function startJob(path, payload, joinExisting=false) {
-      try { const job=await api(path,{method:'POST',body:payload?JSON.stringify(payload):undefined}); if(job.status==='queued'||job.status==='running'){showStatus(job.progress);setBusy(true);pollTimer=setInterval(poll,1200);poll();return true;} return false; }
-      catch(error){if(error.status===409&&joinExisting){try{const job=await api('/api/job');if(['queued','running'].includes(job.status)){showStatus(job.progress||'Inne zadanie jest w kolejce.');setBusy(true);pollTimer=setInterval(poll,1200);poll();return true;}}catch(_ignored){}}showStatus(error.message,'error');return false;}
-    }
-    document.getElementById('scan').addEventListener('click',()=>startJob('/api/scan',undefined,true));
-    document.getElementById('check-self').addEventListener('click',()=>{document.getElementById('update-self').hidden=true;startJob('/api/self-update/check',undefined,false);});
-    document.getElementById('update-self').addEventListener('click',async()=>{if(!confirm('Pobrać najnowszy obraz i bezpiecznie odtworzyć kontener panelu? Ustawienia i wolumen danych zostaną zachowane.'))return;selfUpdateRequested=true;const started=await startJob('/api/self-update',{},false);if(!started)selfUpdateRequested=false;});
-    document.getElementById('select-updates').addEventListener('click',()=>{document.querySelectorAll('.pick').forEach(x=>x.checked=true);updateSelection();});
-    document.getElementById('select-all').addEventListener('change',event=>{document.querySelectorAll('.pick').forEach(x=>x.checked=event.target.checked);updateSelection();});
-    updateButton.addEventListener('click',()=>{const ids=[...document.querySelectorAll('.pick:checked')].map(x=>x.value);if(ids.length&&confirm(`Zaktualizować ${ids.length} zaznaczonych kontenerów?`))startJob('/api/update',{container_ids:ids});});
-    document.getElementById('password-form').addEventListener('submit',async event=>{event.preventDefault();try{const result=await api('/api/password',{method:'POST',body:JSON.stringify({old_password:document.getElementById('old-password').value,new_password:document.getElementById('new-password').value})});showStatus(result.message,'ok');event.target.reset();}catch(error){showStatus(error.message,'error');}});
-    startJob('/api/scan',undefined,true);
-  </script>
-</body>
-</html>
+  <dialog id="self-update-dialog" aria-labelledby="self-update-title" aria-describedby="self-update-description"><form method="dialog"><div class="dialog-icon">{{ icon('download') }}</div><h2 id="self-update-title">{{ ui.dialog_title }}</h2><p id="self-update-description">{{ ui.dialog_description }}</p><p id="self-update-detail" class="dialog-detail"></p><p class="hint">{{ ui.dialog_wait }}</p><div class="dialog-actions"><button value="later" autofocus>{{ ui.not_now }}</button><button id="dialog-update" class="primary" value="install">{{ icon('download') }}{{ ui.update_panel }}</button></div></form></dialog>
+  <script id="ui-translations" type="application/json">{{ ui|tojson }}</script><script defer src="{{ url_for('static', filename='app.js') }}"></script>
+</body></html>
