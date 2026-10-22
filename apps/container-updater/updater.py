@@ -234,7 +234,7 @@ class UpdateService:
         self.compose_roots = tuple(roots)
         self.compose_bin = os.environ.get("DCC_UPDATER_COMPOSE_BIN", "docker-compose")
         self._compose_cache: dict[tuple[str, ...], tuple[dict[str, Any] | None, str | None]] = {}
-        self._registry_cache: dict[tuple[str, tuple[str, ...]], tuple[bool | None, str]] = {}
+        self._registry_cache: dict[tuple[str, str, str, tuple[str, ...]], tuple[bool | None, str]] = {}
 
     def _catalog(self) -> tuple[list[dict[str, Any]], str | None]:
         now = time.monotonic()
@@ -367,7 +367,7 @@ class UpdateService:
                 "update_available": False,
                 "current_image": current,
                 "target_image": SELF_IMAGE,
-                "message": "Panel DCC Container Updater jest aktualny.",
+                "message": "Panel DCC Container Updater jest aktualny. Nie ma nowszego obrazu.",
             }
         return {
             "checked": False,
@@ -956,44 +956,45 @@ class UpdateService:
 
     def _registry_digest(self, image: str, local_image: Any) -> tuple[bool | None, str]:
         local_attrs = getattr(local_image, "attrs", {}) or {}
+        local_os = str(local_attrs.get("Os") or "linux").lower()
+        local_arch = str(local_attrs.get("Architecture") or "").lower()
         local_digests = tuple(sorted(
             value.rsplit("@", 1)[1]
             for value in local_attrs.get("RepoDigests") or []
             if "@" in value
         ))
-        cache_key = (image, local_digests)
+        cache_key = (image, local_os, local_arch, local_digests)
         if cache_key in self._registry_cache:
             return self._registry_cache[cache_key]
 
         for attempt in range(len(REGISTRY_RETRY_DELAYS) + 1):
             try:
                 distribution = self.client.api.inspect_distribution(image)
-                local_os = str(local_attrs.get("Os") or "linux").lower()
-                local_arch = str(local_attrs.get("Architecture") or "").lower()
                 platforms = distribution.get("Platforms") or []
-                platform_digests = set()
+                supported_platforms = set()
                 for platform in platforms:
-                    descriptor = platform.get("Descriptor") or {}
-                    if (
-                        str(platform.get("OS") or "").lower() == local_os
-                        and str(platform.get("Architecture") or "").lower() == local_arch
-                        and descriptor.get("digest")
-                    ):
-                        platform_digests.add(str(descriptor["digest"]))
-                if platforms and local_arch and not platform_digests:
+                    if not isinstance(platform, dict):
+                        continue
+                    # The Engine API returns OCI platform fields in lowercase.
+                    # Platforms describe compatibility; only Descriptor has a digest.
+                    platform_os = str(platform.get("os") or platform.get("OS") or "").lower()
+                    platform_arch = str(platform.get("architecture") or platform.get("Architecture") or "").lower()
+                    if platform_os and platform_arch and "unknown" not in {platform_os, platform_arch}:
+                        supported_platforms.add((platform_os, platform_arch))
+                if supported_platforms and local_arch and (local_os, local_arch) not in supported_platforms:
+                    available_platforms = ", ".join(f"{os_name}/{arch}" for os_name, arch in sorted(supported_platforms))
                     result = (
                         None,
-                        f"Rejestr nie publikuje obrazu dla architektury linux/{local_arch}; host nie pobierze tej wersji.",
+                        f"Obraz w rejestrze nie zawiera wariantu {local_os}/{local_arch}. Dostępne platformy: {available_platforms}.",
                     )
                     self._registry_cache[cache_key] = result
                     return result
                 descriptor = distribution.get("Descriptor") or {}
-                if descriptor.get("digest"):
-                    platform_digests.add(str(descriptor["digest"]))
-                if not platform_digests or not local_digests:
+                remote_digest = str(descriptor.get("digest") or "")
+                if not remote_digest or not local_digests:
                     result = (None, "Rejestr nie udostępnił porównywalnego digestu obrazu.")
                 else:
-                    result = (not bool(platform_digests.intersection(local_digests)), "Porównano digest obrazu z rejestrem.")
+                    result = (remote_digest not in local_digests, "Porównano digest obrazu z rejestrem.")
                 self._registry_cache[cache_key] = result
                 return result
             except Exception as exc:

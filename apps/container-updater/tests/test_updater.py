@@ -89,10 +89,8 @@ class CatalogCandidateTests(unittest.TestCase):
         )
         self.assertEqual(candidate.update_instructions, instructions)
 
-    def test_current_cinema_hub_catalog_offers_139_to_138(self):
-        catalog_path = Path(__file__).resolve().parents[3] / "dcc-catalog.json"
-        payload = json.loads(catalog_path.read_text(encoding="utf-8"))
-        cinema_hub = next(app for app in payload["apps"] if app.get("name") == "Cinema Hub")
+    def test_cinema_hub_catalog_offers_139_to_138(self):
+        cinema_hub = {"image": "ghcr.io/hattimon/cinema-hub:1.3.9", "latest_release": "v1.3.9"}
 
         result = self.service._catalog_candidate("ghcr.io/hattimon/cinema-hub:1.3.8", [cinema_hub])
 
@@ -140,11 +138,10 @@ class ContainerSafetyTests(unittest.TestCase):
                 self.asserted_image = image
                 return {
                     "Platforms": [{
-                        "OS": "linux",
-                        "Architecture": "arm64",
-                        "Descriptor": {"digest": "sha256:new"},
+                        "os": "linux",
+                        "architecture": "arm64",
                     }],
-                    "Descriptor": {"digest": "sha256:index"},
+                    "Descriptor": {"digest": "sha256:new"},
                 }
 
         api = Api()
@@ -172,11 +169,10 @@ class ContainerSafetyTests(unittest.TestCase):
             def inspect_distribution(self, _image):
                 return {
                     "Platforms": [{
-                        "OS": "linux",
-                        "Architecture": "arm64",
-                        "Descriptor": {"digest": "sha256:local"},
+                        "os": "linux",
+                        "architecture": "arm64",
                     }],
-                    "Descriptor": {"digest": "sha256:index"},
+                    "Descriptor": {"digest": "sha256:local"},
                 }
 
         container = self._container(
@@ -223,11 +219,10 @@ class RegistryRetryTests(unittest.TestCase):
                     raise RegistryRetryTests.RegistryError()
                 return {
                     "Platforms": [{
-                        "OS": "linux",
-                        "Architecture": "arm64",
-                        "Descriptor": {"digest": "sha256:new"},
+                        "os": "linux",
+                        "architecture": "arm64",
                     }],
-                    "Descriptor": {"digest": "sha256:index"},
+                    "Descriptor": {"digest": "sha256:new"},
                 }
 
         api = Api()
@@ -274,9 +269,8 @@ class RegistryRetryTests(unittest.TestCase):
             def inspect_distribution(self, _image):
                 return {
                     "Platforms": [{
-                        "OS": "linux",
-                        "Architecture": "amd64",
-                        "Descriptor": {"digest": "sha256:amd64"},
+                        "os": "linux",
+                        "architecture": "amd64",
                     }],
                     "Descriptor": {"digest": "sha256:index"},
                 }
@@ -290,6 +284,68 @@ class RegistryRetryTests(unittest.TestCase):
         )
         self.assertIsNone(available)
         self.assertIn("linux/arm64", message)
+        self.assertIn("Dostępne platformy: linux/amd64", message)
+
+    def test_engine_oci_platforms_without_descriptors_confirm_current_arm64_image(self):
+        class Api:
+            def inspect_distribution(self, _image):
+                return {
+                    "Descriptor": {"digest": "sha256:index"},
+                    "Platforms": [
+                        {"os": "linux", "architecture": "amd64"},
+                        {"os": "linux", "architecture": "arm64", "variant": "v8"},
+                        {"os": "unknown", "architecture": "unknown"},
+                    ],
+                }
+
+        service = UpdateService(SimpleNamespace(api=Api()))
+        available, message = service._registry_digest(
+            "example/service:latest",
+            SimpleNamespace(attrs={
+                "Os": "linux", "Architecture": "arm64",
+                "RepoDigests": ["example/service@sha256:index"],
+            }),
+        )
+        self.assertIs(available, False)
+        self.assertIn("Porównano digest", message)
+
+    def test_unknown_platform_metadata_does_not_claim_architecture_is_missing(self):
+        class Api:
+            def inspect_distribution(self, _image):
+                return {
+                    "Descriptor": {"digest": "sha256:index"},
+                    "Platforms": [{"os": "unknown", "architecture": "unknown"}],
+                }
+
+        service = UpdateService(SimpleNamespace(api=Api()))
+        available, _message = service._registry_digest(
+            "example/service:latest",
+            SimpleNamespace(attrs={
+                "Os": "linux", "Architecture": "arm64",
+                "RepoDigests": ["example/service@sha256:index"],
+            }),
+        )
+        self.assertIs(available, False)
+
+    def test_registry_cache_does_not_share_platform_compatibility_between_architectures(self):
+        class Api:
+            def inspect_distribution(self, _image):
+                return {
+                    "Descriptor": {"digest": "sha256:index"},
+                    "Platforms": [{"os": "linux", "architecture": "arm64"}],
+                }
+
+        service = UpdateService(SimpleNamespace(api=Api()))
+        for arch, expected in (("arm64", False), ("amd64", None)):
+            with self.subTest(architecture=arch):
+                available, _message = service._registry_digest(
+                    "example/service:latest",
+                    SimpleNamespace(attrs={
+                        "Os": "linux", "Architecture": arch,
+                        "RepoDigests": ["example/service@sha256:index"],
+                    }),
+                )
+                self.assertIs(available, expected)
 
 
 class ComposeUpdateSafetyTests(unittest.TestCase):

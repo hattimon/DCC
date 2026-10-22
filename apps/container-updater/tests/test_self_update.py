@@ -58,12 +58,12 @@ class SelfUpdateTests(unittest.TestCase):
         class Api:
             def inspect_distribution(_self, _image):
                 return {
-                    "Platforms": [{
-                        "OS": "linux",
-                        "Architecture": "arm64",
-                        "Descriptor": {"digest": "sha256:new"},
-                    }],
-                    "Descriptor": {"digest": "sha256:index"},
+                    "Platforms": [
+                        {"os": "linux", "architecture": "amd64"},
+                        {"os": "linux", "architecture": "arm64", "variant": "v8"},
+                        {"os": "unknown", "architecture": "unknown"},
+                    ],
+                    "Descriptor": {"digest": "sha256:new"},
                 }
 
         class Images:
@@ -130,16 +130,18 @@ class SelfUpdateTests(unittest.TestCase):
 
     def test_current_image_does_not_launch_a_helper_or_pull(self):
         self.client.api.inspect_distribution = lambda _image: {
-            "Platforms": [{
-                "OS": "linux",
-                "Architecture": "arm64",
-                "Descriptor": {"digest": "sha256:old"},
-            }],
-            "Descriptor": {"digest": "sha256:index"},
+            "Platforms": [
+                {"os": "linux", "architecture": "amd64"},
+                {"os": "linux", "architecture": "arm64", "variant": "v8"},
+                {"os": "unknown", "architecture": "unknown"},
+            ],
+            "Descriptor": {"digest": "sha256:old"},
         }
         result = self.service.start_self_update()
         self.assertFalse(result["started"])
         self.assertFalse(result["update_available"])
+        self.assertTrue(result["checked"])
+        self.assertIn("jest aktualny. Nie ma nowszego obrazu.", result["message"])
         self.assertIsNone(self.client.containers.run_args)
         self.assertEqual(self.client.images.pulls, [])
 
