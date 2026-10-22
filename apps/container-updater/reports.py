@@ -13,6 +13,27 @@ import time
 from pathlib import Path
 
 
+def guidance_codes(messages):
+    """Recognise known diagnostics; never infer or execute a repair command."""
+    text = " ".join(str(message) for message in messages).casefold()
+    codes = []
+    rules = {
+        'compose_file': ('plik compose', 'pliku compose', 'compose file', 'permissionerror', 'permission denied', 'odczytać konfiguracji compose'),
+        'compose_dependency': ('zależno', 'dependencies', 'dependent', 'links', 'volumesfrom', 'przestrze', 'namespace', 'compose jest wyłączona'),
+        'ports': ('konflikt port', 'port conflict', 'port is already', 'port is in use', 'address already in use'),
+        'shared_data': ('dane współdzieli', 'współdzielon', 'shared data', 'shared volume', 'shared mount'),
+        'registry_auth': ('wymaga logowania', 'requires authentication', 'unauthorized', 'denied: requested access', 'token expired'),
+        'network': ('timeout', 'timed out', 'tls handshake', 'nie odpowiedział na czas', 'network is unreachable', 'connection refused'),
+        'architecture': ('architektur', 'architecture', 'no matching manifest', 'platform mismatch'),
+        'registry_image': ('digest', 'manifest unknown', 'nie znalazł wskazanego obrazu', 'image or tag was not found', 'lokalny obraz', 'local image'),
+        'health': ('healthcheck', 'health check', 'unhealthy', 'nie uruchomił', 'startup failed', 'migration', 'migrac'),
+    }
+    for code, needles in rules.items():
+        if any(needle in text for needle in needles):
+            codes.append(code)
+    return codes or ['general']
+
+
 class ReportStore:
     def __init__(self, path: Path, on_event=None) -> None:
         self.path = path
@@ -67,7 +88,11 @@ class ReportStore:
             entries = [item for item in self.entries if not issues_only or item.get('status') in {'error','warning'}]
             pages = max(1, (len(entries) + 9) // 10)
             page = min(max(1, page), pages)
-            return {'entries': copy.deepcopy(entries[(page-1)*10:page*10]), 'page': page,
+            visible = copy.deepcopy(entries[(page-1)*10:page*10])
+            for entry in visible:
+                if entry.get('status') in {'error', 'warning'}:
+                    entry['help_codes'] = guidance_codes([entry.get('message', ''), *[item.get('result', '') for item in entry.get('details', []) if isinstance(item, dict)]])
+            return {'entries': visible, 'page': page,
                     'pages': pages, 'total': len(entries), 'storage_error': self.storage_error}
 
     def delivery(self, event_id, channel, status, message=''):

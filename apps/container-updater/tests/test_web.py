@@ -270,6 +270,70 @@ class WebSecurityTests(unittest.TestCase):
             self.assertEqual(client.post('/api/schedule', json=payload, headers=headers).status_code, 400)
         self.assertEqual(client.get('/api/schedule').get_json()['config']['targets'][0]['name'], 'generic')
 
+    def test_schedule_all_mode_can_be_saved_without_scanning_or_selecting_containers(self):
+        from scheduler import DEFAULT_CONFIG
+        def unexpected_docker_call():
+            self.fail('Saving all mode must not scan or query Docker.')
+        app = create_app(self.temp.name, service_factory=unexpected_docker_call, print_credentials=False)
+        client = app.test_client()
+        with client.session_transaction() as state:
+            state.update(authenticated=True, csrf_token='schedule-test')
+        response = client.post('/api/schedule', json={**DEFAULT_CONFIG, 'enabled':True, 'action':'update_all'},
+                               headers={'X-CSRF-Token':'schedule-test'})
+        self.assertEqual(response.status_code,200)
+        config = client.get('/api/schedule').get_json()['config']
+        self.assertEqual(config['action'],'update_all')
+        self.assertEqual(config['targets'],[])
+        self.assertFalse(config['panel_first'])
+
+    def test_preferences_require_login_and_csrf_and_persist_after_restart(self):
+        self.assertEqual(self.client.get('/api/preferences').status_code,401)
+        with self.client.session_transaction() as state:
+            state.update(authenticated=True,csrf_token='test-token')
+        self.assertEqual(self.client.get('/api/preferences').get_json(),{'theme':'red','sounds_enabled':True,'sound_style':'soft','show_unavailable':False})
+        payload={'theme':'green','sounds_enabled':False,'sound_style':'chime','show_unavailable':True}
+        self.assertEqual(self.client.post('/api/preferences',json=payload).status_code,400)
+        self.assertEqual(self.client.post('/api/preferences',json=payload,headers={'X-CSRF-Token':'test-token'}).status_code,200)
+        reloaded=create_app(self.temp.name,print_credentials=False)
+        client=reloaded.test_client()
+        self.assertIn(b'data-theme="green"',client.get('/login').data)
+        with client.session_transaction() as state:state['authenticated']=True
+        self.assertEqual(client.get('/api/preferences').get_json(),payload)
+
+    def test_invalid_preferences_never_replace_saved_settings(self):
+        with self.client.session_transaction() as state:state.update(authenticated=True,csrf_token='test-token')
+        for payload in ([],{'theme':'unknown'},{'theme':[]},{'sounds_enabled':'false'},{'sound_style':{}},{'show_unavailable':'true'}):
+            self.assertEqual(self.client.post('/api/preferences',json=payload,headers={'X-CSRF-Token':'test-token'}).status_code,400)
+        self.assertEqual(self.client.get('/api/preferences').get_json()['theme'],'red')
+
+    def test_infrastructure_reports_docker_host_instead_of_container_os_and_caches_safe_fields(self):
+        calls=[]
+        def info():
+            calls.append('info')
+            return {'Name':'rpi-server','OperatingSystem':'Ubuntu 22.04.5 LTS','OSType':'linux','Architecture':'aarch64',
+                    'ServerVersion':'29.0.1','KernelVersion':'6.8.0-raspi','NCPU':4,'MemTotal':8*2**30,'unrelated_secret':'DO_NOT_RETURN'}
+        app=create_app(self.temp.name,service_factory=lambda:SimpleNamespace(client=SimpleNamespace(info=info)),print_credentials=False)
+        client=app.test_client()
+        self.assertEqual(client.get('/api/infrastructure').status_code,401)
+        with client.session_transaction() as state:state['authenticated']=True
+        response=client.get('/api/infrastructure')
+        self.assertTrue(response.get_json()['available'])
+        self.assertEqual(response.get_json()['operating_system'],'Ubuntu 22.04.5 LTS')
+        self.assertEqual(response.get_json()['architecture'],'aarch64')
+        self.assertNotIn(b'DO_NOT_RETURN',response.data)
+        client.get('/api/infrastructure')
+        self.assertEqual(calls,['info'])
+
+    def test_unavailable_infrastructure_is_nonblocking_and_does_not_leak_exception(self):
+        def broken():raise RuntimeError('PRIVATE_CONNECTION_STRING')
+        app=create_app(self.temp.name,service_factory=broken,print_credentials=False)
+        client=app.test_client()
+        with client.session_transaction() as state:state['authenticated']=True
+        result=client.get('/api/infrastructure')
+        self.assertEqual(result.status_code,200)
+        self.assertFalse(result.get_json()['available'])
+        self.assertNotIn(b'PRIVATE_CONNECTION_STRING',result.data)
+
     def test_self_update_actions_require_authentication_and_csrf(self):
         self.assertEqual(self.client.post("/api/self-update/check").status_code, 401)
         self.assertEqual(self.client.post("/api/self-update").status_code, 401)

@@ -61,6 +61,10 @@ class CalendarTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 self.config(**values)
 
+    def test_all_container_updates_require_no_individual_targets(self):
+        config = self.config(action='update_all')
+        self.assertEqual(config['targets'], [])
+
 
 class StoreTests(unittest.TestCase):
     def setUp(self):
@@ -101,6 +105,16 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             loaded.save(DEFAULT_CONFIG)
         self.assertEqual(self.path.read_text(), "{invalid")
+
+    def test_all_container_mode_survives_restart_and_pending_handoff_without_targets(self):
+        now = time.time()
+        self.store.save({**DEFAULT_CONFIG, 'enabled': True, 'action': 'update_all'}, now - 86400)
+        self.store.claim('old', now)
+        self.store.phase('awaiting_restart', 'old', expected_image='sha256:' + 'b' * 64, deadline=now + 600)
+        loaded = ScheduleStore(self.path)
+        self.assertFalse(loaded.snapshot()['storage_error'])
+        self.assertEqual(loaded.snapshot()['pending']['config']['action'], 'update_all')
+        self.assertTrue(loaded.due('new', now + 1))
 
     def test_failed_claim_write_never_authorizes_a_docker_operation(self):
         now = time.time()
@@ -196,6 +210,49 @@ class ScheduledExecutionTests(unittest.TestCase):
         self.tick(replacement)
         self.assertEqual(self.calls, ['panel-check','panel-install','scan',('update',['first']),'scan'])
         self.assertIsNone(replacement.extensions['dcc_updater_schedule'].snapshot()['pending'])
+        self.assertFalse(self.tick(replacement))
+
+    def test_all_mode_uses_fresh_inventory_and_skips_blocked_unchecked_current_and_panel(self):
+        rows = self.service.scan(None)
+        self.calls.clear()
+        rows.extend([
+            {**rows[0], 'id': 'new', 'name': 'newly-installed', 'current_image': 'example/new:1'},
+            {**rows[0], 'id': 'current', 'name': 'current', 'update_available': False},
+            {**rows[0], 'id': 'panel', 'name': 'panel', 'is_panel': True},
+            {**rows[0], 'id': 'dependent', 'name': 'dependent', 'auto_update_supported': False, 'auto_update_reason': 'Shared data with another service'},
+            {**rows[0], 'id': 'ports', 'name': 'ports', 'supported': False, 'message': 'Port conflict'},
+            {**rows[0], 'id': 'unchecked', 'name': 'unchecked', 'check_error': True, 'message': 'Registry timeout'},
+        ])
+        self.configure(action='update_all')
+        with patch.object(self.service, 'scan', return_value=rows):
+            self.tick()
+        self.assertEqual(self.calls, [('update', ['first', 'second', 'new'])])
+        outcomes = self.app.extensions['dcc_updater_jobs'].snapshot()['results']['updates']
+        failures = {item['name']: item['result'] for item in outcomes if not item['ok']}
+        self.assertEqual(set(failures), {'compose', 'dependent', 'ports', 'unchecked'})
+        self.assertEqual(failures['unchecked'], 'Registry timeout')
+        reports = self.app.extensions['dcc_updater_reports']
+        deadline = time.monotonic() + 2
+        while not reports.snapshot()['entries'] and time.monotonic() < deadline:
+            time.sleep(.01)
+        self.assertEqual(reports.snapshot()['entries'][0]['updated'], 3)
+
+    def test_all_mode_without_new_images_does_not_replace_or_check_panel(self):
+        self.configure(action='update_all')
+        with patch.object(self.service, 'scan', return_value=[{'name':'current', 'update_available':False}]):
+            self.tick()
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.app.extensions['dcc_updater_schedule'].snapshot()['last_run']['status'], 'success')
+
+    def test_all_mode_keeps_panel_first_separate_and_resumes_inventory_after_restart(self):
+        self.service.panel_available=True
+        self.configure(action='update_all',panel_first=True)
+        self.tick()
+        self.assertEqual(self.calls,['panel-check','panel-install'])
+        self.service.panel_image='sha256:'+'b'*64
+        replacement=create_app(self.temp.name,service_factory=lambda:self.service,print_credentials=False)
+        self.tick(replacement)
+        self.assertEqual(self.calls,['panel-check','panel-install','scan',('update',['first','second']),'scan'])
         self.assertFalse(self.tick(replacement))
 
     def test_panel_blocker_stops_schedule_before_container_scan(self):

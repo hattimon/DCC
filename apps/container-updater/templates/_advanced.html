@@ -1,0 +1,10 @@
+<details id="advanced-settings" class="settings advanced-settings"><summary>{{ ui.advanced_updates }}</summary>
+  <p class="hint">{{ ui.advanced_hint }}</p>
+  <h3>{{ ui.registry_credentials }}</h3><p class="hint">{{ ui.registry_credentials_hint }}</p>
+  <form id="registry-form"><div class="schedule-grid">
+    <div class="field"><label for="registry-host">{{ ui.registry_host }}</label><input id="registry-host" type="text" placeholder="ghcr.io" required></div><div class="field"><label for="registry-username">{{ ui.registry_username }}</label><input id="registry-username" type="text" autocomplete="off"></div><div class="field"><label for="registry-password">{{ ui.registry_password }}</label><input id="registry-password" type="password" autocomplete="new-password"></div>
+  </div><div class="schedule-save"><button id="registry-save" type="submit">{{ ui.save_registry }}</button><button id="registry-remove" type="button">{{ ui.remove_registry }}</button><button id="registry-undo" type="button">{{ ui.undo_registry }}</button></div><p id="registry-status" class="status" role="status"></p><div id="registry-list" class="registry-list"></div></form>
+  <h3>{{ ui.compose_access }}</h3><p class="hint">{{ ui.compose_access_hint }}</p>
+  <form id="mount-plan-form"><div class="field"><label for="mount-path">{{ ui.project_directory }}</label><input id="mount-path" type="text" placeholder="/srv/apps/project" required></div><label class="notification-switch"><input id="mount-capability" type="checkbox">{{ ui.read_capability }}</label><p class="hint">{{ ui.read_capability_warning }}</p><button id="mount-plan" type="submit">{{ ui.show_access_plan }}</button><p id="mount-plan-status" class="status" role="status"></p></form>
+  <div id="mount-plan-output" class="access-plan" hidden></div>
+</details>

@@ -30,7 +30,7 @@ def validate_config(payload: dict, now: float | None = None) -> dict:
     if any(not isinstance(config[key], bool) for key in ("enabled", "panel_first")):
         raise ValueError("Przełączniki harmonogramu muszą mieć wartość true albo false.")
     if (not isinstance(config["kind"], str) or not isinstance(config["action"], str)
-            or config["kind"] not in {"once", "daily", "weekly", "monthly", "interval"} or config["action"] not in {"scan", "update"}):
+            or config["kind"] not in {"once", "daily", "weekly", "monthly", "interval"} or config["action"] not in {"scan", "update", "update_all"}):
         raise ValueError("Nieprawidłowy rodzaj harmonogramu lub operacji.")
     if not isinstance(config["time"], str) or not re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", config["time"]):
         raise ValueError("Podaj prawidłową godzinę HH:MM.")

@@ -224,8 +224,10 @@ class UpdateService:
         catalog_loader: Callable[[], list[dict[str, Any]]] = load_catalog,
         wait_seconds: int = 60,
         compose_roots: tuple[str, ...] | list[str] | None = None,
+        registry_auth_loader: Callable[[str], dict[str, str] | None] | None = None,
     ) -> None:
         self.client = client
+        self.registry_auth_loader = registry_auth_loader
         self.catalog_loader = catalog_loader
         self.wait_seconds = max(1, min(int(wait_seconds), 180))
         self._catalog_cache: tuple[float, list[dict[str, Any]]] | None = None
@@ -1021,7 +1023,8 @@ class UpdateService:
 
         for attempt in range(len(REGISTRY_RETRY_DELAYS) + 1):
             try:
-                distribution = self.client.api.inspect_distribution(image)
+                auth = self.registry_auth_loader(image) if self.registry_auth_loader else None
+                distribution = self.client.api.inspect_distribution(image, **({'auth_config':auth} if auth else {}))
                 platforms = distribution.get("Platforms") or []
                 supported_platforms = set()
                 for platform in platforms:
@@ -1407,10 +1410,14 @@ class UpdateService:
             "bind: cannot assign requested address",
         ))
 
-    def _pull_image_with_retry(self, image: str) -> None:
+    def _pull_image_with_retry(self, image: str, *, platform: str | None = None) -> None:
         for attempt in range(len(REGISTRY_RETRY_DELAYS) + 1):
             try:
-                self.client.images.pull(image)
+                auth = self.registry_auth_loader(image) if self.registry_auth_loader else None
+                options = {'auth_config':auth} if auth else {}
+                if platform:
+                    options['platform'] = platform
+                self.client.images.pull(image, **options)
                 return
             except Exception as exc:
                 if attempt < len(REGISTRY_RETRY_DELAYS) and _is_transient_registry_error(exc):
@@ -1454,6 +1461,11 @@ class UpdateService:
         return completed.returncode, output
 
     def _compose_pull(self, project: ComposeProject) -> None:
+        model = (project.config.get('services') or {}).get(project.service) or {}
+        image = str(model.get('image') or '')
+        if image and self.registry_auth_loader and self.registry_auth_loader(image):
+            self._pull_image_with_retry(image, platform=str(model.get('platform') or '') or None)
+            return
         for attempt in range(len(REGISTRY_RETRY_DELAYS) + 1):
             try:
                 code, output = self._compose_command(project, ["pull", project.service], COMPOSE_PULL_TIMEOUT)

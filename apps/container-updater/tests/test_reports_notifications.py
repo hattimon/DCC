@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from reports import ReportStore
+from reports import ReportStore, guidance_codes
 from notifications import DEFAULTS, NotificationService, NoRedirect, redact
 
 
@@ -65,6 +65,21 @@ class ReportTests(unittest.TestCase):
         self.assertTrue(store.snapshot()['storage_error'])
         store.append('scan','error')
         self.assertEqual(self.path.read_text(),'{invalid')
+
+    def test_existing_report_history_receives_deduplicated_repair_guidance(self):
+        self.store.append('scan','warning',details=[
+            {'name':'first','result':'Plik Compose nie jest dostępny (PermissionError). Rejestr wymaga logowania.'},
+            {'name':'second','result':'Konflikt portu hosta. Rejestr wymaga logowania.'},
+            {'name':'third','result':'Automatyczna aktualizacja zablokowana: trwałe dane współdzieli usługa first.'},
+        ])
+        entry=ReportStore(self.path).snapshot()['entries'][0]
+        self.assertEqual(entry['help_codes'],['compose_file','ports','shared_data','registry_auth'])
+        self.assertNotIn('help_codes',json.loads(self.path.read_text())[0])
+
+    def test_guidance_recognises_network_architecture_and_unknown_errors(self):
+        self.assertEqual(guidance_codes(['TLS handshake timeout']),['network'])
+        self.assertEqual(guidance_codes(['No matching manifest for architecture linux/arm64']),['architecture'])
+        self.assertEqual(guidance_codes(['Unexpected APIError']),['general'])
 
 
 class NotificationTests(unittest.TestCase):

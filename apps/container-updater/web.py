@@ -6,6 +6,8 @@ import hmac
 import json
 import logging
 import os
+import posixpath
+import shlex
 import secrets
 import threading
 import time
@@ -21,6 +23,7 @@ from i18n import localize_payload, strings, translate_text
 from scheduler import ScheduleStore, validate_config
 from reports import ReportStore
 from notifications import NotificationService
+from registry_access import RegistryAccessStore
 
 
 class JobManager:
@@ -165,8 +168,30 @@ def create_app(
     password_path = data_path / "admin_password_hash"
     secret_path = data_path / "secret_key"
     auto_update_store = AutoUpdateStore(data_path / "auto_update_containers.json")
+    registry_access = RegistryAccessStore(data_path / "registry_credentials.json")
+    app.extensions['dcc_updater_registry_access'] = registry_access
     language_path = data_path / "language"
     language_lock = threading.RLock()
+    preferences_path = data_path / "preferences.json"
+    preferences_lock = threading.RLock()
+    preferences = {"theme": "red", "sounds_enabled": True, "sound_style": "soft", "show_unavailable": False}
+    themes = ("red", "green", "blue", "navy", "violet", "amber")
+    sound_styles = ("soft", "chime", "digital")
+    try:
+        saved_preferences = json.loads(preferences_path.read_text(encoding="utf-8"))
+        if isinstance(saved_preferences, dict):
+            if saved_preferences.get("theme") in themes:
+                preferences["theme"] = saved_preferences["theme"]
+            if isinstance(saved_preferences.get("sounds_enabled"), bool):
+                preferences["sounds_enabled"] = saved_preferences["sounds_enabled"]
+            if isinstance(saved_preferences.get("show_unavailable"), bool):
+                preferences["show_unavailable"] = saved_preferences["show_unavailable"]
+            if saved_preferences.get("sound_style") in sound_styles:
+                preferences["sound_style"] = saved_preferences["sound_style"]
+    except (OSError, ValueError, TypeError):
+        pass
+    infrastructure_lock = threading.RLock()
+    infrastructure_cache = {"expires": 0, "result": {"available": False}}
 
     def current_language() -> str:
         selected = session.get("language")
@@ -181,7 +206,10 @@ def create_app(
     @app.context_processor
     def language_context():
         language = current_language()
-        return {"lang": language, "ui": strings(language), "translate": lambda text: translate_text(text, language)}
+        with preferences_lock:
+            appearance = dict(preferences)
+        return {"lang": language, "ui": strings(language), "translate": lambda text: translate_text(text, language),
+                "preferences": appearance, "themes": themes, "sound_styles": sound_styles}
 
     if not secret_path.exists():
         _atomic_write(secret_path, secrets.token_urlsafe(48))
@@ -263,7 +291,7 @@ def create_app(
         except ValueError:
             docker_timeout = 180
         client = docker.from_env(timeout=docker_timeout)
-        return UpdateService(client, wait_seconds=int(os.environ.get("DCC_UPDATER_HEALTH_TIMEOUT", "60")))
+        return UpdateService(client, wait_seconds=int(os.environ.get("DCC_UPDATER_HEALTH_TIMEOUT", "60")), registry_auth_loader=registry_access.for_image)
 
     def annotate_auto_update_state(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         enabled = auto_update_store.snapshot()
@@ -428,19 +456,27 @@ def create_app(
             schedule_store.phase("containers", manager.instance)
             scanned = remember_scan(annotate_auto_update_state(service.scan(progress)))
             outcomes = []
-            if config["action"] == "update":
+            if config["action"] in {"update", "update_all"}:
                 by_name = {item["name"]: item for item in scanned}
                 selected = []
-                for target in config["targets"]:
+                # All mode is resolved from this run's scan, including services
+                # installed after the schedule was saved. The panel stays separate.
+                targets = config["targets"] if config["action"] == "update" else [
+                    {"name": item["name"], "repository": normalized_repository(item.get("current_image", ""))}
+                    for item in scanned if not item.get("is_panel") and (item.get("update_available") or item.get("check_error"))
+                ]
+                for target in targets:
                     item = by_name.get(target["name"])
                     if item is None or normalized_repository(item.get("current_image", "")) != target["repository"]:
                         outcomes.append({"name": target["name"], "ok": False, "result": "Kontener zniknął lub zmienił repozytorium obrazu; pominięto aktualizację."})
-                    elif not item.get("auto_update_supported", item.get("supported")):
-                        outcomes.append({"name": target["name"], "ok": False, "result": item.get("auto_update_reason") or item.get("message") or "Automatyczna aktualizacja tego kontenera jest zablokowana."})
-                    elif item.get("update_available"):
-                        selected.append(item["id"])
+                    elif item.get("is_panel") or item.get("is_compose") or not item.get("supported") or not item.get("auto_update_supported", item.get("supported")):
+                        reason = ("Automatyczna aktualizacja Compose jest wyłączona. Usługi Compose aktualizuj ręcznie po sprawdzeniu zależności i konfiguracji."
+                                  if item.get("is_compose") else item.get("auto_update_reason") or item.get("message") or "Automatyczna aktualizacja tego kontenera jest zablokowana.")
+                        outcomes.append({"name": target["name"], "ok": False, "result": reason})
                     elif item.get("check_error"):
                         outcomes.append({"name": target["name"], "ok": False, "result": item.get("message") or "Nie udało się sprawdzić obrazu kontenera."})
+                    elif item.get("update_available"):
+                        selected.append(item["id"])
                 if selected:
                     outcomes.extend(service.update_selected(selected, progress, automatic=True))
                     scanned = remember_scan(annotate_auto_update_state(service.scan(progress)))
@@ -595,6 +631,113 @@ def create_app(
             cached.update(scan_settings)
         cached["containers"] = annotate_auto_update_state(cached["containers"])
         return jsonify(cached)
+
+    @app.get("/api/infrastructure")
+    def infrastructure():
+        # Query the Docker daemon, never the updater image's /etc/os-release.
+        # This is independent of scans and never contacts an image registry.
+        with infrastructure_lock:
+            if time.monotonic() < infrastructure_cache["expires"]:
+                return jsonify(infrastructure_cache["result"])
+            client = None
+            try:
+                client = service_factory().client if service_factory else docker.from_env(timeout=5)
+                info = client.info()
+                def field(key):
+                    return str(info.get(key) or "").replace("\n", " ").replace("\r", " ")[:200]
+                result = {"available": True, "name": field("Name"), "operating_system": field("OperatingSystem"),
+                          "os_type": field("OSType"), "architecture": field("Architecture"),
+                          "kernel_version": field("KernelVersion"), "docker_version": field("ServerVersion"),
+                          "cpus": info.get("NCPU") if type(info.get("NCPU")) is int else None,
+                          "memory_bytes": info.get("MemTotal") if type(info.get("MemTotal")) is int else None}
+            except Exception:
+                result = {"available": False, "message": "Nie udało się odczytać infrastruktury hosta Docker."}
+            finally:
+                if client is not None and not service_factory:
+                    client.close()
+            infrastructure_cache.update(result=result, expires=time.monotonic() + (30 if result["available"] else 5))
+            return jsonify(result)
+
+    @app.get("/api/preferences")
+    def get_preferences():
+        with preferences_lock:
+            return jsonify(dict(preferences))
+
+    @app.get('/api/registry-access')
+    def get_registry_access():
+        return jsonify(registry_access.public())
+
+    @app.post('/api/registry-access')
+    def save_registry_access():
+        payload = request.get_json(silent=True)
+        if not isinstance(payload,dict):return jsonify({'error':'Nieprawidłowe dane rejestru.'}),400
+        try:
+            result = registry_access.change(payload.get('registry'),payload.get('action','save'),payload.get('username',''),payload.get('password',''))
+        except (ValueError,OSError) as exc:
+            return jsonify({'error':str(exc) if isinstance(exc,ValueError) else 'Nie udało się zapisać danych rejestru.'}),400
+        return jsonify({**result,'message':'Dane rejestru zapisane. Ponów skan, aby sprawdzić dostęp.'})
+
+    @app.post('/api/advanced/mount-plan')
+    def mount_plan():
+        payload = request.get_json(silent=True)
+        if not isinstance(payload,dict):return jsonify({'error':'Nieprawidłowe ustawienia dostępu.'}),400
+        path = payload.get('path')
+        read_capability = payload.get('read_capability',False)
+        if (not isinstance(path,str) or not path.startswith('/') or len(path)>500 or any(char in path for char in '\r\n\0,')
+                or '..' in path.split('/') or not isinstance(read_capability,bool)):
+            return jsonify({'error':'Podaj bezwzględną ścieżkę katalogu Linux bez .. i przecinków.'}),400
+        path = posixpath.normpath(path)
+        try:
+            service = get_service()
+            roots = getattr(service,'compose_roots',('/home','/opt','/srv','/mnt','/media','/root'))
+            if not any(path.startswith(root.rstrip('/')+'/') for root in roots):
+                return jsonify({'error':'Wybierz konkretny podkatalog w dozwolonej lokalizacji Compose, np. /srv/apps/projekt.'}),400
+            panel = service._find_self_container()
+            if panel is None:raise ValueError('Panel container unavailable')
+            name = str(panel.name).lstrip('/')
+            labels = ((panel.attrs.get('Config') or {}).get('Labels') or {})
+            stamp = time.strftime('%Y%m%d-%H%M%S',time.gmtime())
+            backup = f'{name}-access-backup-{stamp}'
+            quote = shlex.quote
+            inspect = f'umask 077\ndocker inspect {quote(name)} > {quote(backup+".json")}\ndocker inspect --format '+quote('{{json .Mounts}}')+f' {quote(name)}'
+            parameter = '--mount '+quote(f'type=bind,source={path},target={path},readonly')
+            if read_capability:parameter += ' --cap-add=DAC_READ_SEARCH'
+            result = {'name':name,'path':path,'inspect':inspect,'parameter':parameter,'compose':bool(labels.get('com.docker.compose.project')),
+                      'read_capability':read_capability}
+            if result['compose']:
+                files = [item.strip() for item in str(labels.get('com.docker.compose.project.config_files') or '').split(',') if item.strip()]
+                working = labels.get('com.docker.compose.project.working_dir')
+                service_name = labels.get('com.docker.compose.service')
+                if not files or not working or not service_name:raise ValueError('Incomplete Compose metadata')
+                base = ['docker','compose','--project-name',labels['com.docker.compose.project'],'--project-directory',working]
+                for file in files:base.extend(['--file',file])
+                result['apply'] = shlex.join([*base,'up','-d','--no-deps',service_name])
+                result['prepare'] = '\n'.join(f'cp -p -- {quote(file)} {quote(file+".dcc-access-before-"+stamp)}' for file in files)
+                result['undo'] = '\n'.join(f'cp -p -- {quote(file+".dcc-access-before-"+stamp)} {quote(file)}' for file in files)+'\n'+result['apply']
+                result['compose_snippet'] = 'services:\n  '+json.dumps(service_name)+':\n    volumes:\n      - type: bind\n        source: '+json.dumps(path)+'\n        target: '+json.dumps(path)+'\n        read_only: true\n'+('    cap_add:\n      - DAC_READ_SEARCH\n' if read_capability else '')
+            else:
+                result['prepare'] = f'docker stop --time 30 {quote(name)}\ndocker rename {quote(name)} {quote(backup)}'
+                result['undo'] = f'docker stop --time 30 {quote(name)}\ndocker rm {quote(name)}\ndocker rename {quote(backup)} {quote(name)}\ndocker start {quote(name)}'
+            return jsonify(result)
+        except Exception:
+            return jsonify({'error':'Nie udało się odczytać konfiguracji panelu. Sprawdź instrukcję jego instalacji przed zmianą montowań.'}),400
+
+    @app.post("/api/preferences")
+    def save_preferences():
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "Nieprawidłowe ustawienia wyglądu lub dźwięków."}), 400
+        with preferences_lock:
+            updated = {key: payload.get(key, value) for key, value in preferences.items()}
+            if (updated["theme"] not in themes or not isinstance(updated["sounds_enabled"], bool) or not isinstance(updated["show_unavailable"], bool)
+                    or updated["sound_style"] not in sound_styles):
+                return jsonify({"error": "Nieprawidłowe ustawienia wyglądu lub dźwięków."}), 400
+            try:
+                _atomic_write(preferences_path, json.dumps(updated))
+            except OSError:
+                return jsonify({"error": "Nie udało się zapisać ustawień panelu."}), 500
+            preferences.update(updated)
+            return jsonify({**preferences, "message": "Ustawienia panelu zapisane."})
 
     @app.post("/api/scan-settings")
     def set_scan_settings():

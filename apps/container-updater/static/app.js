@@ -12,9 +12,51 @@ let autoScanOnRefresh = false;
 let scheduleState = null;
 let scheduleDirty = false;
 const scheduleTargets = new Set();
-const tabs = ['containers', 'schedule', 'reports'];
+const tabs = ['containers', 'schedule', 'reports', 'settings'];
 let reportPage = 1;
+let reportSignature = '';
+const openReports = new Set();
+let preferences = JSON.parse($('panel-preferences').textContent);
+let audioContext = null;
 const picked = new Set();
+
+async function unlockAudio() {
+  if (!preferences.sounds_enabled) return;
+  const Audio = window.AudioContext || window.webkitAudioContext;
+  if (!Audio) return;
+  try {
+    audioContext ||= new Audio();
+    if (audioContext.state === 'suspended') await audioContext.resume();
+  } catch (_) { /* Audio permissions never block container operations. */ }
+}
+document.addEventListener('pointerdown', unlockAudio, {once:true});
+document.addEventListener('keydown', unlockAudio, {once:true});
+function playSound(event) {
+  if (!preferences.sounds_enabled || audioContext?.state !== 'running') return;
+  const notes = {start:[523],success:[523,659,784],error:[330,247],update:[659,880]}[event] || [523];
+  const profiles = {soft:{type:'sine',gain:.025,step:.1},chime:{type:'sine',gain:.035,step:.15},digital:{type:'triangle',gain:.018,step:.08}};
+  const profile = profiles[preferences.sound_style] || profiles.soft;
+  try {
+    notes.forEach((frequency,index) => {
+      const at = audioContext.currentTime + index*profile.step;
+      const oscillator = audioContext.createOscillator(); const gain = audioContext.createGain();
+      oscillator.type = profile.type; oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0,at); gain.gain.linearRampToValueAtTime(profile.gain,at+.012); gain.gain.exponentialRampToValueAtTime(.0001,at+profile.step+.04);
+      oscillator.connect(gain); gain.connect(audioContext.destination); oscillator.start(at); oscillator.stop(at+profile.step+.05);
+      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+    });
+  } catch (_) { /* Unsupported audio is optional. */ }
+}
+async function loadInfrastructure() {
+  try {
+    const info = await api('/api/infrastructure');
+    if (!info.available) throw new Error(info.message);
+    $('host-system').textContent = [info.name,info.operating_system || info.os_type,info.architecture].filter(Boolean).join(' · ');
+    const resources = [info.docker_version ? `Docker ${info.docker_version}` : '', info.cpus ? `${info.cpus} CPU` : '', info.memory_bytes ? `${new Intl.NumberFormat(document.documentElement.lang,{maximumFractionDigits:1}).format(info.memory_bytes/2**30)} GiB RAM` : ''];
+    $('host-engine').textContent = resources.filter(Boolean).join(' · ');
+    $('host-system').title = /docker desktop/i.test(info.operating_system) ? t('host_desktop_hint') : info.kernel_version || '';
+  } catch (_) { $('host-system').textContent = t('host_unavailable'); }
+}
 
 function element(tag, className = '', text = '') {
   const node = document.createElement(tag);
@@ -38,6 +80,9 @@ function setBusy(value) {
   $('update').disabled = value || picked.size === 0;
   $('schedule-save').disabled = value || !!scheduleState?.pending || !!scheduleState?.storage_error;
   $('notification-save').disabled = value;
+  $('preferences-save').disabled = value;
+  $('sound-preview').disabled = value || !preferences.sounds_enabled;
+  for (const id of ['registry-save','registry-remove','registry-undo','mount-plan']) $(id).disabled = value;
   document.querySelectorAll('.notify-test').forEach(button => { button.disabled = value; });
   $('update-label').textContent = picked.size ? t('selected_count', {count: picked.size}) : t('update_selected');
   document.querySelectorAll('.pick').forEach(check => { check.disabled = value; });
@@ -69,18 +114,18 @@ function addAdvanced(cell, item) {
 }
 function render(items = allItems) {
   allItems = items;
-  const eligible = items.filter(item => item.supported && item.update_available && !item.is_panel);
+  const eligible = items.filter(item => item.supported && item.update_available && !item.check_error && !item.is_panel);
   const ids = new Set(eligible.map(item => item.id));
   for (const id of picked) if (!ids.has(id)) picked.delete(id);
   $('count').textContent = items.length;
   $('available-count').textContent = eligible.length;
   $('auto-count').textContent = items.filter(item => item.auto_update_on_startup).length;
   const query = $('filter').value.trim().toLocaleLowerCase();
-  const filtered = items.filter(item => `${item.name} ${item.current_image} ${item.target_image || ''}`.toLocaleLowerCase().includes(query));
+  const filtered = items.filter(item => (preferences.show_unavailable || item.is_panel || (item.supported && !item.check_error)) && `${item.name} ${item.current_image} ${item.target_image || ''}`.toLocaleLowerCase().includes(query));
   const rows = $('rows');
   rows.replaceChildren();
   if (!filtered.length) {
-    const row = element('tr'); const cell = element('td', 'empty', t(items.length ? 'no_matches' : 'empty')); cell.colSpan = 7; row.append(cell); rows.append(row);
+    const row = element('tr'); const cell = element('td', 'empty', t(items.length && !query && !preferences.show_unavailable ? 'hidden_unavailable' : items.length ? 'no_matches' : 'empty')); cell.colSpan = 7; row.append(cell); rows.append(row);
   }
   for (const item of filtered) {
     const row = element('tr', picked.has(item.id) ? 'selected' : '');
@@ -131,10 +176,15 @@ async function waitJob(state) {
 }
 async function runJob(path, payload = {}) {
   setBusy(true);
+  if (path !== '/api/self-update/check') playSound('start');
   // Join an existing serialized job, then submit the requested action. Its results
   // must never be mistaken for those of a different operation.
   for (;;) {
-    try { return await waitJob(await api(path, payload)); }
+    try {
+      const job = await waitJob(await api(path, payload));
+      if (path !== '/api/self-update/check') playSound(job.results?.ok === false || job.results?.updates?.some(item => !item.ok) ? 'error' : 'success');
+      return job;
+    }
     catch (error) {
       if (error.status !== 409 || !['queued', 'running'].includes(error.job?.status)) throw error;
       const completed = await waitJob(error.job);
@@ -200,18 +250,19 @@ async function checkPanelUpdate() {
     $('update-self').hidden = !result.update_available;
   } catch (error) { showWarning(`${t('check_failed')} ${error.message}`); }
   if (result?.update_available) {
+    playSound('update');
     const install = await askPanelUpdate(result);
     if (install) {
       const job = await runJob('/api/self-update');
       if (job.results.started) { await reconnectPanel(job.instance); return 'restarting'; }
       showWarning(job.results.message || t('check_failed'));
     }
-  } else if (result && !result.checked) showWarning(result.message || t('check_failed'));
+  } else if (result && !result.checked) { showWarning(result.message || t('check_failed')); playSound('error'); }
   showStatus(result?.checked && !result.update_available ? t('panel_current') : t('waiting'), result?.checked && !result.update_available ? 'ok' : '');
 }
 async function action(work) {
   if (busy) return;
-  try { await work(); } catch (error) { showStatus(error.message, 'error'); }
+  try { await work(); } catch (error) { showStatus(error.message, 'error'); playSound('error'); }
   finally { setBusy(false); }
 }
 $('check-self').addEventListener('click', () => action(checkPanelUpdate));
@@ -225,6 +276,11 @@ $('auto-scan').addEventListener('change', () => action(async () => {
     autoScanOnRefresh = saved.auto_scan_on_refresh;
     showStatus(saved.message, 'ok');
   } catch (error) { $('auto-scan').checked = autoScanOnRefresh; throw error; }
+}));
+$('show-all').addEventListener('change', () => action(async () => {
+  const enabled=$('show-all').checked; setBusy(true);
+  try { await api('/api/preferences',{show_unavailable:enabled}); preferences.show_unavailable=enabled; render(); }
+  catch(error) { $('show-all').checked=!!preferences.show_unavailable; throw error; }
 }));
 $('filter').addEventListener('input', () => render());
 $('select-updates').addEventListener('click', () => { document.querySelectorAll('.pick').forEach(check => picked.add(check.value)); render(); });
@@ -263,6 +319,7 @@ function scheduleFields() {
   $('schedule-monthday-field').hidden = kind !== 'monthly';
   $('schedule-interval-field').hidden = kind !== 'interval';
   $('schedule-targets-field').hidden = $('schedule-action').value !== 'update';
+  $('schedule-all-hint').hidden = $('schedule-action').value !== 'update_all';
 }
 function renderScheduleTargets() {
   const box = $('schedule-targets');
@@ -326,7 +383,7 @@ setInterval(async () => {
     const completed = state.last_run?.finished_at !== scheduleState?.last_run?.finished_at;
     if (!scheduleDirty && !busy) displaySchedule(state);
     else { scheduleState = state; displayScheduleStatus(state); }
-    if (completed && !busy) await loadLastScan();
+    if (completed && !busy) { await loadLastScan(); playSound(state.last_run?.status === 'error' ? 'error' : 'success'); }
   } catch (_) { /* A disconnected panel keeps the last visible schedule state. */ }
 }, 10000);
 
@@ -336,6 +393,9 @@ async function loadReports(page = reportPage) {
   $('reports-page').textContent = t('report_page', {page: data.page, pages: data.pages});
   $('reports-prev').disabled = data.page <= 1; $('reports-next').disabled = data.page >= data.pages;
   $('report-storage-error').hidden = !data.storage_error;
+  const signature = JSON.stringify(data);
+  if (signature === reportSignature) return;
+  reportSignature = signature;
   const list = $('report-list'); list.replaceChildren();
   if (!data.entries.length) list.append(element('p', 'empty', t('no_reports')));
   for (const entry of data.entries) {
@@ -348,9 +408,25 @@ async function loadReports(page = reportPage) {
     header.append(date, element('span', '', t(`kind_${entry.kind}`)), element('span', `badge ${entry.status}`, t(`report_${entry.status}_badge`)), element('span', '', summary));
     row.append(header);
     if (entry.status === 'error' || entry.status === 'warning') {
-      const details = element('details'); details.append(element('summary', '', t('details')));
+      const details = element('details'); details.open = openReports.has(entry.id);
+      details.addEventListener('toggle', () => { details.open ? openReports.add(entry.id) : openReports.delete(entry.id); });
+      details.append(element('summary', '', t('details')));
       if (entry.message) details.append(element('p', '', entry.message));
-      for (const item of entry.details) details.append(element('p', '', `${item.name}: ${item.result}`));
+      const diagnostics = element('div', 'report-diagnostics');
+      for (const item of entry.details) {
+        const line = element('div', 'report-diagnostic');
+        if (item.name) line.append(element('strong', 'report-container', item.name));
+        line.append(element('span', '', item.result)); diagnostics.append(line);
+      }
+      details.append(diagnostics);
+      if (entry.help_codes?.length) {
+        const guidance = element('section', 'report-guidance'); guidance.append(element('h4', '', t('suggested_steps')));
+        const steps = element('ul'); entry.help_codes.forEach(code => steps.append(element('li', '', t(`help_${code}`))));
+        guidance.append(steps); details.append(guidance);
+        const advanced = element('button','quiet',t('advanced_updates')); advanced.type='button';
+        advanced.addEventListener('click',()=>{ selectTab('settings'); $('advanced-settings').open=true; $('advanced-settings').scrollIntoView({behavior:'smooth',block:'start'}); });
+        details.append(advanced);
+      }
       for (const [channel, delivery] of Object.entries(entry.delivery || {})) details.append(element('p', '', `${channel}: ${t(`delivery_${delivery.status}`)}${delivery.message ? ' · '+delivery.message : ''}`));
       row.append(details);
     }
@@ -398,6 +474,55 @@ document.querySelectorAll('.notify-test').forEach(button => button.addEventListe
   try { const result=await api('/api/notifications/test',{channel:button.dataset.channel}); $('notification-status').textContent=result.message; $('notification-status').className='status ok'; }
   catch (error) { $('notification-status').textContent=error.message; $('notification-status').className='status error'; }
 })));
+$('preferences-form').addEventListener('change', () => {
+  preferences = {...preferences,theme:document.querySelector('input[name=theme]:checked').value,sounds_enabled:$('sounds-enabled').checked,sound_style:$('sound-style').value};
+  document.documentElement.dataset.theme = preferences.theme;
+  $('sound-preview').disabled = busy || !preferences.sounds_enabled;
+  if (!preferences.sounds_enabled && audioContext?.state === 'running') audioContext.suspend().catch(() => {});
+  else unlockAudio();
+});
+$('sound-preview').addEventListener('click', async () => { await unlockAudio(); playSound('success'); });
+$('preferences-form').addEventListener('submit', event => { event.preventDefault(); action(async () => {
+  setBusy(true);
+  try {
+    const result = await api('/api/preferences',preferences);
+    $('preferences-status').textContent = result.message; $('preferences-status').className = 'status ok'; playSound('success');
+  } catch (error) { $('preferences-status').textContent=error.message; $('preferences-status').className='status error'; playSound('error'); }
+}); });
+async function loadRegistryAccess() {
+  const state = await api('/api/registry-access'); const list=$('registry-list'); list.replaceChildren();
+  for (const item of state.registries) {
+    const button=element('button','quiet',`${item.registry} · ${item.username || '—'}`); button.type='button';
+    button.addEventListener('click',()=>{ $('registry-host').value=item.registry; $('registry-username').value=item.username; $('registry-password').value=''; });
+    list.append(button);
+  }
+  if(state.storage_error) { $('registry-status').textContent=t('registry_credentials_hint'); $('registry-status').className='status error'; }
+}
+async function changeRegistry(operation) {
+  setBusy(true);
+  try {
+    const result=await api('/api/registry-access',{action:operation,registry:$('registry-host').value,username:$('registry-username').value,password:$('registry-password').value});
+    $('registry-password').value=''; $('registry-status').textContent=result.message; $('registry-status').className='status ok'; await loadRegistryAccess(); playSound('success');
+  } catch(error) { $('registry-status').textContent=error.message; $('registry-status').className='status error'; playSound('error'); }
+}
+$('registry-form').addEventListener('submit',event=>{ event.preventDefault(); action(()=>changeRegistry('save')); });
+for (const operation of ['remove','undo']) $(`registry-${operation}`).addEventListener('click',()=>action(()=>changeRegistry(operation)));
+$('mount-plan-form').addEventListener('submit',event=>{ event.preventDefault(); action(async()=>{
+  setBusy(true);
+  try {
+    const plan=await api('/api/advanced/mount-plan',{path:$('mount-path').value,read_capability:$('mount-capability').checked});
+    const box=$('mount-plan-output'); box.replaceChildren(); box.hidden=false;
+    const block=(title,text)=>{ box.append(element('h4','',title)); if(text)box.append(element('pre','',text)); };
+    block(t('plan_inspect'),plan.inspect); box.append(element('p','hint',t('plan_backup_note')));
+    block(t('plan_parameter'),plan.parameter); block(t('plan_prepare'),plan.prepare);
+    box.append(element('p','hint',t(plan.compose?'plan_compose':'plan_recreate')));
+    if(plan.compose) { block('Compose',plan.compose_snippet); block('Docker Compose',plan.apply); }
+    block(t('plan_undo'),plan.undo); $('mount-plan-status').textContent='';
+  } catch(error) { $('mount-plan-status').textContent=error.message; $('mount-plan-status').className='status error'; $('mount-plan-output').hidden=true; }
+}); });
+loadRegistryAccess().catch(error=>{ $('registry-status').textContent=error.message; });
+loadInfrastructure();
+
 action(async () => {
   await Promise.all([loadLastScan(), loadSchedule(), loadNotifications()]);
   const state = await checkPanelUpdate();

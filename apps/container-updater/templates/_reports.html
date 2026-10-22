@@ -4,7 +4,7 @@
   <div id="report-storage-error" class="status error" hidden>{{ ui.reports_storage_error }}</div>
   <div id="report-list" class="report-list"></div>
   <div class="report-pagination"><button id="reports-prev" type="button">{{ ui.previous }}</button><span id="reports-page" class="hint"></span><button id="reports-next" type="button">{{ ui.next }}</button></div>
-  <details class="settings notification-settings"><summary>{{ ui.notifications }}</summary>
+  <details class="settings notification-settings"><summary class="notification-toggle">{{ ui.notifications }}<span class="disclosure-arrow" aria-hidden="true"></span></summary>
     <p class="hint">{{ ui.notifications_hint }}</p>
     <form id="notification-form">
       <div class="schedule-toggles"><label><input id="notify-enabled" class="auto-switch" type="checkbox" role="switch">{{ ui.enable_notifications }}</label><label><input id="notify-scan-errors" class="auto-switch" type="checkbox" role="switch">{{ ui.notify_scan_errors }}</label></div>

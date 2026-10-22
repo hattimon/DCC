@@ -1,0 +1,11 @@
+<section id="settings-panel" role="tabpanel" aria-labelledby="tab-settings" hidden>
+  <div class="schedule-heading"><div><h2>{{ ui.settings }}</h2><p class="subtitle">{{ ui.settings_hint }}</p></div></div>
+  <form id="preferences-form" class="schedule-form">
+    <fieldset class="theme-choices"><legend>{{ ui.theme }}</legend><div class="theme-grid">
+      {% for theme in themes %}<label class="theme-choice" data-theme="{{ theme }}"><input type="radio" name="theme" value="{{ theme }}"{% if preferences.theme == theme %} checked{% endif %}><span class="theme-preview" aria-hidden="true"><i></i><i></i><i></i></span><strong>{{ ui['theme_' ~ theme] }}</strong></label>{% endfor %}
+    </div></fieldset>
+    <fieldset class="sound-settings"><legend>{{ ui.event_sounds }}</legend><label class="notification-switch"><input id="sounds-enabled" class="auto-switch" type="checkbox" role="switch"{% if preferences.sounds_enabled %} checked{% endif %}>{{ ui.enable_sounds }}</label><p class="hint">{{ ui.sounds_hint }}</p><div class="sound-controls"><div class="field"><label for="sound-style">{{ ui.sound_style }}</label><select id="sound-style">{% for style in sound_styles %}<option value="{{ style }}"{% if preferences.sound_style == style %} selected{% endif %}>{{ ui['sound_' ~ style] }}</option>{% endfor %}</select></div><button id="sound-preview" type="button">{{ ui.sound_preview }}</button></div></fieldset>
+    <div class="schedule-save"><button id="preferences-save" class="primary" type="submit">{{ ui.save_settings }}</button><p id="preferences-status" class="status" role="status"></p></div>
+  </form>
+  {% include '_advanced.html' %}
+</section>
