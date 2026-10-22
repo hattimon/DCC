@@ -112,8 +112,8 @@
       "homepage_url": "https://www.stirlingpdf.com/",
       "icon_text": "🧰",
       "upstream_repo": "Stirling-Tools/Stirling-PDF",
-      "latest_release": "v3.2.0",
-      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.2.0",
+      "latest_release": "v3.2.1",
+      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.2.1",
       "icon_url": "catalog/media/icons/stirling-pdf.png"
     },
     {
@@ -777,8 +777,8 @@
       "homepage_url": "https://www.portainer.io/",
       "icon_text": "🛠",
       "upstream_repo": "portainer/portainer",
-      "latest_release": "2.45.2",
-      "latest_release_url": "https://github.com/portainer/portainer/releases/tag/2.45.2",
+      "latest_release": "2.45.3",
+      "latest_release_url": "https://github.com/portainer/portainer/releases/tag/2.45.3",
       "icon_url": "catalog/media/icons/portainer-ce.png"
     },
     {
