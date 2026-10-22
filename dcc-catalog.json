@@ -183,17 +183,17 @@
       "image": "ghcr.io/hattimon/dcc-container-updater:latest",
       "category": "Aktualizacje 🔄",
       "description": "Panel WWW do sprawdzania i aktualizowania wybranych kontenerów Docker z zachowaniem konfiguracji oraz wolumenów.",
-      "store_description": "Zeskanuj host Docker, sprawdź dostępność nowszych obrazów i wybierz kontenery do aktualizacji. Panel wykrywa konflikty opublikowanych portów z innymi kontenerami i wstrzymuje aktualizację, gdy mapowanie jest zajęte. Pobiera obraz przed wymianą kontenera, odtwarza jego konfigurację i zachowuje podłączone wolumeny. Opcjonalna automatyczna aktualizacja jest domyślnie wyłączona. Działa jako osobny kontener na Docker Desktop z kontenerami Linux, serwerach Linux i Raspberry Pi 64-bit.",
+      "store_description": "Zeskanuj host Docker, sprawdź nowsze obrazy i wybierz kontenery do aktualizacji. Panel ponawia chwilowe błędy rejestru, opisuje blokady i wykrywa konflikty portów. Zachowuje konfigurację i wolumeny. Usługi Compose aktualizuje ręcznie; blokuje zmianę, gdy wykryje zależności, współdzielone wolumeny lub sieć z innym kontenerem. Automatyczna aktualizacja jest domyślnie wyłączona. Działa na Docker Desktop z kontenerami Linux, serwerach Linux i Raspberry Pi 64-bit.",
       "default_name": "dcc-container-updater",
       "container_port": "8788",
       "host_port": "8788",
-      "extra": "-v /var/run/docker.sock:/var/run/docker.sock -v dcc_updater_data:/data --label com.hattimon.dcc-updater=true --cap-drop=ALL --security-opt=no-new-privileges:true --restart unless-stopped",
+      "extra": "-v /var/run/docker.sock:/var/run/docker.sock -v dcc_updater_data:/data -v /home:/home:ro -v /opt:/opt:ro -v /srv:/srv:ro -v /mnt:/mnt:ro -v /media:/media:ro -v /root:/root:ro --label com.hattimon.dcc-updater=true --cap-drop=ALL --security-opt=no-new-privileges:true --restart unless-stopped",
       "command": "",
-      "notes": "Wymaga dostępu do socketu Docker, co daje uprawnienia administratora hosta. Po instalacji otwórz http://<adres-hosta>:8788. Pierwsze hasło znajdziesz w logach kontenera; zmień je po zalogowaniu. Automatyczne aktualizacje są domyślnie wyłączone i można je włączyć osobno przy każdym kontenerze. Panel działa z kontenerami Linux na Docker Desktop, Linux amd64 i Raspberry Pi ARM64. Kontenery Compose, Swarm i z niestandardową siecią są pomijane.",
+      "notes": "Wymaga dostępu do socketu Docker, co daje uprawnienia administratora hosta. Po instalacji otwórz http://<adres-hosta>:8788. Pierwsze hasło znajdziesz w logach kontenera; zmień je po zalogowaniu. Automatyczne aktualizacje są domyślnie wyłączone; usługi Compose są zawsze ręczne. Panel może zaktualizować pojedynczą usługę Compose, jeśli jej pliki znajdują się w zamontowanych katalogach, ma jedną replikę i nie wykryto zależności, wspólnych sieci ani współdzielonych wolumenów lub bind mountów. Pliki Compose nie są modyfikowane. Katalogi /home, /opt, /srv, /mnt, /media i /root są udostępniane updaterowi tylko do odczytu. Aktualizacja pojedynczej usługi powoduje krótką przerwę; zależności spoza Dockera trzeba ocenić ręcznie. Panel działa z kontenerami Linux na Docker Desktop, Linux amd64 i Raspberry Pi ARM64. Swarm i niestandardowe sieci poza Compose są pomijane.",
       "lightweight": true,
       "category_en": "Updates 🔄",
       "description_en": "Web panel for checking and updating selected Docker containers while preserving their configuration and volumes.",
-      "store_description_en": "Scan a Docker host, check for newer images and select which containers to update. The panel detects published-port conflicts with other containers and stops an update when a mapping is occupied. It pulls the image before replacing a container, recreates its configuration and keeps its attached volumes. Optional automatic updates are off by default. It runs as a separate container on Docker Desktop in Linux-container mode, Linux servers and 64-bit Raspberry Pi.",
+      "store_description_en": "Scan a Docker host, check for newer images and select containers to update. The panel retries temporary registry failures, explains blockers and detects port conflicts. It preserves configuration and volumes. Compose services are manual-only; updates are blocked when declared dependencies, shared networks or volumes make them risky. Automatic updates are off by default. It runs on Docker Desktop with Linux containers, Linux servers and 64-bit Raspberry Pi.",
       "features": [
         "Skanowanie kontenerów i wykrywanie nowszych obrazów.",
         "Zaznaczanie wybranych kontenerów i aktualizacja przyciskiem.",
@@ -201,7 +201,7 @@
         "Wykrywanie konfliktów opublikowanych portów między kontenerami; aktualizacja jest wstrzymywana przy konflikcie.",
         "Opcjonalna automatyczna aktualizacja po restarcie hosta lub panelu, domyślnie wyłączona; jeden kontener naraz.",
         "Działa na Docker Desktop w trybie kontenerów Linux oraz na Linux amd64 i Raspberry Pi ARM64.",
-        "Kontenery Compose, Swarm i korzystające z niestandardowych sieci są pomijane."
+        "Ręczne aktualizacje usługi Compose z kontrolą zależności, współdzielonych sieci, wolumenów i portów oraz kopią obrazu do wycofania."
       ],
       "features_en": [
         "Scan containers and detect newer images.",
@@ -210,9 +210,9 @@
         "Detect published-port conflicts between containers and stop the update when a conflict is found.",
         "Optional automatic updates after a host or panel restart, off by default; one container at a time.",
         "Runs on Docker Desktop in Linux-container mode, Linux amd64 and Raspberry Pi ARM64.",
-        "Compose, Swarm and custom-network containers are skipped."
+        "Manual Compose updates with dependency, shared-network, volume and port checks plus a rollback image."
       ],
-      "notes_en": "Requires the Docker socket, which grants administrator-level access to the host. After installation open http://<host-address>:8788. The initial password is in the container logs; change it after signing in. Automatic updates are off by default and can be enabled separately for each container. Supports Linux containers on Docker Desktop, Linux amd64 and Raspberry Pi ARM64. Compose, Swarm and custom-network containers are skipped.",
+      "notes_en": "Requires the Docker socket, which grants administrator-level access to the host. After installation open http://<host-address>:8788. The initial password is in the container logs; change it after signing in. Automatic updates are off by default; Compose services are always manual. A single Compose service can be updated when its files are in the mounted paths, it has one replica, and no dependencies, shared networks, volumes or bind mounts are detected. Compose files are never modified. The /home, /opt, /srv, /mnt, /media and /root paths are mounted read-only. Updating one service causes a brief interruption; dependencies outside Docker must be assessed manually. Supports Linux containers on Docker Desktop, Linux amd64 and Raspberry Pi ARM64. Swarm and custom networks outside Compose are skipped.",
       "engines": [
         "docker"
       ],

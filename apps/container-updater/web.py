@@ -170,7 +170,11 @@ def create_app(
     def get_service() -> UpdateService:
         if service_factory:
             return service_factory()
-        client = docker.from_env(timeout=30)
+        try:
+            docker_timeout = max(30, min(int(os.environ.get("DCC_UPDATER_DOCKER_TIMEOUT", "180")), 600))
+        except ValueError:
+            docker_timeout = 180
+        client = docker.from_env(timeout=docker_timeout)
         return UpdateService(client, wait_seconds=int(os.environ.get("DCC_UPDATER_HEALTH_TIMEOUT", "60")))
 
     def annotate_auto_update_state(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -179,7 +183,10 @@ def create_app(
             name = str(item.get("name") or "")
             image = str(item.get("current_image") or "")
             repository = normalized_repository(image) if image else ""
-            item["auto_update_on_startup"] = bool(name and repository and enabled.get(name) == repository)
+            auto_supported = item.get("auto_update_supported", item.get("supported", False))
+            item["auto_update_on_startup"] = bool(
+                auto_supported and name and repository and enabled.get(name) == repository
+            )
         return results
 
     def run_startup_auto_updates(progress: Callable[[str], None]) -> dict[str, Any]:
@@ -208,7 +215,7 @@ def create_app(
             item = by_name.get(name)
             if not item or normalized_repository(str(item.get("current_image") or "")) != repository:
                 continue
-            if item.get("supported") and item.get("update_available"):
+            if item.get("auto_update_supported", item.get("supported")) and item.get("update_available"):
                 queued.append(item)
 
         if not queued:
@@ -387,6 +394,10 @@ def create_app(
             name = str(getattr(container, "name", "") or "").lstrip("/")
             if service._is_self(container):
                 return jsonify({"error": "Panel aktualizujący nie może aktualizować samego siebie."}), 400
+            if service._is_compose(container):
+                return jsonify({
+                    "error": "Automatyczna aktualizacja Compose jest wyłączona. Usługi Compose aktualizuj ręcznie po sprawdzeniu zależności i konfiguracji."
+                }), 400
             reason = service._unsupported_reason(container)
             if reason:
                 return jsonify({"error": reason}), 400

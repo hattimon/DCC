@@ -22,7 +22,7 @@
       <button id="update" class="primary" disabled>Aktualizuj zaznaczone</button>
       <span class="grow"></span><span id="count" class="small">Kontenery: —</span>
     </div>
-    <p class="small">Automatyczna aktualizacja jest domyślnie wyłączona. Włącz ją osobno przy kontenerach, które mają być sprawdzane po restarcie hosta lub tego panelu. Kolejka aktualizuje jeden kontener naraz.</p>
+    <p class="small">Automatyczna aktualizacja jest domyślnie wyłączona. Włącz ją przy wybranych kontenerach; kolejka aktualizuje jeden naraz. Compose wymaga ręcznej aktualizacji; blokujemy jawne zależności, współdzielone wolumeny i sieci Docker. Aktualizacja pojedynczej usługi może spowodować krótką przerwę — zależności spoza Dockera sprawdź ręcznie.</p>
     <div id="status" class="status" role="status">Ładowanie panelu…</div>
     <div id="progress" class="progress"></div>
     <div class="table-wrap"><table>
@@ -60,15 +60,15 @@
         }
         const nameCell = document.createElement('td'); const name=document.createElement('div'); name.className='name'; name.textContent=esc(item.name); const state=document.createElement('div'); state.className='small'; state.textContent=esc(item.status); nameCell.append(name,state);
         const autoCell = document.createElement('td');
-        if (item.supported) {
+        if (item.auto_update_supported ?? item.supported) {
           const auto = document.createElement('input'); auto.type='checkbox'; auto.className='auto-update'; auto.checked=!!item.auto_update_on_startup; auto.dataset.supported='true'; auto.setAttribute('aria-label',`Automatycznie aktualizuj ${esc(item.name)} po restarcie`); auto.addEventListener('change',()=>setAutoUpdate(auto,item)); autoCell.append(auto);
         } else {
-          const unavailable=document.createElement('span'); unavailable.className='small'; unavailable.textContent='Niedostępne'; autoCell.append(unavailable);
+          const unavailable=document.createElement('span'); unavailable.className='small'; unavailable.textContent=item.auto_update_supported===false&&item.supported?'Tylko ręcznie (Compose)':'Niedostępne'; unavailable.title=esc(item.message); autoCell.append(unavailable);
         }
         const badgeCell = document.createElement('td'); const badge=document.createElement('span'); badge.className=`badge ${item.update_available && item.supported?'update':item.supported?'current':'skip'}`; badge.textContent=item.update_available&&item.supported?'Dostępna aktualizacja':item.supported?'Aktualny / sprawdź digest':'Pominięto'; badgeCell.append(badge);
         const currentCell=document.createElement('td'); currentCell.className='image'; currentCell.textContent=esc(item.current_image);
         const targetCell=document.createElement('td'); targetCell.className='image'; targetCell.textContent=esc(item.update_available?item.target_image:'—');
-        const infoCell=document.createElement('td'); infoCell.className='detail'; infoCell.textContent=esc([item.source,item.message,item.has_update_instructions?'Zastosowane zostaną jawne instrukcje aktualizacji z katalogu.':''].filter(Boolean).join(' · '));
+        const infoCell=document.createElement('td'); infoCell.className='detail'; infoCell.textContent=esc([item.source,item.message,item.has_update_instructions?'Zastosowane zostaną jawne instrukcje aktualizacji z katalogu.':'',item.last_result].filter(Boolean).join(' · '));
         tr.append(checkCell,nameCell,autoCell,badgeCell,currentCell,targetCell,infoCell); rows.append(tr);
       }
       document.getElementById('select-all').checked=false; updateSelection();
@@ -91,7 +91,7 @@
         clearInterval(pollTimer); pollTimer=null; setBusy(false);
         if(job.status==='done'){
           if(['update','auto_update'].includes(job.kind)&&job.results&&job.results.updates){
-            const summary=job.results.updates.map(x=>`${x.name}: ${x.result}`).join(' | '); const hasFailures=job.results.updates.some(x=>x.ok===false); showStatus(summary||(job.kind==='auto_update'?'Kolejka automatyczna zakończona.':'Aktualizowanie zakończone.'),hasFailures?'error':'ok'); render(job.results.containers||[]);
+            const outcomes=job.results.updates; const succeeded=outcomes.filter(x=>x.ok===true).length; const failed=outcomes.length-succeeded; const hasFailures=failed>0; const byName=new Map(outcomes.map(x=>[x.name,x.result])); const containers=(job.results.containers||[]).map(item=>({...item,last_result:byName.get(item.name)||''})); const title=job.kind==='auto_update'?'Kolejka automatyczna zakończona.':'Aktualizacja zakończona.'; showStatus(`${title} Powodzenia: ${succeeded}; błędy lub blokady: ${failed}. Szczegóły są przy kontenerach.`,hasFailures?'error':'ok'); render(containers);
           } else { showStatus(`Skanowanie zakończone. ${job.results?.length||0} kontenerów.`,'ok'); render(job.results||[]); }
         } else if(job.status==='error'){showStatus(job.progress||'Zadanie nie powiodło się.','error');}
       } catch(error){clearInterval(pollTimer);pollTimer=null;setBusy(false);showStatus(error.message,'error');}

@@ -1,11 +1,15 @@
+import json
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from updater import UpdateService, compare_versions, image_reference, normalized_repository, version_tuple
+from updater import UpdateService, compare_versions, friendly_registry_error, image_reference, normalized_repository, version_tuple
 
 
 class ImageReferenceTests(unittest.TestCase):
@@ -81,6 +85,339 @@ class ContainerSafetyTests(unittest.TestCase):
         )
         result = service.inspect_container(container, [])
         self.assertFalse(result["supported"])
+
+    def test_digest_only_config_uses_a_unique_local_tag_for_registry_checks(self):
+        local_image = SimpleNamespace(attrs={
+            "RepoTags": ["ghcr.io/example/rss-bridge:latest"],
+            "RepoDigests": ["ghcr.io/example/rss-bridge@sha256:old"],
+            "Os": "linux",
+            "Architecture": "arm64",
+        })
+
+        class Api:
+            def inspect_distribution(self, image):
+                self.asserted_image = image
+                return {
+                    "Platforms": [{
+                        "OS": "linux",
+                        "Architecture": "arm64",
+                        "Descriptor": {"digest": "sha256:new"},
+                    }],
+                    "Descriptor": {"digest": "sha256:index"},
+                }
+
+        api = Api()
+        client = SimpleNamespace(api=api, images=SimpleNamespace(get=lambda _identifier: local_image))
+        service = UpdateService(client, catalog_loader=lambda: [])
+        container = self._container(
+            Config={"Image": "sha256:container-image", "Labels": {}},
+            Image="sha256:container-image",
+        )
+        result = service.inspect_container(container, [])
+        self.assertTrue(result["update_available"])
+        self.assertEqual(result["target_image"], "ghcr.io/example/rss-bridge:latest")
+        self.assertEqual(api.asserted_image, "ghcr.io/example/rss-bridge:latest")
+
+
+class RegistryRetryTests(unittest.TestCase):
+    class RegistryError(RuntimeError):
+        def __init__(self):
+            super().__init__("500 Server Error")
+            self.explanation = "TLS handshake timeout while contacting registry-1.docker.io"
+
+    def test_digest_check_retries_transient_registry_timeout(self):
+        class Api:
+            calls = 0
+
+            def inspect_distribution(self, _image):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RegistryRetryTests.RegistryError()
+                return {
+                    "Platforms": [{
+                        "OS": "linux",
+                        "Architecture": "arm64",
+                        "Descriptor": {"digest": "sha256:new"},
+                    }],
+                    "Descriptor": {"digest": "sha256:index"},
+                }
+
+        api = Api()
+        service = UpdateService(SimpleNamespace(api=api))
+        image = SimpleNamespace(attrs={
+            "Os": "linux",
+            "Architecture": "arm64",
+            "RepoDigests": ["cloudflare/cloudflared@sha256:old"],
+        })
+        with patch("updater.time.sleep") as sleep:
+            available, message = service._registry_digest("cloudflare/cloudflared:latest", image)
+        self.assertTrue(available)
+        self.assertIn("Porównano", message)
+        self.assertEqual(api.calls, 2)
+        sleep.assert_called_once_with(2)
+
+    def test_digest_check_explains_repeated_tls_timeout(self):
+        class Api:
+            calls = 0
+
+            def inspect_distribution(self, _image):
+                self.calls += 1
+                raise RegistryRetryTests.RegistryError()
+
+        api = Api()
+        service = UpdateService(SimpleNamespace(api=api))
+        with patch("updater.time.sleep"):
+            available, message = service._registry_digest(
+                "cloudflare/cloudflared:latest",
+                SimpleNamespace(attrs={"RepoDigests": ["cloudflare/cloudflared@sha256:old"]}),
+            )
+        self.assertIsNone(available)
+        self.assertIn("timeout TLS", message)
+        self.assertIn("ponów próbę", message)
+        self.assertEqual(api.calls, 3)
+
+    def test_registry_errors_for_missing_arm_manifest_are_actionable(self):
+        message = friendly_registry_error("no matching manifest for linux/arm/v7", "Pobieranie obrazu")
+        self.assertIn("architektury hosta", message)
+        self.assertIn("linux/arm64", message)
+
+    def test_registry_digest_check_reports_missing_host_architecture(self):
+        class Api:
+            def inspect_distribution(self, _image):
+                return {
+                    "Platforms": [{
+                        "OS": "linux",
+                        "Architecture": "amd64",
+                        "Descriptor": {"digest": "sha256:amd64"},
+                    }],
+                    "Descriptor": {"digest": "sha256:index"},
+                }
+
+        service = UpdateService(SimpleNamespace(api=Api()))
+        available, message = service._registry_digest(
+            "example/service:latest",
+            SimpleNamespace(attrs={
+                "Os": "linux", "Architecture": "arm64", "RepoDigests": ["example/service@sha256:old"],
+            }),
+        )
+        self.assertIsNone(available)
+        self.assertIn("linux/arm64", message)
+
+
+class ComposeUpdateSafetyTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.compose_file = self.root / "compose.yaml"
+        self.compose_file.write_text("services: {}\n", encoding="utf-8")
+        self.compose_config = {
+            "services": {
+                "api": {"image": "example/service:2", "ports": [], "volumes": []},
+            },
+            "volumes": {},
+        }
+        self.container = SimpleNamespace(
+            id="compose-container-1",
+            name="media-api-1",
+            status="running",
+            attrs={
+                "Image": "sha256:local-image",
+                "Config": {
+                    "Image": "example/service:1",
+                    "Labels": {
+                        "com.docker.compose.project": "media",
+                        "com.docker.compose.service": "api",
+                        "com.docker.compose.project.working_dir": str(self.root),
+                        "com.docker.compose.project.config_files": str(self.compose_file),
+                    },
+                },
+                "HostConfig": {"NetworkMode": "media_default", "AutoRemove": False},
+                "NetworkSettings": {"Networks": {"media_default": {}}},
+                "State": {"Status": "running"},
+            },
+        )
+        self.local_image = SimpleNamespace(
+            attrs={"RepoTags": ["example/service:1"], "RepoDigests": ["example/service@sha256:old"]},
+            tag=lambda _repository, tag: True,
+        )
+
+        class Images:
+            def __init__(inner_self):
+                inner_self.removed = []
+
+            def get(inner_self, _identifier):
+                return self.local_image
+
+            def remove(inner_self, reference):
+                inner_self.removed.append(reference)
+
+        self.images = Images()
+        self.client = SimpleNamespace(images=self.images)
+        self.service = UpdateService(self.client, catalog_loader=lambda: [], compose_roots=(str(self.root),))
+        self.app = {"image": "example/service:2", "latest_release": "v2"}
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def _config_call(self, *args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 0, json.dumps(self.compose_config), "")
+
+    def _scan(self, all_containers=None):
+        with patch("updater.subprocess.run", side_effect=self._config_call):
+            return self.service.inspect_container(
+                self.container,
+                [self.app],
+                all_containers=all_containers or [self.container],
+            )
+
+    def test_compose_service_is_manually_updatable_without_restarting_dependencies(self):
+        result = self._scan()
+        self.assertTrue(result["supported"])
+        self.assertTrue(result["update_available"])
+        self.assertFalse(result["auto_update_supported"])
+        self.assertEqual(result["target_image"], "example/service:2")
+
+    def test_compose_file_must_declare_the_detected_target(self):
+        self.compose_config["services"]["api"]["image"] = "example/service:1"
+        result = self._scan()
+        self.assertFalse(result["supported"])
+        self.assertTrue(result["update_available"])
+        self.assertIn("updater nie edytuje plików", result["message"])
+
+    def test_compose_service_with_dependents_is_blocked_with_names(self):
+        self.compose_config["services"]["worker"] = {
+            "image": "example/worker:1",
+            "depends_on": {"api": {"condition": "service_started"}},
+            "volumes": [],
+        }
+        result = self._scan()
+        self.assertFalse(result["supported"])
+        self.assertIn("worker", result["message"])
+
+    def test_compose_service_sharing_a_docker_network_is_blocked(self):
+        other = SimpleNamespace(
+            id="worker-container",
+            name="media-worker-1",
+            attrs={
+                "Config": {"Labels": {}},
+                "HostConfig": {"NetworkMode": "media_default"},
+                "NetworkSettings": {"Networks": {"media_default": {}}},
+            },
+        )
+        result = self._scan([self.container, other])
+        self.assertFalse(result["supported"])
+        self.assertIn("media-worker-1", result["message"])
+        self.assertIn("współdzieli sieć Docker", result["message"])
+
+    def test_compose_service_sharing_a_named_volume_is_blocked(self):
+        self.compose_config["services"]["api"]["volumes"] = [
+            {"type": "volume", "source": "shared-data", "target": "/data"}
+        ]
+        self.compose_config["services"]["worker"] = {
+            "image": "example/worker:1",
+            "volumes": [{"type": "volume", "source": "shared-data", "target": "/data"}],
+        }
+        result = self._scan()
+        self.assertFalse(result["supported"])
+        self.assertIn("współdzieli wolumen", result["message"])
+
+    def test_compose_bind_mount_outside_read_only_roots_is_blocked(self):
+        self.compose_config["services"]["api"]["volumes"] = [
+            {"type": "bind", "source": "/var/lib/media-data", "target": "/data"}
+        ]
+        result = self._scan()
+        self.assertFalse(result["supported"])
+        self.assertIn("poza katalogami udostępnionymi", result["message"])
+
+    def test_compose_host_port_conflict_is_reported_before_update(self):
+        self.compose_config["services"]["api"]["ports"] = [
+            {"target": 8080, "published": "18080", "protocol": "tcp", "host_ip": "0.0.0.0"}
+        ]
+        other = SimpleNamespace(
+            id="other-container",
+            name="other-service",
+            attrs={
+                "Config": {"Labels": {}},
+                "HostConfig": {"PortBindings": {"9090/tcp": [{"HostPort": "18080"}]}},
+                "NetworkSettings": {"Ports": {}},
+            },
+        )
+        result = self._scan([self.container, other])
+        self.assertFalse(result["supported"])
+        self.assertIn("other-service", result["message"])
+        self.assertIn("18080", result["message"])
+
+    def test_compose_bind_mount_outside_read_only_roots_is_blocked(self):
+        self.compose_config["services"]["api"]["volumes"] = [
+            {"type": "bind", "source": "/var/lib/media-data", "target": "/data"}
+        ]
+        result = self._scan()
+        self.assertFalse(result["supported"])
+        self.assertIn("poza katalogami udostępnionymi", result["message"])
+
+    def test_compose_host_port_conflict_is_reported_before_update(self):
+        self.compose_config["services"]["api"]["ports"] = [
+            {"target": 8080, "published": "18080", "protocol": "tcp", "host_ip": "0.0.0.0"}
+        ]
+        other = SimpleNamespace(
+            id="other-container",
+            name="other-service",
+            attrs={
+                "Config": {"Labels": {}},
+                "HostConfig": {"PortBindings": {"9090/tcp": [{"HostPort": "18080"}]}},
+                "NetworkSettings": {"Ports": {}},
+            },
+        )
+        result = self._scan([self.container, other])
+        self.assertFalse(result["supported"])
+        self.assertIn("other-service", result["message"])
+        self.assertIn("18080", result["message"])
+
+    def test_scaled_compose_service_is_blocked(self):
+        replica = SimpleNamespace(
+            id="compose-container-2",
+            attrs={"Config": {"Labels": {
+                "com.docker.compose.project": "media",
+                "com.docker.compose.service": "api",
+            }}},
+        )
+        result = self._scan([self.container, replica])
+        self.assertFalse(result["supported"])
+        self.assertIn("replik", result["message"])
+
+    def test_compose_update_pulls_then_updates_only_service_and_rolls_back_on_failure(self):
+        commands = []
+        rollback_contents = []
+
+        def run(args, **kwargs):
+            commands.append(list(args))
+            for index, value in enumerate(args[:-1]):
+                if value == "--file" and str(args[index + 1]).endswith("rollback.json"):
+                    rollback_contents.append(Path(args[index + 1]).read_text(encoding="utf-8"))
+            if args[-3:] == ["config", "--format", "json"]:
+                return self._config_call(args, **kwargs)
+            if "pull" in args:
+                return subprocess.CompletedProcess(args, 0, "pobieranie", "")
+            if args[-1] == "api":
+                if any(str(value).endswith("rollback.json") for value in args):
+                    return subprocess.CompletedProcess(args, 0, "restored", "")
+                return subprocess.CompletedProcess(args, 1, "", "unhealthy after update")
+            return subprocess.CompletedProcess(args, 0, "restored", "")
+
+        with patch("updater.subprocess.run", side_effect=run), patch("updater.time.time", return_value=100):
+            with self.assertRaisesRegex(RuntimeError, "przywrócono poprzedni obraz"):
+                self.service._update_compose(self.container, "example/service:2", [self.container])
+
+        update_command = commands[2]
+        self.assertIn("--no-deps", update_command)
+        self.assertIn("--no-build", update_command)
+        self.assertIn("--pull", update_command)
+        self.assertIn("never", update_command)
+        self.assertIn("--wait", update_command)
+        rollback_command = commands[3]
+        self.assertGreater(rollback_command.count("--file"), 1)
+        self.assertIn("dcc-updater-rollback:compose-cont-100", rollback_contents[0])
+        self.assertEqual(self.images.removed, ["dcc-updater-rollback:compose-cont-100"])
 
 
 class PortConflictTests(unittest.TestCase):
@@ -238,6 +575,41 @@ class ContainerConfigurationTests(unittest.TestCase):
 
 
 class UpdateRollbackTests(unittest.TestCase):
+    def test_transient_pull_retries_before_touching_the_running_container(self):
+        events = []
+
+        class FakeApi:
+            def create_container_config(self, **kwargs):
+                return kwargs
+
+        class FakeImages:
+            calls = 0
+
+            def pull(self, _image):
+                self.calls += 1
+                events.append("pull")
+                raise RuntimeError("500 Server Error: TLS handshake timeout")
+
+        container = SimpleNamespace(
+            id="container-123456",
+            name="media",
+            attrs={
+                "Config": {"Image": "example/service:1", "Labels": {}},
+                "HostConfig": {"NetworkMode": "bridge", "AutoRemove": False},
+                "NetworkSettings": {"Networks": {"bridge": {}}},
+                "State": {"Status": "running"},
+                "Mounts": [],
+            },
+            stop=lambda **_kwargs: events.append("stop"),
+        )
+        images = FakeImages()
+        service = UpdateService(SimpleNamespace(api=FakeApi(), images=images))
+        with patch("updater.time.sleep"):
+            with self.assertRaisesRegex(RuntimeError, "timeout TLS"):
+                service.update_one(container, "example/service:2")
+        self.assertEqual(images.calls, 3)
+        self.assertEqual(events, ["pull", "pull", "pull"])
+
     def test_docker_port_race_restores_old_container(self):
         events = []
 

@@ -50,6 +50,8 @@ class WebSecurityTests(unittest.TestCase):
         panel = self.client.get("/")
         self.assertEqual(panel.status_code, 200)
         self.assertIn(b"Docker", panel.data)
+        self.assertIn("Compose wymaga ręcznej aktualizacji".encode(), panel.data)
+        self.assertIn("Tylko ręcznie (Compose)".encode(), panel.data)
 
     def test_api_post_requires_csrf_token(self):
         password = self.app.extensions["dcc_updater_initial_password"]
@@ -136,6 +138,42 @@ class WebSecurityTests(unittest.TestCase):
             )
             self.assertEqual(disabled.status_code, 200)
             self.assertFalse(store.is_enabled("media", "ghcr.io/example/media:1.0"))
+
+    def test_compose_auto_update_is_rejected(self):
+        container = SimpleNamespace(
+            id="compose-id",
+            name="media",
+            attrs={
+                "Config": {
+                    "Image": "ghcr.io/example/media:1.0",
+                    "Labels": {"com.docker.compose.project": "media"},
+                },
+            },
+        )
+
+        class Containers:
+            def get(self, _identifier):
+                return container
+
+        service = UpdateService(SimpleNamespace(containers=Containers()), catalog_loader=lambda: [])
+        with tempfile.TemporaryDirectory(dir=self.temp.name) as directory:
+            app = create_app(directory, service_factory=lambda: service, print_credentials=False)
+            app.config["TESTING"] = True
+            client = app.test_client()
+            password = app.extensions["dcc_updater_initial_password"]
+            login_page = client.get("/login")
+            import re
+            csrf = re.search(rb'name="csrf-token" content="([^"]+)"', login_page.data).group(1).decode()
+            client.post("/login", data={"csrf_token": csrf, "password": password})
+            panel = client.get("/")
+            csrf = re.search(rb'name="csrf-token" content="([^"]+)"', panel.data).group(1).decode()
+            response = client.post(
+                "/api/auto-update",
+                json={"name": "media", "container_id": container.id, "enabled": True},
+                headers={"X-CSRF-Token": csrf},
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("Compose", response.get_json()["error"])
 
     def test_job_manager_never_runs_two_container_jobs_at_once(self):
         manager = JobManager()
