@@ -135,6 +135,7 @@ def create_app(
     *,
     print_credentials: bool = True,
     startup_auto_updates: bool = False,
+    startup_self_update: bool = False,
 ) -> Flask:
     app = Flask(__name__, template_folder="templates")
     data_path = Path(data_dir or os.environ.get("DCC_UPDATER_DATA", "/data"))
@@ -190,24 +191,47 @@ def create_app(
         return results
 
     def run_startup_auto_updates(progress: Callable[[str], None]) -> dict[str, Any]:
-        enabled = auto_update_store.snapshot()
-        if not enabled:
-            progress("Automatyczne aktualizacje nie są włączone dla żadnego kontenera.")
-            return {"updates": [], "containers": []}
-
         service = None
-        scanned: list[dict[str, Any]] = []
         deadline = time.monotonic() + max(30, min(int(os.environ.get("DCC_UPDATER_DOCKER_WAIT", "180")), 600))
         while True:
             try:
                 service = get_service()
-                scanned = service.scan(progress)
+                ping = getattr(service.client, "ping", None)
+                if callable(ping):
+                    ping()
+                else:
+                    service.client.containers.list(all=True)
                 break
             except Exception as exc:
                 if time.monotonic() >= deadline:
                     raise RuntimeError("Docker nie uruchomił się przed upływem limitu oczekiwania.") from exc
                 progress("Oczekiwanie na gotowość Docker po restarcie hosta…")
                 time.sleep(3)
+
+        if startup_self_update:
+            try:
+                self_update = service.check_self_update(progress)
+                if self_update.get("update_available") and self_update.get("supported", True):
+                    self_update = service.start_self_update(progress)
+                    if self_update.get("started"):
+                        progress(self_update.get("message", "Aktualizacja panelu została uruchomiona."))
+                        return {"self_update": self_update, "updates": [], "containers": []}
+                elif self_update.get("update_available"):
+                    progress(self_update.get("message", "Aktualizacja panelu wymaga ręcznej obsługi."))
+                elif not self_update.get("checked"):
+                    progress(self_update.get("message", "Nie udało się sprawdzić aktualizacji panelu; obecny panel działa dalej."))
+            except Exception as exc:
+                progress(f"Nie udało się sprawdzić aktualizacji panelu ({type(exc).__name__}); obecny panel działa dalej.")
+
+        if not startup_auto_updates:
+            return {"updates": [], "containers": []}
+
+        enabled = auto_update_store.snapshot()
+        if not enabled:
+            progress("Panel sprawdzony; automatyczne aktualizacje innych kontenerów nie są włączone.")
+            return {"updates": [], "containers": []}
+
+        scanned = service.scan(progress)
 
         by_name = {str(item.get("name") or ""): item for item in scanned}
         queued: list[dict[str, Any]] = []
@@ -230,9 +254,13 @@ def create_app(
 
     def schedule_startup_auto_updates() -> threading.Thread:
         try:
-            delay = max(0, min(int(os.environ.get("DCC_UPDATER_STARTUP_DELAY", "12")), 300))
+            default_delay = "0" if startup_self_update else "12"
+            delay = max(0, min(int(os.environ.get(
+                "DCC_UPDATER_SELF_UPDATE_STARTUP_DELAY" if startup_self_update else "DCC_UPDATER_STARTUP_DELAY",
+                default_delay,
+            )), 300))
         except ValueError:
-            delay = 12
+            delay = 0 if startup_self_update else 12
 
         def wait_for_queue() -> None:
             time.sleep(delay)
@@ -350,6 +378,26 @@ def create_app(
         started, state = manager.start("scan", work)
         return jsonify(state), (202 if started else 409)
 
+    @app.post("/api/self-update/check")
+    def check_self_update():
+        def work(progress):
+            result = get_service().check_self_update(progress)
+            progress(result.get("message", "Sprawdzanie aktualizacji panelu zakończone."))
+            return result
+
+        started, state = manager.start("self_update_check", work)
+        return jsonify(state), (202 if started else 409)
+
+    @app.post("/api/self-update")
+    def update_self():
+        def work(progress):
+            result = get_service().start_self_update(progress)
+            progress(result.get("message", "Aktualizacja panelu zakończona."))
+            return result
+
+        started, state = manager.start("self_update", work)
+        return jsonify(state), (202 if started else 409)
+
     @app.post("/api/update")
     def update():
         payload = request.get_json(silent=True) or {}
@@ -425,9 +473,12 @@ def create_app(
         _atomic_write(password_path, generate_password_hash(new_password, method="scrypt"))
         return jsonify({"message": "Hasło zostało zmienione."})
 
-    if startup_auto_updates:
+    if startup_auto_updates or startup_self_update:
         app.extensions["dcc_updater_startup_thread"] = schedule_startup_auto_updates()
     return app
 
 
-app = create_app(startup_auto_updates=os.environ.get("DCC_UPDATER_AUTO_UPDATE_ON_START", "0") == "1")
+app = create_app(
+    startup_auto_updates=os.environ.get("DCC_UPDATER_AUTO_UPDATE_ON_START", "0") == "1",
+    startup_self_update=os.environ.get("DCC_UPDATER_SELF_UPDATE_ON_START", "0") == "1",
+)

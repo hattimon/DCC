@@ -3,13 +3,15 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import base64
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.error import URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from updater import UpdateService, compare_versions, friendly_registry_error, image_reference, normalized_repository, version_tuple
+from updater import UpdateService, compare_versions, friendly_registry_error, image_reference, load_catalog, normalized_repository, version_tuple
 
 
 class ImageReferenceTests(unittest.TestCase):
@@ -22,6 +24,35 @@ class ImageReferenceTests(unittest.TestCase):
     def test_numeric_version_comparison_avoids_lexicographic_order(self):
         self.assertEqual(compare_versions(version_tuple("1.3.10"), version_tuple("1.3.9")), 1)
         self.assertEqual(compare_versions(version_tuple("v1.3"), version_tuple("1.3.0")), 0)
+
+
+class CatalogLoadingTests(unittest.TestCase):
+    def test_catalog_falls_back_to_github_api_when_raw_github_is_unavailable(self):
+        catalog_bytes = json.dumps({"apps": [{"image": "example/service:2"}]}).encode("utf-8")
+        api_response = json.dumps({
+            "encoding": "base64",
+            "content": base64.b64encode(catalog_bytes).decode("ascii"),
+        }).encode("utf-8")
+
+        class Response:
+            def __init__(self, content):
+                self.content = content
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return self.content
+
+        with patch("updater.urllib.request.urlopen", side_effect=[URLError("raw host timed out"), Response(api_response)]) as open_url:
+            apps = load_catalog()
+
+        self.assertEqual(apps, [{"image": "example/service:2"}])
+        self.assertEqual(open_url.call_count, 2)
+        self.assertIn("api.github.com", open_url.call_args_list[1].args[0].full_url)
 
 
 class CatalogCandidateTests(unittest.TestCase):
@@ -57,6 +88,16 @@ class CatalogCandidateTests(unittest.TestCase):
             [{**self.apps[0], "update_instructions": instructions}],
         )
         self.assertEqual(candidate.update_instructions, instructions)
+
+    def test_current_cinema_hub_catalog_offers_139_to_138(self):
+        catalog_path = Path(__file__).resolve().parents[3] / "dcc-catalog.json"
+        payload = json.loads(catalog_path.read_text(encoding="utf-8"))
+        cinema_hub = next(app for app in payload["apps"] if app.get("name") == "Cinema Hub")
+
+        result = self.service._catalog_candidate("ghcr.io/hattimon/cinema-hub:1.3.8", [cinema_hub])
+
+        self.assertTrue(result.available)
+        self.assertEqual(result.target_image, "ghcr.io/hattimon/cinema-hub:1.3.9")
 
 
 class ContainerSafetyTests(unittest.TestCase):
@@ -117,6 +158,53 @@ class ContainerSafetyTests(unittest.TestCase):
         self.assertTrue(result["update_available"])
         self.assertEqual(result["target_image"], "ghcr.io/example/rss-bridge:latest")
         self.assertEqual(api.asserted_image, "ghcr.io/example/rss-bridge:latest")
+
+    def test_registry_current_digest_does_not_hide_catalog_fetch_failure(self):
+        image = "ghcr.io/hattimon/cinema-hub:1.3.8"
+        local_image = SimpleNamespace(attrs={
+            "RepoTags": [image],
+            "RepoDigests": ["ghcr.io/hattimon/cinema-hub@sha256:local"],
+            "Os": "linux",
+            "Architecture": "arm64",
+        })
+
+        class Api:
+            def inspect_distribution(self, _image):
+                return {
+                    "Platforms": [{
+                        "OS": "linux",
+                        "Architecture": "arm64",
+                        "Descriptor": {"digest": "sha256:local"},
+                    }],
+                    "Descriptor": {"digest": "sha256:index"},
+                }
+
+        container = self._container(
+            Config={"Image": image, "Labels": {}},
+            Image="sha256:container-image",
+            HostConfig={"NetworkMode": "bridge", "AutoRemove": False, "PortBindings": {}},
+            NetworkSettings={"Networks": {"bridge": {}}, "Ports": {}},
+            State={"Status": "running"},
+        )
+        client = SimpleNamespace(
+            api=Api(),
+            images=SimpleNamespace(get=lambda _identifier: local_image),
+        )
+        service = UpdateService(client, catalog_loader=lambda: [])
+
+        result = service.inspect_container(
+            container,
+            [],
+            catalog_error="Nie udało się pobrać katalogu DCC: timeout raw.githubusercontent.com",
+            all_containers=[container],
+        )
+
+        self.assertFalse(result["update_available"])
+        self.assertFalse(result["supported"])
+        self.assertFalse(result["auto_update_supported"])
+        self.assertTrue(result["check_error"])
+        self.assertIn("katalog DCC jest niedostępny", result["message"])
+        self.assertIn("raw.githubusercontent.com", result["message"])
 
 
 class RegistryRetryTests(unittest.TestCase):

@@ -13,7 +13,7 @@
 <body>
   <header>
     <div><div class="brand">DCC · CONTAINER UPDATER</div><h1>Aktualizacje kontenerów Docker</h1><p class="subtitle">Sprawdź obrazy i wybierz kontenery do aktualizacji.</p></div>
-    <div class="head-actions"><button id="scan">Skanuj kontenery</button><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="link-button">Wyloguj</button></form></div>
+    <div class="head-actions"><button id="check-self">Sprawdź aktualizację panelu</button><button id="update-self" class="primary" hidden disabled>Aktualizuj panel</button><button id="scan">Skanuj kontenery</button><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="link-button">Wyloguj</button></form></div>
   </header>
   <main>
     <div class="notice"><span aria-hidden="true">⚠</span><div><strong>Dostęp do Dockera daje uprawnienia administratora hosta.</strong> Chroń to hasło, udostępniaj panel tylko z zaufanej sieci i nie wystawiaj go bez HTTPS do Internetu.</div></div>
@@ -45,9 +45,10 @@
     const progress = document.getElementById('progress');
     const updateButton = document.getElementById('update');
     let pollTimer = null;
+    let selfUpdateRequested = false;
     const esc = value => String(value ?? '');
     function showStatus(message, kind='') { statusBox.textContent = message; statusBox.className = `status ${kind}`; }
-    function setBusy(busy) { progress.classList.toggle('active', busy); document.getElementById('scan').disabled = busy; updateButton.disabled = busy || !document.querySelector('.pick:checked'); document.getElementById('select-updates').disabled = busy; document.querySelectorAll('.auto-update').forEach(check => { check.disabled = busy || check.dataset.supported !== 'true'; }); }
+    function setBusy(busy) { progress.classList.toggle('active', busy); document.getElementById('scan').disabled = busy; document.getElementById('check-self').disabled = busy; document.getElementById('update-self').disabled = busy || document.getElementById('update-self').hidden; updateButton.disabled = busy || !document.querySelector('.pick:checked'); document.getElementById('select-updates').disabled = busy; document.querySelectorAll('.auto-update').forEach(check => { check.disabled = busy || check.dataset.supported !== 'true'; }); }
     function render(items) {
       document.getElementById('count').textContent = `Kontenery: ${items.length}`;
       if (!items.length) { rows.innerHTML = '<tr><td colspan="7" class="empty">Nie znaleziono kontenerów.</td></tr>'; setBusy(false); return; }
@@ -65,7 +66,7 @@
         } else {
           const unavailable=document.createElement('span'); unavailable.className='small'; unavailable.textContent=item.auto_update_supported===false&&item.supported?'Tylko ręcznie (Compose)':'Niedostępne'; unavailable.title=esc(item.message); autoCell.append(unavailable);
         }
-        const badgeCell = document.createElement('td'); const badge=document.createElement('span'); badge.className=`badge ${item.update_available && item.supported?'update':item.supported?'current':'skip'}`; badge.textContent=item.update_available&&item.supported?'Dostępna aktualizacja':item.supported?'Aktualny / sprawdź digest':'Pominięto'; badgeCell.append(badge);
+        const badgeCell = document.createElement('td'); const badge=document.createElement('span'); badge.className=`badge ${item.update_available && item.supported?'update':item.check_error?'skip':item.supported?'current':'skip'}`; badge.textContent=item.update_available&&item.supported?'Dostępna aktualizacja':item.check_error?'Nie sprawdzono':item.supported?'Aktualny / sprawdź digest':'Pominięto'; badge.title=esc(item.message); badgeCell.append(badge);
         const currentCell=document.createElement('td'); currentCell.className='image'; currentCell.textContent=esc(item.current_image);
         const targetCell=document.createElement('td'); targetCell.className='image'; targetCell.textContent=esc(item.update_available?item.target_image:'—');
         const infoCell=document.createElement('td'); infoCell.className='detail'; infoCell.textContent=esc([item.source,item.message,item.has_update_instructions?'Zastosowane zostaną jawne instrukcje aktualizacji z katalogu.':'',item.last_result].filter(Boolean).join(' · '));
@@ -87,20 +88,28 @@
     async function poll() {
       try {
         const job=await api('/api/job',{method:'GET'});
+        if(job.results?.self_update?.started){selfUpdateRequested=true;showStatus(job.results.self_update.message||'Panel uruchamia się ponownie po aktualizacji.','ok');setTimeout(()=>location.reload(),30000);return;}
+        if(selfUpdateRequested&&job.kind!=='self_update'){location.reload();return;}
         if(['queued','running'].includes(job.status)){showStatus(job.progress||'Praca…');setBusy(true);return;}
         clearInterval(pollTimer); pollTimer=null; setBusy(false);
         if(job.status==='done'){
-          if(['update','auto_update'].includes(job.kind)&&job.results&&job.results.updates){
+          if(job.kind==='self_update_check'){
+            const result=job.results||{}; const available=!!result.update_available&&result.supported!==false; document.getElementById('update-self').hidden=!available; document.getElementById('update-self').disabled=!available; showStatus(result.message||'Sprawdzenie aktualizacji panelu zakończone.',result.checked?'ok':'error');
+          } else if(job.kind==='self_update'){
+            const result=job.results||{}; if(result.started){selfUpdateRequested=true;showStatus(result.message||'Panel uruchamia się ponownie po aktualizacji.','ok');setTimeout(()=>location.reload(),30000);}else{selfUpdateRequested=false;document.getElementById('update-self').hidden=!result.update_available;document.getElementById('update-self').disabled=!result.update_available;showStatus(result.message||'Nie uruchomiono aktualizacji panelu.',result.checked?'ok':'error');}
+          } else if(['update','auto_update'].includes(job.kind)&&job.results&&job.results.updates){
             const outcomes=job.results.updates; const succeeded=outcomes.filter(x=>x.ok===true).length; const failed=outcomes.length-succeeded; const hasFailures=failed>0; const byName=new Map(outcomes.map(x=>[x.name,x.result])); const containers=(job.results.containers||[]).map(item=>({...item,last_result:byName.get(item.name)||''})); const title=job.kind==='auto_update'?'Kolejka automatyczna zakończona.':'Aktualizacja zakończona.'; showStatus(`${title} Powodzenia: ${succeeded}; błędy lub blokady: ${failed}. Szczegóły są przy kontenerach.`,hasFailures?'error':'ok'); render(containers);
           } else { showStatus(`Skanowanie zakończone. ${job.results?.length||0} kontenerów.`,'ok'); render(job.results||[]); }
         } else if(job.status==='error'){showStatus(job.progress||'Zadanie nie powiodło się.','error');}
-      } catch(error){clearInterval(pollTimer);pollTimer=null;setBusy(false);showStatus(error.message,'error');}
+      } catch(error){if(selfUpdateRequested){showStatus('Panel uruchamia się ponownie po aktualizacji…','ok');return;}clearInterval(pollTimer);pollTimer=null;setBusy(false);showStatus(error.message,'error');}
     }
     async function startJob(path, payload, joinExisting=false) {
-      try { const job=await api(path,{method:'POST',body:payload?JSON.stringify(payload):undefined}); if(job.status==='queued'||job.status==='running'){showStatus(job.progress);setBusy(true);pollTimer=setInterval(poll,1200);poll();} }
-      catch(error){if(error.status===409&&joinExisting){try{const job=await api('/api/job');if(['queued','running'].includes(job.status)){showStatus(job.progress||'Inne zadanie jest w kolejce.');setBusy(true);pollTimer=setInterval(poll,1200);poll();return;}}catch(_ignored){}}showStatus(error.message,'error');}
+      try { const job=await api(path,{method:'POST',body:payload?JSON.stringify(payload):undefined}); if(job.status==='queued'||job.status==='running'){showStatus(job.progress);setBusy(true);pollTimer=setInterval(poll,1200);poll();return true;} return false; }
+      catch(error){if(error.status===409&&joinExisting){try{const job=await api('/api/job');if(['queued','running'].includes(job.status)){showStatus(job.progress||'Inne zadanie jest w kolejce.');setBusy(true);pollTimer=setInterval(poll,1200);poll();return true;}}catch(_ignored){}}showStatus(error.message,'error');return false;}
     }
     document.getElementById('scan').addEventListener('click',()=>startJob('/api/scan',undefined,true));
+    document.getElementById('check-self').addEventListener('click',()=>{document.getElementById('update-self').hidden=true;startJob('/api/self-update/check',undefined,false);});
+    document.getElementById('update-self').addEventListener('click',async()=>{if(!confirm('Pobrać najnowszy obraz i bezpiecznie odtworzyć kontener panelu? Ustawienia i wolumen danych zostaną zachowane.'))return;selfUpdateRequested=true;const started=await startJob('/api/self-update',{},false);if(!started)selfUpdateRequested=false;});
     document.getElementById('select-updates').addEventListener('click',()=>{document.querySelectorAll('.pick').forEach(x=>x.checked=true);updateSelection();});
     document.getElementById('select-all').addEventListener('change',event=>{document.querySelectorAll('.pick').forEach(x=>x.checked=event.target.checked);updateSelection();});
     updateButton.addEventListener('click',()=>{const ids=[...document.querySelectorAll('.pick:checked')].map(x=>x.value);if(ids.length&&confirm(`Zaktualizować ${ids.length} zaznaczonych kontenerów?`))startJob('/api/update',{container_ids:ids});});

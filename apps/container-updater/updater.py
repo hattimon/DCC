@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import base64
 import json
 import os
 import re
@@ -16,7 +17,14 @@ from typing import Any, Callable
 
 
 DCC_CATALOG_URL = "https://raw.githubusercontent.com/hattimon/DCC/main/dcc-catalog.json"
+DCC_CATALOG_FALLBACK_URLS = (
+    "https://api.github.com/repos/hattimon/DCC/contents/dcc-catalog.json?ref=main",
+    "https://cdn.jsdelivr.net/gh/hattimon/DCC@main/dcc-catalog.json",
+)
 SELF_LABEL = "com.hattimon.dcc-updater"
+SELF_UPDATE_HELPER_LABEL = "com.hattimon.dcc-updater-self-update-helper"
+SELF_IMAGE = "ghcr.io/hattimon/dcc-container-updater:latest"
+SELF_UPDATE_HELPER_NAME = "dcc-updater-self-update-helper"
 SUPPORTED_NETWORK_MODES = {"default", "bridge", "host", "none"}
 COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
 COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
@@ -97,11 +105,34 @@ def compare_versions(left: tuple[int, ...], right: tuple[int, ...]) -> int:
 
 
 def load_catalog(url: str = DCC_CATALOG_URL) -> list[dict[str, Any]]:
-    request = urllib.request.Request(url, headers={"User-Agent": "DCC-Container-Updater/1.0"})
-    with urllib.request.urlopen(request, timeout=12) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    apps = payload.get("apps", []) if isinstance(payload, dict) else []
-    return [item for item in apps if isinstance(item, dict) and item.get("image")]
+    sources = tuple(dict.fromkeys((url, *DCC_CATALOG_FALLBACK_URLS)))
+    failures = []
+    for source in sources:
+        request = urllib.request.Request(source, headers={
+            "Accept": "application/vnd.github+json, application/json",
+            "User-Agent": "DCC-Container-Updater/1.0",
+        })
+        try:
+            with urllib.request.urlopen(request, timeout=8) as response:
+                raw_payload = response.read()
+            if source.startswith("https://api.github.com/"):
+                metadata = json.loads(raw_payload.decode("utf-8"))
+                if metadata.get("encoding") != "base64" or not isinstance(metadata.get("content"), str):
+                    raise ValueError("GitHub API nie zwróciło katalogu w formacie base64.")
+                raw_payload = base64.b64decode(metadata["content"], validate=False)
+            payload = json.loads(raw_payload.decode("utf-8"))
+            apps = payload.get("apps") if isinstance(payload, dict) else None
+            if not isinstance(apps, list):
+                raise ValueError("Odpowiedź nie zawiera listy aplikacji.")
+            valid_apps = [item for item in apps if isinstance(item, dict) and item.get("image")]
+            if not valid_apps:
+                raise ValueError("Pobrany katalog nie zawiera aplikacji.")
+            return valid_apps
+        except Exception as exc:
+            host = source.split("/", 3)[2] if "://" in source else source
+            detail = str(exc).strip().replace("\n", " ")[:160]
+            failures.append(f"{host}: {type(exc).__name__}{(': ' + detail) if detail else ''}")
+    raise RuntimeError("Nie udało się pobrać katalogu DCC z żadnego źródła. Sprawdź połączenie z Internetem, DNS i TLS. " + " | ".join(failures))
 
 
 @dataclass
@@ -214,7 +245,8 @@ class UpdateService:
             self._catalog_cache = (now, apps)
             return apps, None
         except Exception as exc:  # registry checks can still run if GitHub is unavailable
-            return [], f"Nie udało się pobrać katalogu DCC: {type(exc).__name__}"
+            detail = str(exc).strip().replace("\n", " ")[:500]
+            return [], f"Nie udało się pobrać katalogu DCC: {detail or type(exc).__name__}"
 
     @staticmethod
     def _catalog_update_instructions(image: str, apps: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -231,6 +263,222 @@ class UpdateService:
         labels = (container.attrs.get("Config") or {}).get("Labels") or {}
         name = str(getattr(container, "name", "")).lstrip("/").lower()
         return labels.get(SELF_LABEL) == "true" or name in {"dcc-container-updater", "container-updater"}
+
+    @staticmethod
+    def _is_self_update_helper(container: Any) -> bool:
+        labels = (container.attrs.get("Config") or {}).get("Labels") or {}
+        return labels.get(SELF_UPDATE_HELPER_LABEL) == "true"
+
+    @staticmethod
+    def _self_update_docker_socket_mount(container: Any) -> dict[str, Any] | None:
+        mounts = container.attrs.get("Mounts") or []
+        host_mounts = (container.attrs.get("HostConfig") or {}).get("Mounts") or []
+        for mount in (*mounts, *host_mounts):
+            destination = str(mount.get("Destination") or mount.get("Target") or "")
+            if destination == "/var/run/docker.sock" and mount.get("Source"):
+                return {"Source": mount["Source"], "Destination": destination, "Type": "bind"}
+        binds = (container.attrs.get("HostConfig") or {}).get("Binds") or []
+        for bind in binds:
+            parts = str(bind).split(":", 2)
+            if len(parts) >= 2 and parts[1] == "/var/run/docker.sock" and parts[0]:
+                return {"Source": parts[0], "Destination": parts[1], "Type": "bind"}
+        return None
+
+    def _find_self_container(self) -> Any | None:
+        containers = self.client.containers.list(all=True)
+        matches = [container for container in containers if self._is_self(container)]
+        if not matches:
+            return None
+        hostname = os.environ.get("HOSTNAME", "").strip().lower()
+        if hostname:
+            current = [
+                container for container in matches
+                if str(getattr(container, "id", "")).lower().startswith(hostname)
+                or hostname.startswith(str(getattr(container, "id", "")).lower())
+            ]
+            if len(current) == 1:
+                return current[0]
+        running = [
+            container for container in matches
+            if str((container.attrs.get("State") or {}).get("Status") or "").lower() == "running"
+        ]
+        if len(running) == 1:
+            return running[0]
+        if len(matches) == 1:
+            return matches[0]
+        preferred = [
+            container for container in running
+            if str(getattr(container, "name", "")).lstrip("/").lower() == "dcc-container-updater"
+        ]
+        if len(preferred) == 1:
+            return preferred[0]
+        raise RuntimeError("Znaleziono kilka kontenerów DCC Container Updater; nie można bezpiecznie wybrać panelu do aktualizacji.")
+
+    def check_self_update(self, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
+        container = self._find_self_container()
+        if container is None:
+            return {
+                "checked": False,
+                "update_available": False,
+                "message": "Nie rozpoznano kontenera DCC Container Updater na tym hoście.",
+            }
+        local_image = self._local_image(container)
+        if local_image is None:
+            return {
+                "checked": False,
+                "update_available": False,
+                "message": "Nie można odczytać lokalnego obrazu panelu; nie zmieniono działającego kontenera.",
+            }
+        current, image_error = self._named_local_image(container, local_image)
+        if not current or normalized_repository(current) != normalized_repository(SELF_IMAGE):
+            return {
+                "checked": False,
+                "update_available": False,
+                "message": image_error or "Obraz panelu nie pochodzi z oficjalnego repozytorium DCC Container Updater.",
+            }
+        if progress:
+            progress("Sprawdzanie najnowszego obrazu DCC Container Updater…")
+        available, detail = self._registry_digest(SELF_IMAGE, local_image)
+        if available is True:
+            all_containers = self.client.containers.list(all=True)
+            blocker = None
+            if self._is_compose(container):
+                blocker = "Panel jest zarządzany przez Docker Compose; jego własną aktualizację należy wykonać przez plik Compose."
+            else:
+                blocker = self._unsupported_reason(container) or self._port_conflict_reason(
+                    container,
+                    None,
+                    all_containers,
+                )
+            if not blocker and self._self_update_docker_socket_mount(container) is None:
+                blocker = "W kontenerze panelu brakuje montowania /var/run/docker.sock wymaganego do bezpiecznej podmiany."
+            return {
+                "checked": True,
+                "update_available": True,
+                "supported": not bool(blocker),
+                "container_id": str(container.id),
+                "current_image": current,
+                "target_image": SELF_IMAGE,
+                "message": blocker or "W rejestrze znaleziono nowszy obraz panelu. Możesz uruchomić aktualizację.",
+            }
+        if available is False:
+            return {
+                "checked": True,
+                "update_available": False,
+                "current_image": current,
+                "target_image": SELF_IMAGE,
+                "message": "Panel DCC Container Updater jest aktualny.",
+            }
+        return {
+            "checked": False,
+            "update_available": False,
+            "current_image": current,
+            "target_image": SELF_IMAGE,
+            "message": f"Nie udało się sprawdzić wersji panelu. Obecny kontener działa bez zmian. {detail}",
+        }
+
+    def start_self_update(self, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
+        checked = self.check_self_update(progress)
+        if not checked.get("update_available"):
+            return {**checked, "started": False}
+        if not checked.get("supported", True):
+            return {**checked, "started": False}
+
+        container = self.client.containers.get(str(checked["container_id"]))
+        socket_mount = self._self_update_docker_socket_mount(container)
+        if socket_mount is None:
+            return {
+                **checked,
+                "started": False,
+                "message": "Nie można uruchomić bezpiecznej podmiany: w kontenerze panelu nie znaleziono montowania /var/run/docker.sock.",
+            }
+
+        try:
+            if progress:
+                progress("Pobieranie nowego obrazu panelu; obecny kontener pozostaje uruchomiony…")
+            self._pull_image_with_retry(SELF_IMAGE)
+            image = self.client.images.get(SELF_IMAGE)
+            target_image_id = str(getattr(image, "id", ""))
+            if not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", target_image_id):
+                raise RuntimeError("Docker nie zwrócił prawidłowego, przypiętego identyfikatora nowego obrazu.")
+            current_image = self._local_image(container)
+            if current_image is not None and str(getattr(current_image, "id", "")) == target_image_id:
+                return {
+                    **checked,
+                    "started": False,
+                    "update_available": False,
+                    "message": "Obraz panelu zdążył się zaktualizować; nowy kontener nie jest potrzebny.",
+                }
+
+            existing_helpers = [
+                candidate for candidate in self.client.containers.list(all=True)
+                if str(getattr(candidate, "name", "")).lstrip("/") == SELF_UPDATE_HELPER_NAME
+            ]
+            for helper in existing_helpers:
+                labels = ((helper.attrs.get("Config") or {}).get("Labels") or {})
+                if labels.get(SELF_UPDATE_HELPER_LABEL) != "true":
+                    raise RuntimeError(f"Nazwa pomocniczego kontenera {SELF_UPDATE_HELPER_NAME} jest już zajęta.")
+                status = str((helper.attrs.get("State") or {}).get("Status") or "").lower()
+                if status in {"created", "restarting", "running", "paused"}:
+                    return {
+                        **checked,
+                        "started": True,
+                        "message": "Pomocniczy kontener aktualizujący już działa; poczekaj na ponowne uruchomienie panelu.",
+                    }
+                helper.remove(v=False)
+
+            if progress:
+                progress("Uruchamianie pomocniczego kontenera. Panel zostanie odtworzony z zachowaniem konfiguracji i danych…")
+            self.client.containers.run(
+                target_image_id,
+                command=["python", "/app/self_update.py", str(container.id), target_image_id],
+                name=SELF_UPDATE_HELPER_NAME,
+                detach=True,
+                auto_remove=False,
+                volumes={str(socket_mount["Source"]): {
+                    "bind": "/var/run/docker.sock",
+                    "mode": "rw",
+                }},
+                network_mode="none",
+                cap_drop=["ALL"],
+                security_opt=["no-new-privileges:true"],
+                labels={SELF_UPDATE_HELPER_LABEL: "true"},
+                restart_policy={"Name": "no"},
+            )
+            return {
+                **checked,
+                "started": True,
+                "message": "Aktualizacja panelu została uruchomiona. Kontener zostanie bezpiecznie odtworzony z zachowaniem konfiguracji i wolumenów.",
+            }
+        except Exception as exc:
+            message = str(exc) or type(exc).__name__
+            return {
+                **checked,
+                "started": False,
+                "message": f"Nie udało się uruchomić aktualizacji panelu. Działający kontener pozostawiono bez zmian. {message}",
+            }
+
+    def replace_self_from_helper(self, container_id: str, target_image_id: str) -> str:
+        if not re.fullmatch(r"[0-9a-fA-F]{12,64}", str(container_id)):
+            raise ValueError("Nieprawidłowy identyfikator kontenera panelu.")
+        if not re.fullmatch(r"sha256:[0-9a-fA-F]{64}", str(target_image_id)):
+            raise ValueError("Nieprawidłowy identyfikator obrazu aktualizacji.")
+        container = self.client.containers.get(container_id)
+        if not self._is_self(container):
+            raise RuntimeError("Wskazany kontener nie jest oznaczonym panelem DCC Container Updater.")
+        image = self.client.images.get(target_image_id)
+        references = [
+            *(getattr(image, "attrs", {}).get("RepoTags") or []),
+            *(getattr(image, "attrs", {}).get("RepoDigests") or []),
+        ]
+        if not any(normalized_repository(str(reference)) == normalized_repository(SELF_IMAGE) for reference in references):
+            raise RuntimeError("Przypięty obraz nie pochodzi z repozytorium DCC Container Updater.")
+        return self.update_one(
+            container,
+            target_image_id,
+            _allow_self=True,
+            _image_already_pulled=True,
+        )
 
     @staticmethod
     def _is_compose(container: Any) -> bool:
@@ -830,6 +1078,7 @@ class UpdateService:
             "source": "",
             "status": str((attrs.get("State") or {}).get("Status") or getattr(container, "status", "unknown")),
             "message": "",
+            "check_error": False,
             "has_update_instructions": bool(self._catalog_update_instructions(current, apps)) if current else False,
         }
         if self._is_self(container):
@@ -910,9 +1159,24 @@ class UpdateService:
                 message=f"{message} {blocker}" if blocker else message,
                 supported=not bool(blocker),
                 auto_update_supported=not compose and not bool(blocker),
+                check_error=bool(catalog_error),
             )
+            if catalog_error:
+                result["message"] = f"{result['message']} Nie udało się zweryfikować nowszego taga w katalogu DCC: {catalog_error}"
         elif available is False:
             blocker = runtime_blocker or compose_error
+            if catalog_error:
+                detail = "Nie można potwierdzić, czy aplikacja ma nowszy tag, ponieważ katalog DCC jest niedostępny."
+                if blocker:
+                    detail = f"{blocker} {detail}"
+                result.update(
+                    source=result["source"] or "digest rejestru",
+                    message=f"{detail} Digest bieżącego taga nie wykazuje nowego obrazu. {catalog_error}",
+                    supported=False,
+                    auto_update_supported=False,
+                    check_error=True,
+                )
+                return result
             result.update(
                 source=result["source"] or "digest rejestru",
                 message=blocker or "Obraz jest aktualny.",
@@ -924,8 +1188,9 @@ class UpdateService:
             result.update(
                 source=result["source"] or "rejestr",
                 message=" ".join(value for value in (blocker, catalog_error or digest_message) if value),
-                supported=not bool(blocker),
-                auto_update_supported=not compose and not bool(blocker),
+                supported=not bool(blocker or catalog_error),
+                auto_update_supported=not compose and not bool(blocker or catalog_error),
+                check_error=True,
             )
         return result
 
@@ -933,7 +1198,10 @@ class UpdateService:
         self._compose_cache.clear()
         self._registry_cache.clear()
         apps, catalog_error = self._catalog()
-        containers = self.client.containers.list(all=True)
+        containers = [
+            container for container in self.client.containers.list(all=True)
+            if not self._is_self_update_helper(container)
+        ]
         results = []
         for index, container in enumerate(containers, start=1):
             if progress:
@@ -1223,8 +1491,11 @@ class UpdateService:
         container: Any,
         target_image: str,
         update_instructions: dict[str, Any] | None = None,
+        *,
+        _allow_self: bool = False,
+        _image_already_pulled: bool = False,
     ) -> str:
-        if self._is_self(container):
+        if self._is_self(container) and not _allow_self:
             raise RuntimeError("Aktualizacja samego panelu nie jest obsługiwana.")
         if self._is_compose(container):
             raise RuntimeError("Usługi Compose należy aktualizować przez kontrolowany tryb Compose.")
@@ -1235,7 +1506,8 @@ class UpdateService:
         # Validate and build the replacement config while the original is still running.
         raw_config = self._create_config(container, target_image, update_instructions)
         # Pull first: a registry or network failure leaves the running service untouched.
-        self._pull_image_with_retry(target_image)
+        if not _image_already_pulled:
+            self._pull_image_with_retry(target_image)
         original_name = str(getattr(container, "name", "")).lstrip("/")
         was_running = str((container.attrs.get("State") or {}).get("Status")) == "running"
         existing_names = {

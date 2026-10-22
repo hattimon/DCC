@@ -60,6 +60,23 @@ class WebSecurityTests(unittest.TestCase):
         response = self.client.post("/api/scan")
         self.assertEqual(response.status_code, 400)
 
+    def test_panel_exposes_manual_self_update_controls(self):
+        password = self.app.extensions["dcc_updater_initial_password"]
+        csrf = self._csrf()
+        self.client.post("/login", data={"csrf_token": csrf, "password": password})
+        response = self.client.get("/")
+        self.assertIn("Sprawdź aktualizację panelu".encode(), response.data)
+        self.assertIn("Aktualizuj panel".encode(), response.data)
+
+    def test_self_update_actions_require_authentication_and_csrf(self):
+        self.assertEqual(self.client.post("/api/self-update/check").status_code, 401)
+        self.assertEqual(self.client.post("/api/self-update").status_code, 401)
+        password = self.app.extensions["dcc_updater_initial_password"]
+        csrf = self._csrf()
+        self.client.post("/login", data={"csrf_token": csrf, "password": password})
+        self.assertEqual(self.client.post("/api/self-update/check").status_code, 400)
+        self.assertEqual(self.client.post("/api/self-update").status_code, 400)
+
     def test_password_change_checks_length_and_current_password(self):
         password = self.app.extensions["dcc_updater_initial_password"]
         csrf = self._csrf()
@@ -195,6 +212,47 @@ class WebSecurityTests(unittest.TestCase):
         while manager.snapshot()["status"] != "done" and time.monotonic() < deadline:
             time.sleep(0.01)
         self.assertEqual(manager.snapshot()["status"], "done")
+
+    def test_startup_checks_and_updates_panel_even_when_other_auto_updates_are_off(self):
+        checked = threading.Event()
+        calls = []
+
+        class FakeClient:
+            def ping(self):
+                calls.append("ping")
+
+        class FakeService:
+            client = FakeClient()
+
+            def check_self_update(self, _progress):
+                calls.append("check")
+                return {"checked": True, "update_available": True, "supported": True}
+
+            def start_self_update(self, _progress):
+                calls.append("start")
+                return {"checked": True, "update_available": True, "started": True, "message": "started"}
+
+            def scan(self, _progress):
+                raise AssertionError("Other automatic updates are disabled in this test.")
+
+        def run_startup(_manager, kind, work):
+            self.assertEqual(kind, "auto_update")
+            work(lambda _message: None)
+            checked.set()
+            return True, {}
+
+        with patch.dict(os.environ, {"DCC_UPDATER_SELF_UPDATE_STARTUP_DELAY": "0"}), \
+                patch.object(JobManager, "start", run_startup):
+            create_app(
+                self.temp.name,
+                service_factory=FakeService,
+                print_credentials=False,
+                startup_auto_updates=False,
+                startup_self_update=True,
+            )
+            self.assertTrue(checked.wait(2))
+
+        self.assertEqual(calls, ["ping", "check", "start"])
 
 
 if __name__ == "__main__":

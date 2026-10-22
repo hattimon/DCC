@@ -3,7 +3,8 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DCC_UPDATER_DATA=/data \
-    DCC_UPDATER_AUTO_UPDATE_ON_START=1
+    DCC_UPDATER_AUTO_UPDATE_ON_START=1 \
+    DCC_UPDATER_SELF_UPDATE_ON_START=1
 
 WORKDIR /app
 COPY requirements.txt ./requirements.txt
@@ -26,7 +27,7 @@ RUN apt-get update \
     echo "${compose_sha}  /usr/local/bin/docker-compose" | sha256sum --check --status; \
     chmod 0755 /usr/local/bin/docker-compose
 
-COPY updater.py web.py ./
+COPY updater.py web.py self_update.py ./
 COPY templates ./templates
 RUN mkdir -p /data
 
