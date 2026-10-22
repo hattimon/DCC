@@ -18,12 +18,16 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from updater import UpdateService, normalized_repository
 from i18n import localize_payload, strings, translate_text
+from scheduler import ScheduleStore, validate_config
+from reports import ReportStore
+from notifications import NotificationService
 
 
 class JobManager:
-    def __init__(self) -> None:
+    def __init__(self, on_complete=None) -> None:
         self._lock = threading.RLock()
         self.instance = secrets.token_urlsafe(12)
+        self.on_complete = on_complete
         self._history: dict[str, dict[str, Any]] = {}
         self._state: dict[str, Any] = {"id": None, "instance": self.instance, "kind": None, "status": "idle", "progress": "", "results": []}
 
@@ -70,6 +74,12 @@ class JobManager:
                 with self._lock:
                     if self._state.get("id") == job_id:
                         self._state.update(status="error", progress=f"Zadanie nie powiodło się ({type(exc).__name__}).", results=[])
+            finally:
+                if self.on_complete:
+                    try:
+                        self.on_complete(self.snapshot(job_id))
+                    except Exception:
+                        logging.getLogger(__name__).exception("Could not record completed updater job.")
 
         threading.Thread(target=run, name=f"dcc-updater-{kind}", daemon=True).start()
         return True, self.snapshot()
@@ -147,6 +157,7 @@ def create_app(
     print_credentials: bool = True,
     startup_auto_updates: bool = False,
     startup_self_update: bool = False,
+    start_scheduler: bool = False,
 ) -> Flask:
     app = Flask(__name__, template_folder="templates")
     data_path = Path(data_dir or os.environ.get("DCC_UPDATER_DATA", "/data"))
@@ -190,7 +201,14 @@ def create_app(
         if print_credentials:
             print(f"DCC_UPDATER_INITIAL_CREDENTIALS username=admin password={initial_password}", flush=True)
 
-    manager = JobManager()
+    report_store = ReportStore(data_path / "reports.json")
+    notifier = NotificationService(data_path / "notifications.json", report_store)
+    report_store.on_event = notifier.enqueue
+    manager = JobManager(on_complete=report_store.record_job)
+    app.extensions["dcc_updater_reports"] = report_store
+    app.extensions["dcc_updater_notifications"] = notifier
+    schedule_store = ScheduleStore(data_path / "schedule.json")
+    app.extensions["dcc_updater_schedule"] = schedule_store
     app.extensions["dcc_updater_jobs"] = manager
     app.extensions["dcc_updater_data_dir"] = data_path
     app.extensions["dcc_updater_initial_password"] = initial_password
@@ -202,6 +220,35 @@ def create_app(
         "awaiting_panel_decision": False,
         "panel_update_started": False,
     }
+    scan_cache_lock = threading.RLock()
+    scan_cache_path = data_path / "last_scan.json"
+    scan_settings_path = data_path / "scan_settings.json"
+    scan_settings = {"auto_scan_on_refresh": False}
+    try:
+        saved_settings = json.loads(scan_settings_path.read_text(encoding="utf-8"))
+        if isinstance(saved_settings, dict):
+            scan_settings["auto_scan_on_refresh"] = saved_settings.get("auto_scan_on_refresh") is True
+    except (OSError, ValueError, TypeError):
+        pass
+    scan_cache: dict[str, Any] = {"containers": [], "scanned_at": None}
+    try:
+        saved_scan = json.loads(scan_cache_path.read_text(encoding="utf-8"))
+        timestamp = saved_scan.get("scanned_at") if isinstance(saved_scan, dict) else None
+        saved_containers = saved_scan.get("containers") if isinstance(saved_scan, dict) else None
+        if (isinstance(timestamp, (int, float)) and 0 < timestamp < 1e12
+                and isinstance(saved_containers, list) and all(isinstance(item, dict) for item in saved_containers)):
+            scan_cache.update(containers=saved_containers, scanned_at=timestamp)
+    except (OSError, ValueError, TypeError):
+        pass
+
+    def remember_scan(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        with scan_cache_lock:
+            scan_cache.update(containers=json.loads(json.dumps(results)), scanned_at=time.time())
+            try:
+                _atomic_write(scan_cache_path, json.dumps(scan_cache, ensure_ascii=False))
+            except OSError:
+                logging.getLogger(__name__).warning("Could not persist the last scan; retaining it in memory.")
+        return results
 
     def finish_startup(result: dict[str, Any]) -> dict[str, Any]:
         with startup_lock:
@@ -253,6 +300,7 @@ def create_app(
         if startup_self_update and not skip_panel_check:
             try:
                 self_update = service.check_self_update(progress)
+                report_store.resolve_panel(self_update.get("current_image_id"))
                 if self_update.get("update_available"):
                     with startup_lock:
                         startup_state["awaiting_panel_decision"] = True
@@ -289,12 +337,12 @@ def create_app(
 
         if not queued:
             progress("Kolejka automatyczna zakończona: brak dostępnych aktualizacji.")
-            return finish_startup({"updates": [], "containers": annotate_auto_update_state(scanned)})
+            return finish_startup({"updates": [], "containers": remember_scan(annotate_auto_update_state(scanned))})
 
         progress(f"Kolejka automatyczna: {len(queued)} kontenerów; aktualizacja po jednym kontenerze naraz.")
-        outcomes = service.update_selected([str(item["id"]) for item in queued], progress)
+        outcomes = service.update_selected([str(item["id"]) for item in queued], progress, automatic=True)
         progress("Kolejka zakończona. Ponowne skanowanie kontenerów…")
-        updated = annotate_auto_update_state(service.scan(progress))
+        updated = remember_scan(annotate_auto_update_state(service.scan(progress)))
         return finish_startup({"updates": outcomes, "containers": updated})
 
     def schedule_startup_auto_updates() -> threading.Thread:
@@ -314,6 +362,9 @@ def create_app(
                     if not startup_state["scheduled"]:
                         return {"updates": [], "containers": []}
                     startup_state["scheduled"] = False
+                    if schedule_store.snapshot()["pending"]:
+                        startup_state["auto_updates_pending"] = False
+                        return {"updates": [], "containers": []}
                 return run_startup_auto_updates(progress)
 
             while True:
@@ -329,6 +380,108 @@ def create_app(
         thread = threading.Thread(target=wait_for_queue, name="dcc-updater-startup-queue", daemon=True)
         thread.start()
         return thread
+
+    def run_scheduled_work(progress, now: float) -> dict[str, Any]:
+        pending = schedule_store.snapshot()["pending"]
+        if pending:
+            if pending["phase"] != "awaiting_restart":
+                schedule_store.finish("error", "Poprzednie wykonanie harmonogramu zostało przerwane; nie ponowiono zmian kontenerów.")
+                return {"updates": [], "ok": False, "message": schedule_store.snapshot()["last_run"]["message"]}
+            if now >= pending.get("deadline", 0):
+                schedule_store.finish("error", "Panel nie zakończył aktualizacji w terminie. Kontenerów nie zaktualizowano.")
+                report_store.resolve_panel(failed_message=schedule_store.snapshot()["last_run"]["message"])
+                return {"updates": [], "ok": False, "message": schedule_store.snapshot()["last_run"]["message"]}
+            service = get_service()
+            panel = service._find_self_container()
+            attrs = getattr(panel, "attrs", {})
+            health = (attrs.get("State") or {}).get("Health") or {}
+            if (attrs.get("Image") != pending.get("expected_image")
+                    or (attrs.get("State") or {}).get("Status") != "running"
+                    or (health and health.get("Status") != "healthy")):
+                return {"updates": [], "waiting": True, "message": "Oczekiwanie na uruchomienie nowej wersji panelu; kontenery pozostają bez zmian."}
+            schedule_store.phase("containers", manager.instance)
+            report_store.resolve_panel(attrs.get("Image"))
+        else:
+            pending = schedule_store.claim(manager.instance, now)
+            if pending is None:
+                return {"updates": []}
+            service = get_service()
+        config = pending["config"]
+        try:
+            if config["panel_first"] and pending["phase"] == "running":
+                checked = service.check_self_update(progress)
+                if not checked.get("checked"):
+                    raise RuntimeError(checked.get("message") or "Nie udało się sprawdzić wersji panelu; harmonogram wstrzymany.")
+                if checked.get("update_available"):
+                    if not checked.get("supported"):
+                        raise RuntimeError(checked.get("message") or "Aktualizacja panelu jest zablokowana; kontenerów nie zaktualizowano.")
+                    def prepare(image):
+                        schedule_store.phase("awaiting_restart", manager.instance, expected_image=image, deadline=time.time() + 600)
+                        report_store.panel_started(image)
+                    result = service.start_self_update(progress, prepare_restart=prepare)
+                    if result.get("started"):
+                        with startup_lock:
+                            startup_state["panel_update_started"] = True
+                        return result
+                    if result.get("update_available") or not result.get("checked"):
+                        raise RuntimeError(result.get("message") or "Aktualizacja panelu nie powiodła się; kontenery pozostają bez zmian.")
+            schedule_store.phase("containers", manager.instance)
+            scanned = remember_scan(annotate_auto_update_state(service.scan(progress)))
+            outcomes = []
+            if config["action"] == "update":
+                by_name = {item["name"]: item for item in scanned}
+                selected = []
+                for target in config["targets"]:
+                    item = by_name.get(target["name"])
+                    if item is None or normalized_repository(item.get("current_image", "")) != target["repository"]:
+                        outcomes.append({"name": target["name"], "ok": False, "result": "Kontener zniknął lub zmienił repozytorium obrazu; pominięto aktualizację."})
+                    elif not item.get("auto_update_supported", item.get("supported")):
+                        outcomes.append({"name": target["name"], "ok": False, "result": item.get("auto_update_reason") or item.get("message") or "Automatyczna aktualizacja tego kontenera jest zablokowana."})
+                    elif item.get("update_available"):
+                        selected.append(item["id"])
+                    elif item.get("check_error"):
+                        outcomes.append({"name": target["name"], "ok": False, "result": item.get("message") or "Nie udało się sprawdzić obrazu kontenera."})
+                if selected:
+                    outcomes.extend(service.update_selected(selected, progress, automatic=True))
+                    scanned = remember_scan(annotate_auto_update_state(service.scan(progress)))
+            failed = [item for item in outcomes if not item.get("ok")]
+            message = "Harmonogram zakończony."
+            if failed:
+                message = " | ".join(f"{item['name']}: {item['result']}" for item in failed)[:3000]
+            schedule_store.finish("error" if failed else "success", message)
+            return {"updates": outcomes, "containers": scanned, "message": message, "ok": not failed, "action": config["action"]}
+        except Exception as exc:
+            message = str(exc) if isinstance(exc, (RuntimeError, ValueError)) else f"Harmonogram zatrzymany ({type(exc).__name__})."
+            schedule_store.finish("error", message[:3000])
+            report_store.resolve_panel(failed_message=message)
+            return {"updates": [], "message": message, "ok": False}
+
+    def scheduler_tick(now: float | None = None) -> bool:
+        moment = time.time() if now is None else now
+        if not schedule_store.due(manager.instance, moment):
+            return False
+        def work(progress):
+            try:
+                return run_scheduled_work(progress, moment)
+            except Exception as exc:
+                message = f"Harmonogram zatrzymany ({type(exc).__name__})."
+                if schedule_store.snapshot()["pending"]:
+                    schedule_store.finish("error", message)
+                return {"updates": [], "message": message, "ok": False}
+        started, _state = manager.start("schedule", work)
+        return started
+
+    app.extensions["dcc_updater_scheduler_tick"] = scheduler_tick
+    scheduler_stop = threading.Event()
+    app.extensions["dcc_updater_scheduler_stop"] = scheduler_stop
+
+    def schedule_loop() -> None:
+        while not scheduler_stop.is_set():
+            try:
+                scheduler_tick()
+            except Exception:
+                logging.getLogger(__name__).exception("Scheduled updater work could not be queued.")
+            scheduler_stop.wait(5)
 
     def validate_container_name(value: Any) -> str:
         name = str(value or "").strip().lstrip("/")
@@ -437,8 +590,100 @@ def create_app(
 
     @app.get("/api/containers")
     def containers():
-        state = manager.snapshot()
-        return jsonify(state.get("results", []))
+        with scan_cache_lock:
+            cached = json.loads(json.dumps(scan_cache))
+            cached.update(scan_settings)
+        cached["containers"] = annotate_auto_update_state(cached["containers"])
+        return jsonify(cached)
+
+    @app.post("/api/scan-settings")
+    def set_scan_settings():
+        enabled = (request.get_json(silent=True) or {}).get("auto_scan_on_refresh")
+        if not isinstance(enabled, bool):
+            return jsonify({"error": "Pole auto_scan_on_refresh musi mieć wartość true albo false."}), 400
+        with scan_cache_lock:
+            try:
+                _atomic_write(scan_settings_path, json.dumps({"auto_scan_on_refresh": enabled}))
+            except OSError:
+                return jsonify({"error": "Nie udało się zapisać ustawienia automatycznego skanowania."}), 500
+            scan_settings["auto_scan_on_refresh"] = enabled
+        return jsonify({"auto_scan_on_refresh": enabled, "message": "Automatyczne skanowanie po odświeżeniu włączone." if enabled else "Automatyczne skanowanie po odświeżeniu wyłączone."})
+
+    @app.get("/api/schedule")
+    def get_schedule():
+        return jsonify(schedule_store.snapshot())
+
+    @app.get("/api/reports")
+    def get_reports():
+        try:
+            page = int(request.args.get("page", "1"))
+        except ValueError:
+            page = 1
+        return jsonify(report_store.snapshot(page, request.args.get("issues_only") == "1"))
+
+    @app.get("/api/notifications")
+    def get_notifications():
+        return jsonify(notifier.public())
+
+    @app.post("/api/notifications")
+    def set_notifications():
+        try:
+            result = notifier.save(request.get_json(silent=True))
+        except (ValueError, OSError) as exc:
+            return jsonify({"error": str(exc) if isinstance(exc, ValueError) else "Nie udało się zapisać ustawień powiadomień."}), 400
+        return jsonify({**result, "message": "Ustawienia powiadomień zapisane."})
+
+    @app.post("/api/notifications/test")
+    def test_notifications():
+        try:
+            payload = request.get_json(silent=True)
+            notifier.test(payload.get("channel") if isinstance(payload, dict) else None)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"message": "Powiadomienie testowe wysłane."})
+
+    @app.post("/api/schedule")
+    def save_schedule():
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return jsonify({"error": "Nieprawidłowe ustawienia harmonogramu."}), 400
+        try:
+            # Bind selected names to their current repositories, just like restart
+            # opt-ins. A different image reusing a name never inherits permission.
+            targets = payload.get("targets", [])
+            if not isinstance(targets, list) or len(targets) > 100:
+                raise ValueError("Harmonogram może zawierać najwyżej 100 wybranych kontenerów.")
+            resolved = []
+            service = None
+            for target in targets:
+                name = validate_container_name(target.get("name") if isinstance(target, dict) else None)
+                if payload.get("enabled") is not True or payload.get("action") != "update":
+                    resolved.append({"name": name, "repository": target.get("repository", "")})
+                    continue
+                service = service or get_service()
+                container = service.client.containers.get(name)
+                if service._is_self(container) or service._is_compose(container):
+                    raise ValueError("Wybierz samodzielne kontenery. Compose wymaga ręcznej aktualizacji, a panel ma osobny przełącznik.")
+                blocker = service._unsupported_reason(container)
+                if blocker:
+                    raise ValueError(blocker)
+                dependency_check = getattr(service, "automatic_dependency_blocker", None)
+                if callable(dependency_check):
+                    blocker = dependency_check(container, service.client.containers.list(all=True))
+                    if blocker:
+                        raise ValueError(blocker)
+                image = str((container.attrs.get("Config") or {}).get("Image") or "")
+                if not image:
+                    raise ValueError("Kontener nie ma obrazu, dla którego można włączyć aktualizacje.")
+                resolved.append({"name": str(container.name).lstrip("/"), "repository": normalized_repository(image)})
+            payload = {**payload, "targets": resolved}
+            config = validate_config(payload)
+            result = schedule_store.save(config)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except Exception as exc:
+            return jsonify({"error": f"Nie udało się zapisać harmonogramu ({type(exc).__name__})."}), 400
+        return jsonify({**result, "message": "Harmonogram zapisany."})
 
     @app.get("/api/job")
     def job():
@@ -467,7 +712,7 @@ def create_app(
                 resume_startup = startup_state["auto_updates_pending"]
             if resume_startup:
                 return run_startup_auto_updates(progress, skip_panel_check=True, scan_all=True)
-            return annotate_auto_update_state(get_service().scan(progress))
+            return remember_scan(annotate_auto_update_state(get_service().scan(progress)))
 
         started, state = manager.start("scan", work)
         return jsonify(state), (202 if started else 409)
@@ -490,7 +735,9 @@ def create_app(
     @app.post("/api/self-update")
     def update_self():
         def work(progress):
-            result = get_service().start_self_update(progress)
+            result = get_service().start_self_update(progress, prepare_restart=report_store.panel_started)
+            if not result.get("started") and result.get("update_available"):
+                report_store.resolve_panel(failed_message=result.get("message"))
             with startup_lock:
                 startup_state["awaiting_panel_decision"] = False
                 startup_state["panel_update_started"] = bool(result.get("started"))
@@ -514,7 +761,7 @@ def create_app(
             service = get_service()
             outcomes = service.update_selected(ids, progress)
             progress("Ponowne sprawdzanie stanu kontenerów…")
-            containers_after = annotate_auto_update_state(service.scan(progress))
+            containers_after = remember_scan(annotate_auto_update_state(service.scan(progress)))
             return {"updates": outcomes, "containers": containers_after}
 
         started, state = manager.start("update", work)
@@ -551,6 +798,11 @@ def create_app(
             reason = service._unsupported_reason(container)
             if reason:
                 return jsonify({"error": reason}), 400
+            list_containers = getattr(service.client.containers, "list", None)
+            if callable(list_containers):
+                reason = service.automatic_dependency_blocker(container, list_containers(all=True))
+                if reason:
+                    return jsonify({"error": reason}), 400
             image = str((container.attrs.get("Config") or {}).get("Image") or "")
             if not image:
                 return jsonify({"error": "Kontener nie ma obrazu, dla którego można włączyć aktualizacje."}), 400
@@ -577,10 +829,16 @@ def create_app(
 
     if startup_auto_updates or startup_self_update:
         app.extensions["dcc_updater_startup_thread"] = schedule_startup_auto_updates()
+    if start_scheduler:
+        thread = threading.Thread(target=schedule_loop, name="dcc-updater-scheduler", daemon=True)
+        thread.start()
+        app.extensions["dcc_updater_scheduler_thread"] = thread
+        app.extensions["dcc_updater_notification_thread"] = notifier.start()
     return app
 
 
 app = create_app(
     startup_auto_updates=os.environ.get("DCC_UPDATER_AUTO_UPDATE_ON_START", "0") == "1",
     startup_self_update=os.environ.get("DCC_UPDATER_SELF_UPDATE_ON_START", "0") == "1",
+    start_scheduler=True,
 )

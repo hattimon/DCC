@@ -148,6 +148,24 @@ class ContainerSafetyTests(unittest.TestCase):
         with patch('updater.time.monotonic', side_effect=[0, 0, 1]), patch('updater.time.sleep'):
             service._wait_until_healthy(container)
 
+    def test_automatic_updates_block_shared_data_and_namespace_dependents(self):
+        service = UpdateService(SimpleNamespace(), catalog_loader=lambda: [])
+        container = self._container(Mounts=[{'Type': 'volume', 'Name': 'shared', 'Destination': '/data', 'RW': True}])
+        peer = SimpleNamespace(id='peer-id', name='reader', attrs={'Mounts': [{'Type': 'volume', 'Name': 'shared', 'Destination': '/state', 'RW': False}]})
+        self.assertIn('trwałe dane', service.automatic_dependency_blocker(container, [container, peer]))
+        peer.attrs = {'HostConfig': {'NetworkMode': 'container:' + container.id}}
+        self.assertIn('przestrzeń', service.automatic_dependency_blocker(container, [container, peer]))
+        peer.attrs = {'Mounts': [{'Type': 'volume', 'Name': 'different', 'Destination': '/state', 'RW': True}]}
+        self.assertIsNone(service.automatic_dependency_blocker(container, [container, peer]))
+
+    def test_automatic_updates_detect_overlapping_bind_paths(self):
+        service = UpdateService(SimpleNamespace(), catalog_loader=lambda: [])
+        container = self._container(Mounts=[{'Type': 'bind', 'Source': '/srv/app', 'Destination': '/data', 'RW': True}])
+        peer = SimpleNamespace(id='peer-id', name='dependent', attrs={'Mounts': [{'Type': 'bind', 'Source': '/srv/app/database', 'Destination': '/state', 'RW': False}]})
+        self.assertIsNotNone(service.automatic_dependency_blocker(container, [container, peer]))
+        peer.attrs['Mounts'][0]['Source'] = '/srv/application'
+        self.assertIsNone(service.automatic_dependency_blocker(container, [container, peer]))
+
     def test_digest_only_config_uses_a_unique_local_tag_for_registry_checks(self):
         local_image = SimpleNamespace(attrs={
             "RepoTags": ["ghcr.io/example/rss-bridge:latest"],

@@ -1,0 +1,34 @@
+<section id="reports-panel" role="tabpanel" aria-labelledby="tab-reports" hidden>
+  <div class="schedule-heading"><div><h2>{{ ui.reports }}</h2><p class="subtitle">{{ ui.reports_hint }}</p></div><button id="refresh-reports" type="button">{{ ui.refresh }}</button></div>
+  <div class="report-controls"><label><input id="reports-issues" type="checkbox">{{ ui.issues_only }}</label><span class="hint">{{ ui.report_limit }}</span></div>
+  <div id="report-storage-error" class="status error" hidden>{{ ui.reports_storage_error }}</div>
+  <div id="report-list" class="report-list"></div>
+  <div class="report-pagination"><button id="reports-prev" type="button">{{ ui.previous }}</button><span id="reports-page" class="hint"></span><button id="reports-next" type="button">{{ ui.next }}</button></div>
+  <details class="settings notification-settings"><summary>{{ ui.notifications }}</summary>
+    <p class="hint">{{ ui.notifications_hint }}</p>
+    <form id="notification-form">
+      <div class="schedule-toggles"><label><input id="notify-enabled" class="auto-switch" type="checkbox" role="switch">{{ ui.enable_notifications }}</label><label><input id="notify-scan-errors" class="auto-switch" type="checkbox" role="switch">{{ ui.notify_scan_errors }}</label></div>
+      <div class="field notify-language"><label for="notify-language">{{ ui.alert_language }}</label><select id="notify-language"><option value="en">English</option><option value="pl">Polski</option></select></div>
+      {% for channel, channel_name in [('email','E-mail (SMTP)'),('telegram','Telegram'),('signal','Signal'),('whatsapp','WhatsApp')] %}
+      <details class="notification-channel"><summary>{{ channel_name }}<span id="notify-{{ channel }}-configured" class="hint"></span></summary>
+        <label class="notification-switch"><input id="notify-{{ channel }}-enabled" class="auto-switch" type="checkbox" role="switch">{{ ui.enable_channel }} {{ channel_name }}</label>
+        <div class="schedule-grid">
+          {% if channel == 'telegram' %}
+          <div class="field"><label for="notify-telegram-bot_token">{{ ui.bot_token }}</label><input id="notify-telegram-bot_token" type="password" autocomplete="new-password"></div><div class="field"><label for="notify-telegram-chat_id">{{ ui.chat_id }}</label><input id="notify-telegram-chat_id" type="text"></div>
+          {% elif channel == 'signal' %}
+          <div class="field"><label for="notify-signal-url">{{ ui.signal_url }}</label><input id="notify-signal-url" type="url" placeholder="http://signal-api:8080"></div><div class="field"><label for="notify-signal-number">{{ ui.sender_number }}</label><input id="notify-signal-number" type="text" placeholder="+48123456789"></div><div class="field"><label for="notify-signal-recipients">{{ ui.recipients }}</label><input id="notify-signal-recipients" type="text"></div><div class="field"><label for="notify-signal-bearer_token">{{ ui.optional_token }}</label><input id="notify-signal-bearer_token" type="password" autocomplete="new-password"></div>
+          {% elif channel == 'email' %}
+          <div class="field"><label for="notify-email-host">{{ ui.smtp_host }}</label><input id="notify-email-host" type="text"></div><div class="field"><label for="notify-email-port">{{ ui.smtp_port }}</label><input id="notify-email-port" type="number" min="1" max="65535" value="587"></div><div class="field"><label for="notify-email-security">{{ ui.smtp_security }}</label><select id="notify-email-security"><option value="starttls">STARTTLS (587)</option><option value="tls">TLS (465)</option></select></div><div class="field"><label for="notify-email-username">{{ ui.smtp_username }}</label><input id="notify-email-username" type="text" autocomplete="off"></div><div class="field"><label for="notify-email-password">{{ ui.smtp_password }}</label><input id="notify-email-password" type="password" autocomplete="new-password"></div><div class="field"><label for="notify-email-sender">{{ ui.smtp_sender }}</label><input id="notify-email-sender" type="email"></div><div class="field"><label for="notify-email-recipients">{{ ui.email_recipients }}</label><input id="notify-email-recipients" type="text"></div>
+          {% else %}
+          <div class="field"><label for="notify-whatsapp-access_token">{{ ui.access_token }}</label><input id="notify-whatsapp-access_token" type="password" autocomplete="new-password"></div><div class="field"><label for="notify-whatsapp-phone_id">{{ ui.phone_id }}</label><input id="notify-whatsapp-phone_id" type="text"></div><div class="field"><label for="notify-whatsapp-recipients">{{ ui.recipients }}</label><input id="notify-whatsapp-recipients" type="text"></div><div class="field"><label for="notify-whatsapp-template">{{ ui.template_name }}</label><input id="notify-whatsapp-template" type="text"></div><div class="field"><label for="notify-whatsapp-template_language">{{ ui.template_language }}</label><input id="notify-whatsapp-template_language" type="text" placeholder="en_US"></div><div class="field"><label for="notify-whatsapp-api_version">{{ ui.api_version }}</label><input id="notify-whatsapp-api_version" type="text" placeholder="v25.0"></div>
+          {% endif %}
+        </div>
+        <p class="hint">{{ ui['notify_' ~ channel ~ '_help'] }} {% if channel != 'email' %}<a href="{{ {'telegram':'https://core.telegram.org/bots/api','signal':'https://github.com/bbernhard/signal-cli-rest-api','whatsapp':'https://developers.facebook.com/docs/whatsapp/cloud-api/'}[channel] }}" target="_blank" rel="noopener noreferrer">{{ ui.docs }}</a>{% endif %}</p>
+        <label class="hint"><input id="notify-{{ channel }}-clear" type="checkbox">{{ ui.clear_saved_secret if channel == 'email' else ui.clear_saved_token }}</label>
+        <div><button class="notify-test" data-channel="{{ channel }}" type="button">{{ ui.send_test }}</button></div>
+      </details>
+      {% endfor %}
+      <div class="schedule-save"><button id="notification-save" class="primary" type="submit">{{ ui.save_notifications }}</button><p id="notification-status" class="status" role="status"></p></div>
+    </form>
+  </details>
+</section>

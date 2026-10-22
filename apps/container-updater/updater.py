@@ -357,6 +357,7 @@ class UpdateService:
                 "update_available": True,
                 "supported": not bool(blocker),
                 "container_id": str(container.id),
+                "current_image_id": str(getattr(local_image, "id", "")),
                 "current_image": current,
                 "target_image": SELF_IMAGE,
                 "message": blocker or "W rejestrze znaleziono nowszy obraz panelu. Możesz uruchomić aktualizację.",
@@ -365,6 +366,7 @@ class UpdateService:
             return {
                 "checked": True,
                 "update_available": False,
+                "current_image_id": str(getattr(local_image, "id", "")),
                 "current_image": current,
                 "target_image": SELF_IMAGE,
                 "message": "Panel DCC Container Updater jest aktualny. Nie ma nowszego obrazu.",
@@ -377,7 +379,10 @@ class UpdateService:
             "message": f"Nie udało się sprawdzić wersji panelu. Obecny kontener działa bez zmian. {detail}",
         }
 
-    def start_self_update(self, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
+    def start_self_update(
+        self, progress: Callable[[str], None] | None = None,
+        prepare_restart: Callable[[str], None] | None = None,
+    ) -> dict[str, Any]:
         checked = self.check_self_update(progress)
         if not checked.get("update_available"):
             return {**checked, "started": False}
@@ -410,6 +415,8 @@ class UpdateService:
                     "message": "Obraz panelu zdążył się zaktualizować; nowy kontener nie jest potrzebny.",
                 }
 
+            if prepare_restart:
+                prepare_restart(target_image_id)
             existing_helpers = [
                 candidate for candidate in self.client.containers.list(all=True)
                 if str(getattr(candidate, "name", "")).lstrip("/") == SELF_UPDATE_HELPER_NAME
@@ -423,6 +430,7 @@ class UpdateService:
                     return {
                         **checked,
                         "started": True,
+                        "target_image_id": target_image_id,
                         "message": "Pomocniczy kontener aktualizujący już działa; poczekaj na ponowne uruchomienie panelu.",
                     }
                 helper.remove(v=False)
@@ -448,6 +456,7 @@ class UpdateService:
             return {
                 **checked,
                 "started": True,
+                "target_image_id": target_image_id,
                 "message": "Aktualizacja panelu została uruchomiona. Kontener zostanie bezpiecznie odtworzony z zachowaniem konfiguracji i wolumenów.",
             }
         except Exception as exc:
@@ -521,6 +530,49 @@ class UpdateService:
             except (OSError, RuntimeError, ValueError):
                 continue
         return False
+
+    @staticmethod
+    def automatic_dependency_blocker(container: Any, all_containers: list[Any]) -> str | None:
+        """Explicit Docker dependencies need a human-controlled coordinated update."""
+        host = container.attrs.get("HostConfig") or {}
+        if (host.get("VolumesFrom") or host.get("Links")
+                or any(str(host.get(key) or "").startswith("container:") for key in ("NetworkMode", "PidMode", "IpcMode"))):
+            return "Automatyczna aktualizacja zablokowana: kontener deklaruje zależności Links, VolumesFrom lub współdzielone przestrzenie."
+        identifiers = {str(container.id), str(getattr(container, "name", "")).lstrip("/")}
+        own_mounts = container.attrs.get("Mounts") or []
+        for other in all_containers:
+            if str(other.id) == str(container.id):
+                continue
+            other_host = other.attrs.get("HostConfig") or {}
+            for key in ("NetworkMode", "PidMode", "IpcMode"):
+                value = str(other_host.get(key) or "")
+                if value.startswith("container:"):
+                    target = value.split(":", 1)[1]
+                    if target and any(name == target or (len(target) >= 12 and name.startswith(target)) for name in identifiers):
+                        return f"Automatyczna aktualizacja zablokowana: przestrzeń kontenera współdzieli usługa {other.name}."
+            for value in other_host.get("VolumesFrom") or []:
+                target = str(value).split(":", 1)[0].lstrip("/")
+                if target in identifiers:
+                    return f"Automatyczna aktualizacja zablokowana: VolumesFrom używa usługa {other.name}."
+            for value in other_host.get("Links") or []:
+                if str(value).split(":", 1)[0].lstrip("/") in identifiers:
+                    return f"Automatyczna aktualizacja zablokowana: Links używa usługa {other.name}."
+            for mount in own_mounts:
+                if mount.get("Type") not in {"bind", "volume"} or mount.get("Destination") == "/var/run/docker.sock":
+                    continue
+                source = str((mount.get("Name") or mount.get("Source") or "") if mount.get("Type") == "volume" else mount.get("Source") or "").replace("\\", "/")
+                for peer in other.attrs.get("Mounts") or []:
+                    if peer.get("Type") != mount.get("Type") or not (mount.get("RW", True) or peer.get("RW", True)):
+                        continue
+                    peer_source = str((peer.get("Name") or peer.get("Source") or "") if peer.get("Type") == "volume" else peer.get("Source") or "").replace("\\", "/")
+                    overlap = source and peer_source and (source == peer_source or (
+                        mount.get("Type") == "bind" and (
+                            peer_source.startswith(source.rstrip("/") + "/")
+                            or source.startswith(peer_source.rstrip("/") + "/"))
+                    ))
+                    if overlap:
+                        return f"Automatyczna aktualizacja zablokowana: trwałe dane współdzieli usługa {other.name}."
+        return None
 
     def _load_compose_project(self, container: Any) -> tuple[ComposeProject | None, str | None]:
         """Read Compose's resolved model without modifying any project files."""
@@ -1217,7 +1269,11 @@ class UpdateService:
             if progress:
                 progress(f"Sprawdzanie kontenera {index}/{len(containers)}: {getattr(container, 'name', container.id)}")
             try:
-                results.append(self.inspect_container(container, apps, catalog_error, containers))
+                item = self.inspect_container(container, apps, catalog_error, containers)
+                reason = self.automatic_dependency_blocker(container, containers)
+                if reason:
+                    item.update(auto_update_supported=False, auto_update_reason=reason)
+                results.append(item)
             except Exception as exc:
                 results.append({
                     "id": str(container.id),
@@ -1585,6 +1641,7 @@ class UpdateService:
         self,
         container_ids: list[str],
         progress: Callable[[str], None] | None = None,
+        *, automatic: bool = False,
     ) -> list[dict[str, Any]]:
         self._compose_cache.clear()
         self._registry_cache.clear()
@@ -1598,6 +1655,12 @@ class UpdateService:
                 all_containers = self.client.containers.list(all=True)
                 current = self.inspect_container(container, apps, catalog_error, all_containers)
                 display_name = current["name"]
+                if automatic:
+                    blocker = ("Automatyczna aktualizacja Compose jest wyłączona. Usługi Compose aktualizuj ręcznie po sprawdzeniu zależności i konfiguracji."
+                               if self._is_compose(container) else self.automatic_dependency_blocker(container, all_containers))
+                    if blocker:
+                        output.append({"name": display_name, "ok": False, "result": blocker})
+                        continue
                 if not current["supported"] or not current["update_available"]:
                     output.append({
                         "name": current["name"],

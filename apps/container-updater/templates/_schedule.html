@@ -1,0 +1,21 @@
+<section id="schedule-panel" role="tabpanel" aria-labelledby="tab-schedule" hidden>
+  <div class="schedule-heading"><div><h2>{{ ui.schedule }}</h2><p class="subtitle">{{ ui.schedule_hint }}</p></div><div class="schedule-next"><span>{{ ui.next_run }}</span><strong id="schedule-next">—</strong></div></div>
+  <form id="schedule-form" class="schedule-form">
+    <div class="schedule-toggles"><label><input id="schedule-enabled" class="auto-switch" type="checkbox" role="switch">{{ ui.enable_schedule }}</label><label><input id="schedule-panel-first" class="auto-switch" type="checkbox" role="switch">{{ ui.include_panel }}</label></div>
+    <p class="hint">{{ ui.panel_first_hint }}</p>
+    <div class="schedule-grid">
+      <div class="field"><label for="schedule-action">{{ ui.schedule_action }}</label><select id="schedule-action"><option value="scan">{{ ui.scan_only }}</option><option value="update">{{ ui.scan_update }}</option></select></div>
+      <div class="field"><label for="schedule-kind">{{ ui.recurrence }}</label><select id="schedule-kind"><option value="once">{{ ui.once }}</option><option value="daily">{{ ui.daily }}</option><option value="weekly">{{ ui.weekly }}</option><option value="monthly">{{ ui.monthly }}</option><option value="interval">{{ ui.interval }}</option></select></div>
+      <div class="field"><label for="schedule-time">{{ ui.at_time }}</label><input id="schedule-time" type="time" required value="03:00"></div>
+      <div class="field"><label for="schedule-timezone">{{ ui.timezone }}</label><input id="schedule-timezone" type="text" required placeholder="Europe/Warsaw" maxlength="100"></div>
+      <div id="schedule-date-field" class="field" hidden><label for="schedule-date">{{ ui.start_date }}</label><input id="schedule-date" type="date"></div>
+      <div id="schedule-weekday-field" class="field" hidden><label for="schedule-weekday">{{ ui.weekday }}</label><select id="schedule-weekday">{% for key in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}<option value="{{ loop.index0 }}">{{ ui[key] }}</option>{% endfor %}</select></div>
+      <div id="schedule-monthday-field" class="field" hidden><label for="schedule-monthday">{{ ui.month_day }}</label><input id="schedule-monthday" type="number" min="1" max="31" value="1"></div>
+      <div id="schedule-interval-field" class="field" hidden><label for="schedule-every">{{ ui.every }}</label><div class="interval-fields"><input id="schedule-every" type="number" min="1" max="8760" value="1"><select id="schedule-unit" aria-label="{{ ui.interval_unit }}"><option value="hours">{{ ui.hours }}</option><option value="days">{{ ui.days }}</option></select></div></div>
+    </div>
+    <p id="schedule-time-hint" class="hint">{{ ui.schedule_time_hint }}</p>
+    <fieldset id="schedule-targets-field" hidden><legend>{{ ui.schedule_targets }}</legend><p class="hint">{{ ui.schedule_targets_hint }}</p><div id="schedule-targets" class="schedule-targets"></div></fieldset>
+    <div class="schedule-save"><button id="schedule-save" class="primary" type="submit">{{ ui.save_schedule }}</button><p id="schedule-status" class="status" role="status"></p></div>
+  </form>
+  <div class="schedule-history"><h3>{{ ui.last_run }}</h3><p id="schedule-last-time" class="hint">—</p><p id="schedule-last-result" class="detail">{{ ui.no_runs }}</p></div>
+</section>

@@ -60,6 +60,37 @@ class WebSecurityTests(unittest.TestCase):
         response = self.client.post("/api/scan")
         self.assertEqual(response.status_code, 400)
 
+    def test_reports_and_notification_settings_require_login_and_mutations_require_csrf(self):
+        for route in ('/api/reports','/api/notifications'):
+            self.assertEqual(self.client.get(route).status_code,401)
+        with self.client.session_transaction() as state:
+            state.update(authenticated=True,csrf_token='test-token')
+        for route in ('/api/notifications','/api/notifications/test'):
+            self.assertEqual(self.client.post(route,json={}).status_code,400)
+        reports=self.app.extensions['dcc_updater_reports']
+        for index in range(12):reports.append('update','error' if index==0 else 'success')
+        self.assertEqual(len(self.client.get('/api/reports?page=2').get_json()['entries']),2)
+        self.assertEqual(self.client.get('/api/reports?issues_only=1').get_json()['total'],1)
+        self.assertEqual(self.client.get('/api/reports?page=invalid').status_code,200)
+
+    def test_notification_api_never_returns_tokens_and_test_delivery_requires_explicit_request(self):
+        with self.client.session_transaction() as state:
+            state.update(authenticated=True,csrf_token='test-token')
+        headers={'X-CSRF-Token':'test-token'}
+        service=self.app.extensions['dcc_updater_notifications']
+        calls=[]
+        service.transport=lambda *args: calls.append(args) or {'ok':True}
+        config={'enabled':True,'telegram':{'enabled':True,'bot_token':'12345:TEST_TOKEN','chat_id':'123456'}}
+        result=self.client.post('/api/notifications',json=config,headers=headers)
+        self.assertEqual(result.status_code,200)
+        self.assertNotIn(b'TEST_TOKEN',result.data)
+        self.assertNotIn(b'TEST_TOKEN',self.client.get('/api/notifications').data)
+        self.assertEqual(calls,[])
+        for payload in ([],{'channel':[]},{'channel':'unknown'}):
+            self.assertEqual(self.client.post('/api/notifications/test',json=payload,headers=headers).status_code,400)
+        self.assertEqual(self.client.post('/api/notifications/test',json={'channel':'telegram'},headers=headers).status_code,200)
+        self.assertEqual(len(calls),1)
+
     def test_language_defaults_to_english_and_last_selection_survives_logout_and_new_session(self):
         self.assertIn(b'lang="en"', self.client.get('/login').data)
         csrf = self._csrf()
@@ -99,7 +130,7 @@ class WebSecurityTests(unittest.TestCase):
                 return [{'id': 'one', 'name': 'generic', 'current_image': 'example/service:latest',
                          'supported': True, 'update_available': True}]
 
-            def update_selected(self, ids, _progress):
+            def update_selected(self, ids, _progress, *, automatic=False):
                 calls.append(('update', ids))
                 return [{'name': 'generic', 'ok': True, 'result': 'updated'}]
 
@@ -133,6 +164,59 @@ class WebSecurityTests(unittest.TestCase):
         wait()
         self.assertEqual(calls.count(('update', ['one'])), 1)
 
+    def test_last_scan_cache_and_time_survive_language_change_without_a_new_scan(self):
+        calls = []
+
+        class Service:
+            def check_self_update(self, _progress):
+                calls.append('check')
+                return {'checked': True, 'update_available': False}
+
+            def scan(self, _progress):
+                calls.append('scan')
+                return [{'id': 'one', 'name': 'generic', 'current_image': 'example/service:latest',
+                         'supported': True, 'message': 'Obraz jest aktualny.'}]
+
+        app = create_app(self.temp.name, service_factory=Service, print_credentials=False)
+        client = app.test_client()
+        with client.session_transaction() as state:
+            state.update(authenticated=True, csrf_token='test-token')
+        headers = {'X-CSRF-Token': 'test-token'}
+
+        def wait():
+            manager = app.extensions['dcc_updater_jobs']
+            deadline = time.monotonic() + 2
+            while manager.snapshot()['status'] in {'queued', 'running'} and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertEqual(manager.snapshot()['status'], 'done')
+
+        self.assertIsNone(client.get('/api/containers').get_json()['scanned_at'])
+        client.post('/api/self-update/check', json={}, headers=headers)
+        wait()
+        self.assertEqual(calls, ['check'])
+        before = time.time()
+        client.post('/api/scan', json={}, headers=headers)
+        wait()
+        first = client.get('/api/containers').get_json()
+        self.assertGreaterEqual(first['scanned_at'], before)
+        self.assertEqual(first['containers'][0]['message'], 'The image is up to date.')
+        client.post('/language', data={'csrf_token': 'test-token', 'language': 'pl'})
+        client.get('/')
+        client.post('/api/self-update/check', json={}, headers=headers)
+        wait()
+        second = client.get('/api/containers').get_json()
+        self.assertEqual(second['scanned_at'], first['scanned_at'])
+        self.assertEqual(second['containers'][0]['message'], 'Obraz jest aktualny.')
+        self.assertEqual(calls, ['check', 'scan', 'check'])
+        reloaded_app = create_app(self.temp.name, service_factory=Service, print_credentials=False)
+        reloaded_client = reloaded_app.test_client()
+        with reloaded_client.session_transaction() as state:
+            state.update(authenticated=True)
+        restored = reloaded_client.get('/api/containers').get_json()
+        self.assertEqual(restored['scanned_at'], first['scanned_at'])
+        self.assertEqual(restored['containers'][0]['name'], 'generic')
+        self.assertEqual(calls, ['check', 'scan', 'check'])
+
     def test_panel_exposes_manual_self_update_controls(self):
         password = self.app.extensions["dcc_updater_initial_password"]
         csrf = self._csrf()
@@ -140,6 +224,51 @@ class WebSecurityTests(unittest.TestCase):
         response = self.client.get("/")
         self.assertIn(b"Check panel update", response.data)
         self.assertIn(b"Update panel", response.data)
+
+    def test_auto_scan_refresh_is_optin_persistent_and_csrf_protected(self):
+        with self.client.session_transaction() as state:
+            state.update(authenticated=True, csrf_token='settings-test')
+        headers = {'X-CSRF-Token': 'settings-test'}
+        self.assertFalse(self.client.get('/api/containers').get_json()['auto_scan_on_refresh'])
+        self.assertEqual(self.client.post('/api/scan-settings', json={'auto_scan_on_refresh': True}).status_code, 400)
+        self.assertEqual(self.client.post('/api/scan-settings', json={'auto_scan_on_refresh': 'true'}, headers=headers).status_code, 400)
+        self.assertEqual(self.client.post('/api/scan-settings', json={'auto_scan_on_refresh': True}, headers=headers).status_code, 200)
+        restarted = create_app(self.temp.name, print_credentials=False).test_client()
+        with restarted.session_transaction() as state:
+            state.update(authenticated=True)
+        self.assertTrue(restarted.get('/api/containers').get_json()['auto_scan_on_refresh'])
+        self.assertIsNone(restarted.get('/api/containers').get_json()['scanned_at'])
+
+    def test_schedule_is_disabled_by_default_and_requires_csrf(self):
+        self.assertEqual(self.client.get('/api/schedule').status_code, 401)
+        with self.client.session_transaction() as state:
+            state.update(authenticated=True, csrf_token='schedule-test')
+        config = self.client.get('/api/schedule').get_json()['config']
+        self.assertFalse(config['enabled'])
+        self.assertFalse(config['panel_first'])
+        self.assertEqual(self.client.post('/api/schedule', json=config).status_code, 400)
+        self.assertEqual(self.client.post('/api/schedule', json=config, headers={'X-CSRF-Token': 'schedule-test'}).status_code, 200)
+
+    def test_schedule_update_targets_are_validated_and_bound_to_actual_repositories(self):
+        from scheduler import DEFAULT_CONFIG
+        class Service:
+            client = SimpleNamespace(containers=SimpleNamespace(get=lambda name: SimpleNamespace(name=name, attrs={'Config': {'Image': 'ghcr.io/example/app:1'}})))
+            _is_self = staticmethod(lambda container: container.name == 'panel')
+            _is_compose = staticmethod(lambda container: container.name == 'compose')
+            _unsupported_reason = staticmethod(lambda _container: None)
+        app = create_app(self.temp.name, service_factory=Service, print_credentials=False)
+        client = app.test_client()
+        with client.session_transaction() as state:
+            state.update(authenticated=True, csrf_token='schedule-test')
+        headers = {'X-CSRF-Token': 'schedule-test'}
+        payload = {**DEFAULT_CONFIG, 'enabled': True, 'action': 'update', 'targets': [{'name': 'generic', 'repository': 'untrusted/different'}]}
+        response = client.post('/api/schedule', json=payload, headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['config']['targets'], [{'name': 'generic', 'repository': 'ghcr.io/example/app'}])
+        for name in ['panel', 'compose']:
+            payload['targets'] = [{'name': name, 'repository': 'ghcr.io/example/app'}]
+            self.assertEqual(client.post('/api/schedule', json=payload, headers=headers).status_code, 400)
+        self.assertEqual(client.get('/api/schedule').get_json()['config']['targets'][0]['name'], 'generic')
 
     def test_self_update_actions_require_authentication_and_csrf(self):
         self.assertEqual(self.client.post("/api/self-update/check").status_code, 401)
