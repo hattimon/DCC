@@ -5684,6 +5684,12 @@ class NewContainerDialog(QDialog):
 
         self.store_hero_card = QFrame()
         self.store_hero_card.setObjectName("storeHeroCard")
+        # Keep the app summary compact; the surrounding tab can be much taller
+        # because of its description and feature list.
+        self.store_hero_card.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         hero_layout = QHBoxLayout(self.store_hero_card)
         hero_layout.setContentsMargins(12, 10, 12, 10)
         hero_layout.setSpacing(11)
