@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.40.8",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.8",
+      "latest_release": "v0.40.9",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.9",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -273,8 +273,8 @@
       "homepage_url": "https://beszel.dev/",
       "icon_text": "📊",
       "upstream_repo": "henrygd/beszel",
-      "latest_release": "v0.21.0",
-      "latest_release_url": "https://github.com/henrygd/beszel/releases/tag/v0.21.0",
+      "latest_release": "v0.21.1",
+      "latest_release_url": "https://github.com/henrygd/beszel/releases/tag/v0.21.1",
       "icon_url": "catalog/media/icons/beszel-hub.png"
     },
     {
@@ -1014,8 +1014,8 @@
       "homepage_url": "https://jellyfin.org/",
       "icon_text": "🎬",
       "upstream_repo": "jellyfin/jellyfin",
-      "latest_release": "v12.2",
-      "latest_release_url": "https://github.com/jellyfin/jellyfin/releases/tag/v12.2",
+      "latest_release": "v12.3",
+      "latest_release_url": "https://github.com/jellyfin/jellyfin/releases/tag/v12.3",
       "icon_url": "catalog/media/icons/jellyfin.png"
     },
     {
@@ -1040,8 +1040,8 @@
       "homepage_url": "https://uptime.kuma.pet/",
       "icon_text": "📊",
       "upstream_repo": "louislam/uptime-kuma",
-      "latest_release": "2.5.6",
-      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.6",
+      "latest_release": "2.5.7",
+      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.7",
       "icon_url": "catalog/media/icons/uptime-kuma.png"
     },
     {
@@ -1337,8 +1337,8 @@
       "homepage_url": "https://ntfy.sh/",
       "icon_text": "🔔",
       "upstream_repo": "binwiederhier/ntfy",
-      "latest_release": "v2.32.0",
-      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.32.0",
+      "latest_release": "v2.33.1",
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.33.1",
       "icon_url": "catalog/media/icons/ntfy.png"
     },
     {
@@ -1668,8 +1668,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.19.2",
-      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.19.2",
+      "latest_release": "v1.20.0",
+      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.20.0",
       "icon_url": "catalog/media/icons/qdrant.png"
     },
     {
