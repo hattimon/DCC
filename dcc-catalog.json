@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.40.9",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.9",
+      "latest_release": "v0.40.10",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.10",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -84,8 +84,8 @@
       "homepage_url": "https://nocodb.com/",
       "icon_text": "⚙",
       "upstream_repo": "nocodb/nocodb",
-      "latest_release": "2026.09.1",
-      "latest_release_url": "https://github.com/nocodb/nocodb/releases/tag/2026.09.1",
+      "latest_release": "2026.10.0",
+      "latest_release_url": "https://github.com/nocodb/nocodb/releases/tag/2026.10.0",
       "icon_url": "catalog/media/icons/nocodb.png"
     },
     {
@@ -1924,8 +1924,8 @@
       "security_exposure": "reverse_proxy_required",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v2.37.1",
-      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.37.1",
+      "latest_release": "v2.37.2",
+      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.37.2",
       "icon_url": "catalog/media/icons/audiobookshelf.png"
     },
     {
