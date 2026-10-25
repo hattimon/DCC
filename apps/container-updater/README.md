@@ -307,6 +307,44 @@ replace an installed-version upgrade and restore rehearsal.
 
 ## Appearance, sound and host identification
 
+### Windows Cinema Hub with an existing SQLite volume
+
+Compose discovery checks the DCC catalog for newer version tags as well as
+registry digests, and displays the target image. A running container can outlive
+its local image metadata; that service is shown with a diagnostic instead of
+hiding every project. Inventory reads also tolerate a container removed between
+Docker's list and inspect calls. Self-update checks reuse one inventory.
+
+For a single Cinema Hub service launched from Windows Compose paths, the project
+card offers **Windows: prepare a database-preserving update**. The Linux web
+panel exports a PowerShell 7 workflow for the Windows Docker Desktop host. Its
+existing deployment gates remain in effect: this is a manually run host workflow,
+not permission to schedule database updates from the web container.
+
+Run the downloaded script without options to prepare a private online SQLite
+backup together with `credentials.key`, verify integrity, and start the pinned
+published GHCR image against an isolated copy without networking or host ports.
+The workflow checks schema, encryption key and protected account/library table
+fingerprints. It refuses changed schemas or data that need a migration review.
+It does not build from the local source tree. Backup directories contain private
+account data, encryption keys and resolved environment settings; keep them local.
+
+After reviewing `result.json`, `-Apply` repeats preparation, stops this service
+for a fresh offline backup and isolated test, then uses native Docker Compose
+with the exact reviewed configuration, the pinned image and the same named
+volume. Source files and local overrides are preserved. A failed deployment can
+return to the pinned old image only if protected data still match the offline
+backup. Database backups are never automatically restored over live data.
+An unexpected schema/key/account change requires manual recovery from the saved
+private operation directory. Other services and shared volumes are excluded.
+
+The operation directory retains `images.override.json` and the reviewed Compose
+model. Include that image override in subsequent manual Compose runs to retain
+the selected published image; running the original development files alone can
+select their original image again. The normal `Update` action remains blocked
+until its separate profile requirements are met. This workflow does not enable
+automatic database migrations or arbitrary stateful Compose deployment.
+
 Self-updates recreate the panel using its verified `repository@sha256:digest` reference rather than a bare image ID. This preserves recognition by the existing desktop DCC store without relying on a mutable `latest` tag. The replacement's actual image ID must match the selected update before it starts; a mismatch triggers rollback. A panel previously created with a bare ID regains its store identity on its next successful self-update, after refreshing DCC's container list.
 
 The header identifies the Docker daemon's host name, operating system/version, architecture and Docker version, with CPU/RAM information. It uses a cached, read-only daemon query, independently of registry scans. Docker Desktop exposes its virtual-machine environment; the physical Windows/macOS version is not guessed from it. Unavailable host information does not block the rest of the panel.

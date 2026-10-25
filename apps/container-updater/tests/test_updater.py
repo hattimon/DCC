@@ -861,7 +861,7 @@ class UpdateRollbackTests(unittest.TestCase):
         container.start = start
 
         class FakeContainers:
-            def list(self, all=False):
+            def list(self, all=False, ignore_removed=False):
                 return [container]
 
         client = SimpleNamespace(

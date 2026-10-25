@@ -286,8 +286,9 @@ class UpdateService:
                 return {"Source": parts[0], "Destination": parts[1], "Type": "bind"}
         return None
 
-    def _find_self_container(self) -> Any | None:
-        containers = self.client.containers.list(all=True)
+    def _find_self_container(self, containers: list[Any] | None = None) -> Any | None:
+        if containers is None:
+            containers = self.client.containers.list(all=True, ignore_removed=True)
         matches = [container for container in containers if self._is_self(container)]
         if not matches:
             return None
@@ -317,7 +318,11 @@ class UpdateService:
         raise RuntimeError("Znaleziono kilka kontenerów DCC Container Updater; nie można bezpiecznie wybrać panelu do aktualizacji.")
 
     def check_self_update(self, progress: Callable[[str], None] | None = None) -> dict[str, Any]:
-        container = self._find_self_container()
+        # Docker inspects each listed container separately. Short-lived jobs can
+        # disappear between these calls; they must not abort a panel check.
+        # Reuse the same complete inventory for identity and port checks.
+        all_containers = self.client.containers.list(all=True, ignore_removed=True)
+        container = self._find_self_container(all_containers)
         if container is None:
             return {
                 "checked": False,
@@ -342,7 +347,6 @@ class UpdateService:
             progress("Sprawdzanie najnowszego obrazu DCC Container Updater…")
         available, detail = self._registry_digest(SELF_IMAGE, local_image)
         if available is True:
-            all_containers = self.client.containers.list(all=True)
             blocker = None
             if self._is_compose(container):
                 blocker = "Panel jest zarządzany przez Docker Compose; jego własną aktualizację należy wykonać przez plik Compose."
@@ -420,7 +424,7 @@ class UpdateService:
             if prepare_restart:
                 prepare_restart(target_image_id)
             existing_helpers = [
-                candidate for candidate in self.client.containers.list(all=True)
+                candidate for candidate in self.client.containers.list(all=True, ignore_removed=True)
                 if str(getattr(candidate, "name", "")).lstrip("/") == SELF_UPDATE_HELPER_NAME
             ]
             for helper in existing_helpers:
@@ -1285,7 +1289,7 @@ class UpdateService:
         self._registry_cache.clear()
         apps, catalog_error = self._catalog()
         containers = [
-            container for container in self.client.containers.list(all=True)
+            container for container in self.client.containers.list(all=True, ignore_removed=True)
             if not self._is_self_update_helper(container)
         ]
         results = []
@@ -1613,7 +1617,7 @@ class UpdateService:
         was_running = str((container.attrs.get("State") or {}).get("Status")) == "running"
         existing_names = {
             str(getattr(item, "name", "")).lstrip("/")
-            for item in self.client.containers.list(all=True)
+            for item in self.client.containers.list(all=True, ignore_removed=True)
         }
         base_backup_name = f"dcc-backup-{str(container.id)[:10]}"
         backup_name = base_backup_name
@@ -1688,7 +1692,7 @@ class UpdateService:
             try:
                 container = self.client.containers.get(container_id)
                 display_name = str(getattr(container, "name", display_name)).lstrip("/")
-                all_containers = self.client.containers.list(all=True)
+                all_containers = self.client.containers.list(all=True, ignore_removed=True)
                 current = self.inspect_container(container, apps, catalog_error, all_containers)
                 display_name = current["name"]
                 if automatic:

@@ -294,6 +294,34 @@ class ManagerAnalysisTests(unittest.TestCase):
         self.assertEqual(checked,[TARGET]);self.assertEqual(result[0]['services'][0]['target_image'],TARGET)
         self.assertEqual(result[0]['status'],'update_available')
 
+    def test_discovery_finds_new_version_tags_from_catalog_without_an_approved_profile(self):
+        (self.fixture.folder/'approval.json').unlink()
+        self.fixture.container.attrs['Config']['Image']='ghcr.io/hattimon/cinema-hub:1.3.9'
+        self.fixture.service.catalog_loader=lambda:[{'image':'ghcr.io/hattimon/cinema-hub:1.3.10'}]
+        checked=[]
+        self.fixture.service._registry_digest=lambda image,local:(checked.append(image) or True,'')
+        project=self.manager.discover(check_updates=True)[0]
+        self.assertEqual(checked,['ghcr.io/hattimon/cinema-hub:1.3.10'])
+        self.assertEqual(project['services'][0]['target_image'],'ghcr.io/hattimon/cinema-hub:1.3.10')
+        self.assertTrue(project['services'][0]['update_available'])
+        self.assertEqual(project['source'],'unapproved')
+        self.assertEqual(self.fixture.pulls,[])
+
+    def test_catalog_target_is_not_reported_as_available_when_registry_check_fails(self):
+        (self.fixture.folder/'approval.json').unlink()
+        self.fixture.container.attrs['Config']['Image']='ghcr.io/hattimon/cinema-hub:1.3.9'
+        self.fixture.service.catalog_loader=lambda:[{'image':'ghcr.io/hattimon/cinema-hub:1.3.10'}]
+        self.fixture.service._registry_digest=lambda image,local:(None,'registry unavailable')
+
+        project=self.manager.discover(check_updates=True)[0]
+
+        service=project['services'][0]
+        self.assertEqual(service['target_image'],'ghcr.io/hattimon/cinema-hub:1.3.10')
+        self.assertIsNone(service['update_available'])
+        self.assertEqual(service['check_diagnostics'],['image_check_failed'])
+        self.assertEqual(project['status'],'review_required')
+        self.assertEqual(self.fixture.pulls,[])
+
     def test_missing_original_image_does_not_hide_other_services_or_projects(self):
         from docker.errors import ImageNotFound
         from docker.models.containers import Container

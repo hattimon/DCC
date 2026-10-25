@@ -26,6 +26,7 @@ from notifications import NotificationService
 from registry_access import RegistryAccessStore
 from compose_manager import SafeComposeManager
 from compose_config import ComposeBlocked
+from cinema_windows import export_script as export_windows_cinema_script
 
 
 class JobManager:
@@ -327,7 +328,7 @@ def create_app(
                 if callable(ping):
                     ping()
                 else:
-                    service.client.containers.list(all=True)
+                    service.client.containers.list(all=True, ignore_removed=True)
                 break
             except Exception as exc:
                 if time.monotonic() >= deadline:
@@ -659,6 +660,18 @@ def create_app(
     def compose_history(project):
         return jsonify({'operations': compose_manager.store.history(project)})
 
+    @app.get('/api/compose/projects/<project>/windows-cinema')
+    def windows_cinema_workflow(project):
+        try:
+            script = export_windows_cinema_script(get_service(), project)
+            response = jsonify({'filename': 'dcc-cinema-windows.ps1', 'script': script})
+            response.headers['Cache-Control'] = 'no-store'
+            return response
+        except ComposeBlocked as exc:
+            return jsonify({'error': str(exc)}), 409
+        except Exception:
+            return jsonify({'error': 'windows_target_unavailable'}), 409
+
     @app.get('/api/compose/operations/<operation>')
     def compose_operation(operation):
         try:
@@ -885,7 +898,7 @@ def create_app(
                     raise ValueError(blocker)
                 dependency_check = getattr(service, "automatic_dependency_blocker", None)
                 if callable(dependency_check):
-                    blocker = dependency_check(container, service.client.containers.list(all=True))
+                    blocker = dependency_check(container, service.client.containers.list(all=True, ignore_removed=True))
                     if blocker:
                         raise ValueError(blocker)
                 image = str((container.attrs.get("Config") or {}).get("Image") or "")

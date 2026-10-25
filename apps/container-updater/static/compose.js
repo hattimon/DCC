@@ -117,6 +117,18 @@ async function loadCompose() {
     actions.append(composeButton('compose_update',async()=>{if(confirm(t('compose_confirm_deploy')))await composeRun(`/api/compose/operations/${operation.id}/execute`);},operation?.state==='READY'&&operation.approved&&!operation.dry_run));
     actions.append(composeButton('compose_cancel',()=>api(`/api/compose/operations/${operation.id}/cancel`,{}),!!operation&&['READY','PLAN_READY','CONFIG_VALIDATED','BACKUP_VERIFIED','MIGRATION_PRECHECK'].includes(operation.state)));
     actions.append(composeButton('compose_history',async()=>{const data=await api(base+'/history');const content=element('div');for(const entry of data.operations)content.append(composeOperationView(entry));composeReview(t('compose_history'),content);}));
+    if(project.windows_manual_update){
+      card.append(element('p','hint',t('compose_windows_hint')));
+      actions.append(composeButton('compose_windows_prepare',async()=>{
+        const data=await api(base+'/windows-cinema');
+        const url=URL.createObjectURL(new Blob([data.script],{type:'text/plain;charset=utf-8'}));
+        const download=element('a');download.href=url;download.download=data.filename;download.click();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+        const content=element('div','access-plan');content.append(element('p','',t('compose_windows_instructions')),
+          element('pre','','pwsh -NoProfile -File .\\dcc-cinema-windows.ps1\npwsh -NoProfile -File .\\dcc-cinema-windows.ps1 -Apply'));
+        composeReview(t('compose_windows_prepare'),content);
+      }));
+    }
     card.append(actions);
     for(const code of operation?.blockers || project.blockers || [])card.append(element('p','status error',composeMessage(code)));
     card.append(composeSettings(project));box.append(card);

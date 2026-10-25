@@ -89,7 +89,7 @@ class SelfUpdateTests(unittest.TestCase):
                 _self.run_args = None
                 _self.other_containers = []
 
-            def list(_self, all=False):
+            def list(_self, all=False, ignore_removed=False):
                 return [_self.outer.container, *_self.other_containers]
 
             def get(_self, identifier):
@@ -112,6 +112,44 @@ class SelfUpdateTests(unittest.TestCase):
         self.assertTrue(result["update_available"])
         self.assertTrue(result["supported"])
         self.assertEqual(result["target_image"], SELF_IMAGE)
+
+    def sdk_inventory_with_removed_job(self):
+        from docker.errors import NotFound
+        from docker.models.containers import ContainerCollection
+
+        attrs={**self.container.attrs,'Id':self.container.id,'Name':'/dcc-container-updater'}
+        def inspect(identifier):
+            if identifier=='removed-job':raise NotFound('No such container: removed-job')
+            return attrs
+        self.client.api.containers=Mock(return_value=[{'Id':'removed-job'},{'Id':self.container.id}])
+        self.client.api.inspect_container=Mock(side_effect=inspect)
+        self.client.containers=ContainerCollection(client=self.client)
+
+    def test_real_sdk_removed_job_does_not_abort_panel_check(self):
+        self.sdk_inventory_with_removed_job()
+        result=self.service.check_self_update()
+        self.assertTrue(result['checked'])
+        self.assertTrue(result['update_available'])
+        self.assertTrue(result['supported'])
+        self.client.api.containers.assert_called_once()
+        self.container.stop.assert_not_called()
+        self.assertEqual(self.client.images.pulls,[])
+
+    def test_real_sdk_missing_panel_is_not_replaced_by_another_container(self):
+        from docker.errors import NotFound
+        self.sdk_inventory_with_removed_job()
+        self.client.api.inspect_container.side_effect=NotFound('No such container')
+        result=self.service.check_self_update()
+        self.assertFalse(result['checked'])
+        self.assertFalse(result['update_available'])
+        self.assertEqual(self.client.images.pulls,[])
+
+    def test_real_sdk_daemon_error_is_not_ignored_as_a_removed_job(self):
+        from docker.errors import APIError
+        self.sdk_inventory_with_removed_job()
+        self.client.api.inspect_container.side_effect=APIError('daemon unavailable')
+        with self.assertRaises(APIError):self.service.check_self_update()
+        self.assertEqual(self.client.images.pulls,[])
 
     def test_self_update_uses_new_image_helper_without_stopping_current_process(self):
         progress = []

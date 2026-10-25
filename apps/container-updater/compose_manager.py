@@ -26,6 +26,7 @@ from compose_config import (ComposeBlocked, ComposeConfig, ControlledWriter, dig
 from scheduler import validate_config, next_run
 from updater import (COMPOSE_CONFIG_FILES_LABEL, COMPOSE_PROJECT_LABEL, COMPOSE_SERVICE_LABEL,
                      COMPOSE_WORKING_DIR_LABEL, SELF_LABEL, normalized_repository)
+from cinema_windows import eligible as windows_cinema_eligible
 
 
 MODES = ('monitor', 'manual', 'conditional', 'migration')
@@ -350,7 +351,13 @@ class SafeComposeManager:
 
     def discover(self, progress=lambda _message: None, *, check_updates=False):
         service = self.service_factory()
-        containers = service.client.containers.list(all=True)
+        containers = service.client.containers.list(all=True, ignore_removed=True)
+        catalog, catalog_error = [], None
+        if check_updates:
+            try:
+                catalog, catalog_error = service._catalog()
+            except Exception:
+                catalog_error = True
         groups = {}
         for container in containers:
             labels = (container.attrs.get('Config') or {}).get('Labels') or {}
@@ -364,6 +371,7 @@ class SafeComposeManager:
             item = {'name': name, 'services': [], 'settings': self.store.settings(name), 'status': 'review_required',
                     'config_files': [], 'networks': [], 'volumes': [], 'databases': [], 'source': 'unapproved',
                     'analyzed_at': None, 'updated_at': None, 'blockers': []}
+            item['windows_manual_update'] = windows_cinema_eligible(members)
             histories = self.store.history(name)
             if histories:
                 item['last_operation'] = histories[0]
@@ -390,11 +398,19 @@ class SafeComposeManager:
                 target = (((trust or {}).get('profile') or {}).get('services') or {}).get(svc, {}).get('target_image', '')
                 if PINNED.fullmatch(target) and normalized_repository(target) == normalized_repository(image):
                     entry['target_image'] = target
+                else:
+                    entry['target_image'] = image
                 entry['image_ids'].append(str(container.attrs.get('Image') or ''))
                 entry['database'] |= bool(DATABASE.search(image))
                 item['config_files'] = sorted(set(item['config_files']) | set(str(labels.get(COMPOSE_CONFIG_FILES_LABEL) or '').split(',')))
                 if check_updates:
                     try:
+                        if not PINNED.fullmatch(target):
+                            candidate = service._catalog_candidate(image, catalog)
+                            if candidate and candidate.available:
+                                entry['target_image'] = candidate.target_image
+                            if catalog_error:
+                                entry['check_diagnostics'].append('catalog_check_failed')
                         local = service._local_image(container)
                         if local is None:
                             entry['check_diagnostics'].append('local_image_unavailable')
@@ -483,7 +499,7 @@ class SafeComposeManager:
         return config
 
     def members(self, project, service):
-        all_containers = service.client.containers.list(all=True)
+        all_containers = service.client.containers.list(all=True, ignore_removed=True)
         members = [c for c in all_containers if ((c.attrs.get('Config') or {}).get('Labels') or {}).get(COMPOSE_PROJECT_LABEL) == project]
         if not members:
             raise ComposeBlocked('project_unknown')
