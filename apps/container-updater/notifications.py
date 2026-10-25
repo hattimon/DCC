@@ -22,6 +22,7 @@ from email.message import EmailMessage
 
 DEFAULTS = {
     'enabled': False, 'scan_errors': False, 'language': 'en',
+    'compose_info': False, 'compose_progress': False, 'compose_success': False,
     'telegram': {'enabled': False, 'bot_token': '', 'chat_id': ''},
     'signal': {'enabled': False, 'url': '', 'number': '', 'recipients': '', 'bearer_token': ''},
     'whatsapp': {'enabled': False, 'access_token': '', 'phone_id': '', 'recipients': '',
@@ -84,7 +85,7 @@ class NotificationService:
         if not isinstance(payload, dict):
             raise ValueError('Nieprawidłowe ustawienia powiadomień.')
         config = copy.deepcopy(DEFAULTS)
-        for key in ('enabled', 'scan_errors'):
+        for key in ('enabled', 'scan_errors', 'compose_info', 'compose_progress', 'compose_success'):
             value = payload.get(key, False)
             if not isinstance(value, bool):
                 raise ValueError('Przełączniki powiadomień muszą mieć wartość true albo false.')
@@ -177,7 +178,11 @@ class NotificationService:
     def enqueue(self, event):
         with self.lock:
             config = copy.deepcopy(self.config)
-        if not config['enabled'] or self.storage_error or event.get('status') not in ('error','warning'):
+        if not config['enabled'] or self.storage_error:
+            return
+        is_compose = str(event.get('kind', '')).startswith('compose_')
+        preference = {'info': 'compose_info', 'running': 'compose_progress', 'success': 'compose_success'}.get(event.get('status'))
+        if event.get('status') not in ('error', 'warning') and not (is_compose and preference and config[preference]):
             return
         if event.get('kind') in ('scan','self_update_check','schedule_scan') and not config['scan_errors']:
             return
@@ -193,9 +198,14 @@ class NotificationService:
     def format_message(self, event, language):
         from i18n import translate_text
         title = 'DCC Container Updater · błąd aktualizacji' if language == 'pl' else 'DCC Container Updater · update issue'
+        if str(event.get('kind', '')).startswith('compose_'):
+            title = 'DCC Container Updater · Docker Compose'
         lines = [title, time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(event['occurred_at']))]
         if event.get('message'):
-            lines.append(translate_text(redact(event['message']), language)[:1000])
+            from i18n import STRINGS
+            code = 'compose_code_' + event['message']
+            message = STRINGS[code][1 if language == 'pl' else 0] if code in STRINGS else translate_text(redact(event['message']), language)
+            lines.append(message[:1000])
         for detail in event.get('details', [])[:5]:
             lines.append(f"{detail.get('name','')}: {translate_text(redact(detail.get('result','')), language)[:400]}")
         return '\n'.join(lines)[:3000]
@@ -246,6 +256,10 @@ class NotificationService:
             config = copy.deepcopy(self.config)
         if not config['enabled']:
             return
+        if str(event.get('kind', '')).startswith('compose_'):
+            preference = {'info': 'compose_info', 'running': 'compose_progress', 'success': 'compose_success'}.get(event.get('status'))
+            if preference and not config[preference]:
+                return  # Honor opt-out even for an event already in the queue.
         message = self.format_message(event, config['language'])
         fingerprint = hashlib.sha256(json.dumps([event.get('kind'), event.get('message'), event.get('details')], sort_keys=True).encode()).hexdigest()
         for channel in SECRETS:

@@ -8,6 +8,7 @@
     <p class="hint">{{ ui.notifications_hint }}</p>
     <form id="notification-form">
       <div class="schedule-toggles"><label><input id="notify-enabled" class="auto-switch" type="checkbox" role="switch">{{ ui.enable_notifications }}</label><label><input id="notify-scan-errors" class="auto-switch" type="checkbox" role="switch">{{ ui.notify_scan_errors }}</label></div>
+      <div class="schedule-toggles">{% for key in ['compose_info', 'compose_progress', 'compose_success'] %}<label><input id="notify-{{ key }}" class="auto-switch" type="checkbox" role="switch">{{ ui['notify_' ~ key] }}</label>{% endfor %}</div>
       <div class="field notify-language"><label for="notify-language">{{ ui.alert_language }}</label><select id="notify-language"><option value="en">English</option><option value="pl">Polski</option></select></div>
       {% for channel, channel_name in [('email','E-mail (SMTP)'),('telegram','Telegram'),('signal','Signal'),('whatsapp','WhatsApp')] %}
       <details class="notification-channel"><summary>{{ channel_name }}<span id="notify-{{ channel }}-configured" class="hint"></span></summary>

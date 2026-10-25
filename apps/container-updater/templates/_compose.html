@@ -1,0 +1,7 @@
+<section id="compose-panel" role="tabpanel" aria-labelledby="tab-compose" hidden>
+  <div class="schedule-heading"><div><h2>Docker Compose</h2><p class="subtitle">{{ ui.compose_intro }}</p></div><button id="compose-discover" data-compose-action="discover">{{ ui.compose_discover }}</button></div>
+  <p class="notice">{{ ui.compose_limits }}</p>
+  <p id="compose-progress" class="status" role="status" aria-live="polite">{{ ui.compose_initial }}</p>
+  <div id="compose-projects" class="compose-projects"></div>
+  <dialog id="compose-review"><h2 id="compose-review-title">{{ ui.compose_diff }}</h2><div id="compose-review-body"></div><form method="dialog"><button>{{ ui.compose_close }}</button></form></dialog>
+</section>

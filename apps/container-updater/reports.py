@@ -137,6 +137,8 @@ class ReportStore:
 
     def record_job(self, job):
         kind, result = job.get('kind'), job.get('results') or {}
+        if str(kind).startswith('compose_') and job.get('status') != 'error':
+            return  # The persistent Compose engine records its own stage events.
         if isinstance(result, dict) and result.get('waiting'):
             return
         if job.get('status') == 'error':

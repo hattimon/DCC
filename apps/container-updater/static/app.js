@@ -12,7 +12,7 @@ let autoScanOnRefresh = false;
 let scheduleState = null;
 let scheduleDirty = false;
 const scheduleTargets = new Set();
-const tabs = ['containers', 'schedule', 'reports', 'settings'];
+const tabs = ['containers', 'compose', 'schedule', 'reports', 'settings'];
 let reportPage = 1;
 let reportSignature = '';
 const openReports = new Set();
@@ -84,6 +84,7 @@ function setBusy(value) {
   $('sound-preview').disabled = value || !preferences.sounds_enabled;
   for (const id of ['registry-save','registry-remove','registry-undo','mount-plan']) $(id).disabled = value;
   document.querySelectorAll('.notify-test').forEach(button => { button.disabled = value; });
+  document.querySelectorAll('[data-compose-action]').forEach(button => { button.disabled = value || button.dataset.unavailable === 'true'; });
   $('update-label').textContent = picked.size ? t('selected_count', {count: picked.size}) : t('update_selected');
   document.querySelectorAll('.pick').forEach(check => { check.disabled = value; });
   document.querySelectorAll('.auto-switch').forEach(check => { check.disabled = value; });
@@ -169,6 +170,7 @@ async function api(path, payload) {
 }
 async function waitJob(state) {
   while (state.status === 'queued' || state.status === 'running') {
+    if (state.kind?.startsWith('compose_')) $('compose-progress').textContent = composeMessage(state.progress || 'ANALYZING');
     showStatus(state.progress || t('loading')); await pause(900); state = await api(`/api/job?id=${encodeURIComponent(state.id)}`);
   }
   if (state.status === 'error') throw new Error(state.progress || t('job_error'));
@@ -182,7 +184,7 @@ async function runJob(path, payload = {}) {
   for (;;) {
     try {
       const job = await waitJob(await api(path, payload));
-      if (path !== '/api/self-update/check') playSound(job.results?.ok === false || job.results?.updates?.some(item => !item.ok) ? 'error' : 'success');
+      if (path !== '/api/self-update/check') playSound(job.results?.ok === false || ['BLOCKED','FAILED','RESTORED','MANUAL_INTERVENTION'].includes(job.results?.state) || job.results?.updates?.some(item => !item.ok) ? 'error' : 'success');
       return job;
     }
     catch (error) {
@@ -301,6 +303,7 @@ function selectTab(name) {
     $(`${tab}-panel`).hidden = tab !== name;
   }
   if (name === 'reports') loadReports().catch(error => { $('report-storage-error').hidden = false; $('report-storage-error').textContent = error.message; });
+  if (name === 'compose') loadCompose().catch(error => { $('compose-progress').textContent = composeMessage(error.message); });
 }
 for (const name of tabs) {
   $(`tab-${name}`).addEventListener('click', () => selectTab(name));
@@ -446,6 +449,7 @@ const notificationFields = {
 const notificationSecrets = {telegram:'bot_token',signal:'bearer_token',whatsapp:'access_token',email:'password'};
 function displayNotifications(config) {
   $('notify-enabled').checked = config.enabled; $('notify-scan-errors').checked = config.scan_errors; $('notify-language').value = config.language;
+  for (const key of ['compose_info','compose_progress','compose_success']) $('notify-'+key).checked = !!config[key];
   for (const [channel, fields] of Object.entries(notificationFields)) {
     $('notify-'+channel+'-enabled').checked = config[channel].enabled;
     $('notify-'+channel+'-clear').checked = false;
@@ -462,6 +466,7 @@ async function loadNotifications() { displayNotifications(await api('/api/notifi
 $('notification-form').addEventListener('submit', event => { event.preventDefault(); action(async () => {
   setBusy(true);
   const payload = {enabled:$('notify-enabled').checked,scan_errors:$('notify-scan-errors').checked,language:$('notify-language').value};
+  for (const key of ['compose_info','compose_progress','compose_success']) payload[key] = $('notify-'+key).checked;
   for (const [channel, fields] of Object.entries(notificationFields)) {
     payload[channel] = {enabled:$('notify-'+channel+'-enabled').checked,clear_secret:$('notify-'+channel+'-clear').checked};
     for (const field of fields) payload[channel][field] = $(`notify-${channel}-${field}`).value;

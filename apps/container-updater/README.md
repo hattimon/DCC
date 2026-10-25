@@ -34,7 +34,7 @@ The interface defaults to **English** and offers **Polski** on the login page an
 - Per-container automatic updates are opt-in and off by default. Enable them with the row checkbox in the panel. On updater/host startup it waits for Docker, checks only enabled containers and processes available updates sequentially, one container at a time. A container name is bound to its image repository so a different image reusing the name does not inherit the setting.
 - Opening the panel automatically checks only its own GHCR image and offers **Update panel / Not now**. Container scans use **Scan containers**. An **Automatically scan on refresh** switch is off by default and saved in `/data`; enabling it allows scans after a page refresh or language switch, after the panel-version check and any update decision. The last completed scan, date and time are persisted and displayed without new registry requests. Restart-update opt-ins remain separate from this page preference.
 - If the replacement fails to start or becomes unhealthy, the app removes the replacement and attempts to restore the original container. The old container is removed only after a running replacement passes its startup check.
-- Compose services are manual-only. The updater reads the service model through the official Docker Compose CLI and will update one running replica only when the Compose file already declares the target image. It never edits the user's Compose files. It runs `pull SERVICE`, then `up -d --no-deps --no-build --pull never --wait --wait-timeout N SERVICE`; dependency services are not restarted. The updater blocks services with Compose dependents, any other container on the same Docker network, shared named volumes or bind mounts, conflicting published ports, multiple replicas, unavailable project files, unresolved environment variables or bind mounts outside the read-only roots. If Compose cannot be read safely, the row explains which path or dependency prevents the update. Compose changes use a temporary local tag of the previous image and attempt rollback if the replacement does not pass its health check. A single-service update still causes a short interruption; dependencies outside Docker cannot be inferred automatically.
+- Compose services in the **Containers** tab retain the existing manual-only path. The updater reads the service model through the official Docker Compose CLI and will update one running replica only when the Compose file already declares the target image. That legacy path never edits the user's Compose files; the separate Docker Compose manager uses explicit file grants described below. It runs `pull SERVICE`, then `up -d --no-deps --no-build --pull never --wait --wait-timeout N SERVICE`; dependency services are not restarted. The updater blocks services with Compose dependents, any other container on the same Docker network, shared named volumes or bind mounts, conflicting published ports, multiple replicas, unavailable project files, unresolved environment variables or bind mounts outside the read-only roots. If Compose cannot be read safely, the row explains which path or dependency prevents the update. Compose changes use a temporary local tag of the previous image and attempt rollback if the replacement does not pass its health check. A single-service update still causes a short interruption; dependencies outside Docker cannot be inferred automatically.
 - Version-pinned Compose projects must first have their `image:` field changed in the user's Compose file to the target version. The updater then detects that declared target and applies it without rewriting the file. It does not support Compose builds from source, Swarm, or custom-network standalone containers.
 - Digest-only local images are checked through a unique local repository tag when available. Images with no tag or several ambiguous tags remain blocked with an explanation.
 - The updater is skipped in the general container list; its dedicated self-update path uses a temporary helper so the process can safely replace its own container.
@@ -49,13 +49,13 @@ The separate **Include panel updates** switch is also off by default. When enabl
 
 All scheduled scans and updates use the same single-operation queue as manual actions. Busy jobs delay the schedule. After downtime, one overdue run is claimed durably; missed runs do not pile up. A completed/claimed one-time schedule does not repeat. An interrupted container-update phase is reported rather than replayed automatically. Settings, restart continuation and last result are saved in `/data/schedule.json`; a damaged file disables scheduled execution without overwriting the evidence.
 
-Choose **Scan and update selected containers** to restrict updates to selected, matching image repositories. A different image reusing a name does not inherit that permission. Alternatively, **Scan and update all containers** checks the current inventory on every run, including containers installed later; it requires no individual selections and updates only verified, eligible newer images. It uses the same serial queue and safety checks. The panel is controlled separately by **Include panel updates**. Compose remains manual-only; blocked or unverified services are explained in the last result and Reports. Explicit Links, VolumesFrom, shared namespaces and shared writable persistent mounts block automatic replacement, including when rechecked just before execution. Volumes are kept, but image rollback cannot reverse database migrations. Run one updater instance per Docker host/data volume; unrelated external Docker operations cannot be serialized by this panel.
+Choose **Scan and update selected containers** to restrict updates to selected, matching image repositories. A different image reusing a name does not inherit that permission. Alternatively, **Scan and update all containers** checks the current inventory on every run, including containers installed later; it requires no individual selections and updates only verified, eligible newer images. It uses the same serial queue and safety checks. The panel is controlled separately by **Include panel updates**. The general schedule does not opt Compose projects in; their separate schedules and safety policies are configured in Docker Compose. Blocked or unverified services are explained in the last result and Reports. Explicit Links, VolumesFrom, shared namespaces and shared writable persistent mounts block automatic replacement, including when rechecked just before execution. Volumes are kept, but image rollback cannot reverse database migrations. Run one updater instance per Docker host/data volume; unrelated external Docker operations cannot be serialized by this panel.
 
 ## Reports and error alerts
 
 The **Reports** tab retains the latest 200 local events, ten per page, with an issues-only filter. Successful runs stay on one compact line; errors and blockers expand on demand. Panel replacement is marked complete only after the exact expected image is observed. Viewing reports or their delivery status never scans registries. Events are stored in `/data/reports.json` using a versioned structure for future integrations.
 
-**Error notifications** are off by default. Configure channels under Reports, save their settings, and explicitly use **Send test message** to verify your account. Successful runs do not send alerts. Scan warnings require a separate opt-in. Messages contain a short summary and up to five affected containers. Repeated identical alerts are muted for an hour; delivery status is retained beside the report. Sending runs in a separate bounded worker queue, so a messenger outage does not block Docker work. Failed or unconfirmed sends are not automatically replayed after a restart, avoiding duplicate alerts; new unsent recent errors can resume.
+**Error notifications** are off by default. Configure channels under Reports, save their settings, and explicitly use **Send test message** to verify your account. Successful standalone runs do not send alerts. Compose information, progress and success each have an independent opt-in, all OFF by default. Scan warnings require a separate opt-in. Messages contain a short summary and up to five affected containers. Repeated identical alerts are muted for an hour; delivery status is retained beside the report. Sending runs in a separate bounded worker queue, so a messenger outage does not block Docker work. Failed or unconfirmed sends are not automatically replayed after a restart, avoiding duplicate alerts; new unsent recent errors can resume.
 
 - **E-mail (SMTP):** your SMTP hostname, port, sender and up to ten recipient addresses. STARTTLS (usually port 587) or implicit TLS (usually port 465) is required, with certificate verification. Provide both username and password/app password if authentication is needed. Passwordless trusted relays still require TLS. Unencrypted SMTP is not supported.
 - **Telegram:** a Bot API token and chat ID where that bot is allowed to send. Uses plain-text `sendMessage` through the official Telegram API.
@@ -63,6 +63,247 @@ The **Reports** tab retains the latest 200 local events, ten per page, with an i
 - **WhatsApp:** your WhatsApp Cloud API token, phone-number ID, API version and recipient numbers. Supply an approved text-only template with exactly one body text parameter for the alert summary, plus its language code. The implementation follows [Meta's template-message example](https://github.com/fbsamples/whatsapp-api-examples/blob/main/template-for-ecommerce-js/messageHelper.js). Account setup, template approval and provider messaging charges remain with your configured account.
 
 Secrets are stored only in `/data/notifications.json` with restrictive file permissions. GET responses expose only whether a secret was saved, never its value. Blank secret fields retain the saved value; disable a channel and choose Delete saved token/password to remove it. Diagnostic alerts redact common password/token patterns; delivery errors record exception types or HTTP codes rather than request URLs or tokens. No credentials, SMTP account, Signal bridge or recipient accounts are bundled in the image. External delivery requires your configuration; no real recipient is contacted during local automated tests.
+
+## Safe Compose Update Manager / Bezpieczne aktualizacje Compose
+
+The **Docker Compose** tab discovers projects and replicas from existing Compose
+labels. It shows service images/IDs, update availability, configuration paths,
+approved source revision, dependencies, networks, persistent mounts, detected
+database images, operation state and timestamps. Discover is an explicit scan;
+viewing this tab or its history does not contact a registry. PL/EN and all six
+existing themes are supported. Progress shows stages, never invented percentages.
+
+### Available modes and deliberate limits
+
+- **Monitoring only** is the default, with project automation **OFF** and database
+  policy **Unknown — block**. Discovery, differences and analysis never pull
+  images or deploy services.
+- **Controlled manual** prepares an exact plan and requires **Approve plan**, then
+  **Update**. Approval expires after 30 minutes. Any settings, runtime, source or
+  input-file change invalidates the plan. Dry-run plans cannot be approved.
+- **Conditional automatic** requires BOTH project mode and project automation to
+  be conditional, plus service consent, a schedule and every gate below. General
+  “update all” and legacy container startup opt-ins never grant this consent.
+- **Approved migration** can be selected for documenting intent, but production
+  migration/restore has **no executable adapter** and stays blocked. Unknown
+  databases, engine upgrades and application schema migrations are never guessed.
+
+The only executable new deployment profile is `stateless-v1`: a complete reviewed
+project, one healthy replica per service, digest-pinned old/new images in the same
+repositories, application tests for exact versions, no persistent mounts or image
+VOLUME declarations, no database images, no unreviewed external dependencies or
+shared outside networks. Include/extends, profiles, builds, lifecycle hooks,
+privilege/device changes, additional/removal of services and non-image
+configuration changes remain blocked. Compatibility evidence must describe an
+isolated test of these exact normalized models and image IDs; selecting “No
+database” or “Compatible” alone proves nothing. There are no bundled approved
+application profiles. An administrator must review each version pair; a new
+release requires new evidence and a new pinned source bundle.
+
+### Configuration and semantic review
+
+The official Compose CLI renders the complete ordered `-f` set, `.env`,
+`env_file`, secrets/config files and normalized service model. Override files must
+be explicitly listed, exactly as recorded in running container labels; the manager
+does not guess an unlisted compose.override.yaml. Extra CLI environment files,
+unresolved interpolation and unprovable recursive inputs block deployment.
+All input hashes, missing optional-file sentinels, Compose service configuration
+hashes, policies and runtime fingerprints are rechecked immediately before write
+and again after pulls. The effective candidate model must equal the reviewed
+target. Shell interpolation inherits only minimal Docker/runtime variables,
+never arbitrary updater environment secrets.
+
+`BASE`, `LOCAL`, and `UPSTREAM` comparisons operate on CLI-normalized models.
+Maps recurse, Compose unique resources use target/port identities, and ordered
+commands stay atomic. Compose itself validates the generated override; a generic
+YAML merge is never used as deployment evidence. Local independent changes are
+preserved. Without BASE the result is explicitly a two-way review and cannot
+deploy. Sensitive upstream environment/ports/volumes/secrets/config/dependency
+changes and conflicts require manual edits, fresh normalized sources, reviewed
+evidence and another analysis. The UI shows changed/added/removed paths and
+conflicts while withholding all values and sensitive key names. This version
+does not provide an in-browser conflict resolver or general config writer.
+
+Sources are **local, explicitly approved, hash-pinned JSON exports** of Compose
+models. There is no URL download/execution endpoint. The source revision may
+identify a reviewed commit/release; the SHA-256 of each imported model is the
+actual immutable content check. Do not import “latest compose” from random URLs.
+
+### Narrow optional write access
+
+All catalog mounts and the catalog `extra` remain read-only. Deployments through
+the new manager require a separate, existing image-only override JSON file,
+listed LAST in the original Compose `-f` set and in the local approval bundle.
+Its only fields may be `services.<name>.image`. Only this exact file is writable
+by the adapter. The operator must opt in on the host and prepare the original
+deployment definition before recreating the updater; no Docker-socket helper is
+created and no permissions are granted by the UI.
+
+For example, keep the existing `/srv:/srv:ro` mount and separately mount just the
+approved project's small override directory at the SAME in-container location:
+
+```text
+--mount type=bind,src=/srv/my-stack/.dcc-safe,dst=/srv/my-stack/.dcc-safe
+```
+
+This is an example to adapt to a verified existing project, not a remote path
+the manager creates. Mount a directory containing only the granted override,
+not the whole project RW. The override must belong to the updater's uid/gid
+(root:root in the default image), with a directory writable by that uid; the
+adapter does not request CHOWN or broad DAC capabilities. A single-file bind mount does not support atomic rename
+and is not suitable. Update using the original installation definition to retain
+every existing mount, option and `dcc_updater_data`. Labels must already record
+both Compose files. Keep directory ownership restricted to trusted administrators.
+
+The Linux writer rejects traversal, symlinks/junctions and hard links, walks
+directory descriptors with O_NOFOLLOW, checks hashes and file identity, keeps a
+private original, preserves uid/gid/mode and atomically renames one file. Undo
+checks the current hash before restoring; it will never overwrite a later edit.
+File sets or multi-service Docker operations are not atomic. External host
+writers are outside the updater's serial queue; stop them during deployment.
+The writer is deliberately unavailable on Windows hosts running Python directly;
+the published updater runs inside a Linux container on Docker Desktop.
+
+### Locally approved bundle (example schema)
+
+Install the following **inside the existing updater data volume**, using trusted
+administrator file access, under `/data/safe-compose/trusted/my-stack/`:
+
+```json
+{
+  "project": "my-stack",
+  "approved": true,
+  "root": "/srv/my-stack",
+  "files": ["compose.yaml", ".dcc-safe/images.json"],
+  "source": {
+    "revision": "reviewed-commit-or-release",
+    "base": "base.json",
+    "base_sha256": "<sha256-of-base-file-bytes>",
+    "upstream": "upstream.json",
+    "upstream_sha256": "<sha256-of-upstream-file-bytes>"
+  },
+  "write": {"file": ".dcc-safe/images.json"},
+  "profile": {
+    "kind": "stateless-v1",
+    "approved": true,
+    "evidence": {"file": "isolated-test-report.json", "sha256": "<report-file-sha256>"},
+    "services": {
+      "web": {
+        "source_image_id": "sha256:<64-hex-local-image-id>",
+        "target_image": "registry.example/team/web@sha256:<64-hex-registry-digest>",
+        "application_check": {
+          "kind": "http-sha256", "port": 8080, "path": "/ready",
+          "body_sha256": "<sha256-of-reviewed-expected-response-bytes>"
+        }
+      }
+    }
+  }
+}
+```
+
+Save that manifest as `approval.json`, with actual values, not placeholders.
+Both base.json and upstream.json contain complete Compose-normalized models.
+Export using the same project name, directory, file order and Compose version as
+the updater (`docker-compose ... config --format json`). These exports contain
+resolved secrets: use restrictive permissions, never commit or share them.
+The independent isolated test report schema is:
+
+```json
+{
+  "schema": 1,
+  "source_model_sha256": "<canonical-model-hash>",
+  "target_model_sha256": "<canonical-model-hash>",
+  "versions": {"web": {"source": ["sha256:<old-id>"], "target": "registry.example/team/web@sha256:<new-digest>"}},
+  "isolated": true,
+  "application_checks_passed": true,
+  "persistent_data": [],
+  "external_data_dependencies": [],
+  "test_suite": "<name-and-result-reference-of-the-actual-reviewed-test-suite>"
+}
+```
+
+Canonical model hashes use `compose_config.digest(model)` (sorted JSON keys,
+compact separators). File hashes use raw bytes. A fabricated report is not a test:
+the local approver is responsible for independently reviewing its origin/results.
+No checkbox or public metadata can create this trusted evidence through the API.
+The HTTP adapter runs a fixed argument list for `curl` INSIDE each approved
+container as uid 65534, without a shell, proxy or redirects, and compares response
+bytes to the pinned hash. Curl must exist there; no tools are installed in the
+application. It tests the old version before deployment and the replacement after
+Docker's mandatory healthcheck. Response bodies are never logged or exported.
+
+### Database policy, backup and recovery
+
+Image updates, database-engine updates and application schema changes are treated
+separately. Detected engine names are inventory hints, not migration knowledge.
+Database policy defaults to unknown. No database-bearing project is deployed by
+the initial adapter, even with an apparently good healthcheck or preserved volume.
+Only stateless-v1 reports data backup as not applicable, with its scope explicit.
+
+The real `sqlite-online-v1` backup adapter can be configured in approval.json:
+
+```json
+{"backup": {"adapter": "sqlite-online-v1", "file": "data/application.sqlite"}}
+```
+
+**Verify backup** opens the approved SQLite file read-only and uses SQLite's online
+backup API, copies it to a separate restore-test database, then runs
+`PRAGMA integrity_check`. The backup and restored copy stay private under
+`/data/safe-compose/backups/<operation-id>/`. The result exposes only scope,
+checksum and timestamps. It checks SQLite structural integrity, not business
+invariants, multiple databases, external data or application migration safety.
+It never makes a database deployment READY and never restores over live data.
+Postgres/MySQL/other engine backup adapters and production migrations/restores
+are unsupported and blocked. Ordinary volume retention is not a backup.
+
+The durable SQLite state machine records DETECTED → ANALYZING → PLAN_READY →
+CONFIG_VALIDATED → BACKUP_VERIFIED → MIGRATION_PRECHECK → READY → APPLYING →
+HEALTH_CHECK → APPLICATION_CHECK → COMPLETED, timestamps, operation/project,
+image versions, checks and error/rollback codes. State is persisted before
+mutations. A restart invalidates unfinished preparation; interrupted deployment
+becomes MANUAL_INTERVENTION and is NEVER replayed. That condition also blocks
+other Docker mutations in the shared queue. Read-only monitoring still works.
+
+On failure, a stateless deployment attempts only the approved old pinned images
+and original configuration, with full checks. Old images, evidence and private
+config copies are retained. Restore failure or uncertain write outcome holds the
+project lock and reports intervention. Do not delete state.sqlite or clear a
+lock to “retry”. Inspect/reconcile live state, configuration and evidence on the
+host, restore the original deployment through its verified procedure, then have
+an administrator reconcile the operation record under exclusive maintenance.
+There is intentionally no UI button that guesses whether unknown production
+state is safe. Production data restoration is never attempted by this release.
+
+### Schedules, notifications and safe rollout
+
+Each project has OFF / check / analyze-and-notify / conditional automation,
+per-service modes and its own one-time/daily/weekly/monthly/interval settings.
+It reuses `scheduler.validate_config` and `next_run`, IANA zones, DST behavior,
+the existing scheduler loop and JobManager serial queue. Due time is consumed
+durably before work; missed runs do not pile up or replay after a restart.
+Projects sharing outside networks/data/dependencies remain blocked. Settings,
+plans and event history persist under `/data/safe-compose/` without changing
+legacy settings files or the `dcc_updater_data` volume.
+
+Compose events flow through existing Reports and Telegram, Signal, WhatsApp and
+SMTP transports, the bounded delivery queue and hourly deduplication. Errors and
+blockers use existing alert configuration. Information, progress and success each
+have independent switches, OFF by default. No real messenger is contacted by the
+test suite. Compose event reports contain diagnostic codes, IDs and field paths,
+never Compose values, tokens, application response bodies or backup records.
+
+For a safe rollout: start in monitoring, inspect discovery, run Analyze/Dry run,
+resolve missing/conflicting inputs manually, validate the exact version pair in
+an isolated environment, install the approved hash-pinned bundle, prepare only
+the narrow write mount, select manual mode and database policy, analyze again,
+review the plan, approve and deploy during a maintenance window. Verify the
+application and history before considering project-specific conditional mode.
+For any database/migration/unknown dependency, keep monitoring/manual external
+administration until an application-specific verified adapter exists.
+
+The manager is an intentionally restricted first implementation. Fixture/API/
+CLI tests do not establish production readiness for arbitrary applications or
+replace an installed-version upgrade and restore rehearsal.
 
 ## Appearance, sound and host identification
 

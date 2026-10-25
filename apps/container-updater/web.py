@@ -24,6 +24,8 @@ from scheduler import ScheduleStore, validate_config
 from reports import ReportStore
 from notifications import NotificationService
 from registry_access import RegistryAccessStore
+from compose_manager import SafeComposeManager
+from compose_config import ComposeBlocked
 
 
 class JobManager:
@@ -31,6 +33,7 @@ class JobManager:
         self._lock = threading.RLock()
         self.instance = secrets.token_urlsafe(12)
         self.on_complete = on_complete
+        self.mutation_guard = None
         self._history: dict[str, dict[str, Any]] = {}
         self._state: dict[str, Any] = {"id": None, "instance": self.instance, "kind": None, "status": "idle", "progress": "", "results": []}
 
@@ -43,6 +46,9 @@ class JobManager:
 
     def start(self, kind: str, work: Callable[[Callable[[str], None]], Any]) -> tuple[bool, dict[str, Any]]:
         with self._lock:
+            if (self.mutation_guard and kind in {'update', 'auto_update', 'self_update', 'schedule', 'compose_execute'}
+                    and self.mutation_guard()):
+                return False, {**self.snapshot(), 'error': 'compose_admin_intervention'}
             if self._state["status"] in {"queued", "running"}:
                 return False, self.snapshot()
             if self._state["id"]:
@@ -293,6 +299,10 @@ def create_app(
         client = docker.from_env(timeout=docker_timeout)
         return UpdateService(client, wait_seconds=int(os.environ.get("DCC_UPDATER_HEALTH_TIMEOUT", "60")), registry_auth_loader=registry_access.for_image)
 
+    compose_manager = SafeComposeManager(data_path, get_service, report_store)
+    app.extensions['dcc_updater_compose'] = compose_manager
+    manager.mutation_guard = compose_manager.store.requires_intervention
+
     def annotate_auto_update_state(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         enabled = auto_update_store.snapshot()
         for item in results:
@@ -495,6 +505,9 @@ def create_app(
     def scheduler_tick(now: float | None = None) -> bool:
         moment = time.time() if now is None else now
         if not schedule_store.due(manager.instance, moment):
+            if compose_manager.store.due(moment):
+                started, _state = manager.start('compose_schedule', lambda progress: compose_manager.run_due(moment, progress))
+                return started
             return False
         def work(progress):
             try:
@@ -631,6 +644,66 @@ def create_app(
             cached.update(scan_settings)
         cached["containers"] = annotate_auto_update_state(cached["containers"])
         return jsonify(cached)
+
+    @app.get('/api/compose/projects')
+    def compose_projects():
+        return jsonify({'projects': compose_manager.projects(), 'automation_default': 'off'})
+
+    @app.post('/api/compose/discover')
+    def compose_discover():
+        started, state = manager.start('compose_discover', lambda progress: {
+            'projects': compose_manager.discover(progress, check_updates=True)})
+        return jsonify(state), (202 if started else 409)
+
+    @app.get('/api/compose/projects/<project>/history')
+    def compose_history(project):
+        return jsonify({'operations': compose_manager.store.history(project)})
+
+    @app.get('/api/compose/operations/<operation>')
+    def compose_operation(operation):
+        try:
+            return jsonify(compose_manager.store.get(operation))
+        except ComposeBlocked as exc:
+            return jsonify({'error': str(exc)}), 404
+
+    @app.post('/api/compose/projects/<project>/settings')
+    def compose_settings(project):
+        try:
+            compose_manager.require_project(project)
+            return jsonify(compose_manager.store.save_settings(project, request.get_json(silent=True)))
+        except (ComposeBlocked, ValueError, TypeError):
+            return jsonify({'error': 'compose_settings_invalid'}), 400
+
+    @app.post('/api/compose/projects/<project>/<action>')
+    def compose_action(project, action):
+        try:
+            compose_manager.require_project(project)
+        except ComposeBlocked as exc:
+            return jsonify({'error': str(exc)}), 404
+        if action not in ('analyze', 'dry-run', 'backup'):
+            return jsonify({'error': 'compose_action_invalid'}), 400
+        def work(progress):
+            return (compose_manager.check_backup(project) if action == 'backup' else
+                    compose_manager.analyze(project, progress, dry_run=action == 'dry-run'))
+        started, state = manager.start('compose_' + action, work)
+        return jsonify(state), (202 if started else 409)
+
+    @app.post('/api/compose/operations/<operation>/<action>')
+    def compose_operation_action(operation, action):
+        try:
+            if action in ('approve', 'cancel'):
+                if manager.snapshot()['status'] in {'queued', 'running'}:
+                    return jsonify({'error': 'project_locked'}), 409
+                return jsonify(compose_manager.approve(operation) if action == 'approve' else compose_manager.cancel(operation))
+            if action != 'execute':
+                return jsonify({'error': 'compose_action_invalid'}), 400
+            current = compose_manager.store.get(operation)
+            if current['state'] != 'READY' or not current.get('approved') or current.get('dry_run'):
+                raise ComposeBlocked('consent_required')
+            started, state = manager.start('compose_execute', lambda progress: compose_manager.execute(operation, progress))
+            return jsonify(state), (202 if started else 409)
+        except ComposeBlocked as exc:
+            return jsonify({'error': str(exc)}), 409
 
     @app.get("/api/infrastructure")
     def infrastructure():
