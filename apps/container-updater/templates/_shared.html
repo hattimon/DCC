@@ -12,6 +12,6 @@
 {% macro language_picker(ui, lang, csrf_token) -%}
 <form class="language-picker" method="post" action="{{ url_for('set_language') }}" aria-label="{{ ui.language }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button name="language" value="en" type="submit" lang="en" aria-label="English" aria-pressed="{{ 'true' if lang == 'en' else 'false' }}">EN</button><button name="language" value="pl" type="submit" lang="pl" aria-label="Polski" aria-pressed="{{ 'true' if lang == 'pl' else 'false' }}">PL</button></form>
 {%- endmacro %}
-{% macro footer(ui) -%}
-<footer class="footer"><span>{{ ui.footer }}</span><a href="https://github.com/hattimon/DCC" target="_blank" rel="noopener noreferrer">{{ ui.repo }} {{ icon('arrow') }}</a></footer>
+{% macro footer(ui, version='') -%}
+<footer class="footer"><span>{{ ui.footer }}{% if version %} · v{{ version }}{% endif %}</span><a href="https://github.com/hattimon/DCC" target="_blank" rel="noopener noreferrer">{{ ui.repo }} {{ icon('arrow') }}</a></footer>
 {%- endmacro %}

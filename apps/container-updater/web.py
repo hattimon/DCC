@@ -28,6 +28,8 @@ from compose_manager import SafeComposeManager
 from compose_config import ComposeBlocked
 from cinema_windows import export_script as export_windows_cinema_script
 
+UPDATER_VERSION = Path(__file__).with_name("VERSION").read_text(encoding="utf-8").strip()
+
 
 class JobManager:
     def __init__(self, on_complete=None) -> None:
@@ -216,7 +218,8 @@ def create_app(
         with preferences_lock:
             appearance = dict(preferences)
         return {"lang": language, "ui": strings(language), "translate": lambda text: translate_text(text, language),
-                "preferences": appearance, "themes": themes, "sound_styles": sound_styles}
+                "preferences": appearance, "themes": themes, "sound_styles": sound_styles,
+                "updater_version": UPDATER_VERSION}
 
     if not secret_path.exists():
         _atomic_write(secret_path, secrets.token_urlsafe(48))
@@ -276,9 +279,21 @@ def create_app(
     except (OSError, ValueError, TypeError):
         pass
 
-    def remember_scan(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def remember_scan(results: list[dict[str, Any]], *, partial: bool = False) -> list[dict[str, Any]]:
         with scan_cache_lock:
-            scan_cache.update(containers=json.loads(json.dumps(results)), scanned_at=time.time())
+            checked_at = time.time()
+            for item in results:
+                item.setdefault("checked_at", checked_at)
+            if partial:
+                previous = {item.get("id"): item for item in scan_cache["containers"]}
+                for item in results:
+                    if item.get("missing") and item["id"] in previous:
+                        item["name"] = previous[item["id"]].get("name", item["name"])
+                    previous[item["id"]] = item
+                saved = list(previous.values())
+            else:
+                saved = results
+            scan_cache.update(containers=json.loads(json.dumps(saved)), scanned_at=checked_at)
             try:
                 _atomic_write(scan_cache_path, json.dumps(scan_cache, ensure_ascii=False))
             except OSError:
@@ -643,6 +658,24 @@ def create_app(
         with scan_cache_lock:
             cached = json.loads(json.dumps(scan_cache))
             cached.update(scan_settings)
+        service = None
+        try:
+            service = get_service()
+            inventory = getattr(service, "inventory", None)
+            if callable(inventory):
+                previous = {item.get("id"): item for item in cached["containers"]}
+                current = []
+                for item in inventory():
+                    old = previous.get(item["id"])
+                    if old and not old.get("missing"):
+                        item = {**item, **old, "name": item["name"], "status": item["status"]}
+                    current.append(item)
+                cached["containers"] = current
+        except Exception:
+            logging.getLogger(__name__).warning("Could not refresh local container inventory; retaining cached results.")
+        finally:
+            if service is not None and service_factory is None:
+                service.client.close()
         cached["containers"] = annotate_auto_update_state(cached["containers"])
         return jsonify(cached)
 
@@ -923,7 +956,17 @@ def create_app(
 
     @app.post("/api/scan")
     def scan():
-        payload = request.get_json(silent=True) or {}
+        payload = request.get_json(silent=True)
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            return jsonify({"error": "Nieprawidłowe żądanie skanowania."}), 400
+        selected = payload.get("container_ids") if "container_ids" in payload else None
+        if "container_ids" in payload:
+            if (not isinstance(selected, list) or not 1 <= len(selected) <= 100
+                    or any(not isinstance(value, str) or not value.strip() or len(value) > 128 for value in selected)):
+                return jsonify({"error": "Wybierz od 1 do 100 kontenerów."}), 400
+            selected = list(dict.fromkeys(value.strip() for value in selected))
         defer_panel_update = payload.get("defer_panel_update") is True
         with startup_lock:
             if startup_state["panel_update_started"]:
@@ -938,7 +981,11 @@ def create_app(
                 if startup_state["awaiting_panel_decision"] and not defer_panel_update:
                     raise RuntimeError("Najpierw wybierz Aktualizuj panel albo Nie teraz.")
                 startup_state["awaiting_panel_decision"] = False
-                resume_startup = startup_state["auto_updates_pending"]
+                resume_startup = startup_state["auto_updates_pending"] and selected is None
+            if selected is not None:
+                results = get_service().scan(progress, container_ids=selected)
+                remember_scan(annotate_auto_update_state(results), partial=True)
+                return {"containers": results, "partial": True, "scanned_count": len(results)}
             if resume_startup:
                 return run_startup_auto_updates(progress, skip_panel_check=True, scan_all=True)
             return remember_scan(annotate_auto_update_state(get_service().scan(progress)))

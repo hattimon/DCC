@@ -19,6 +19,10 @@ const openReports = new Set();
 let preferences = JSON.parse($('panel-preferences').textContent);
 let audioContext = null;
 const picked = new Set();
+const scanPicked = new Set();
+const scanning = new Set();
+const recentChecks = new Set();
+let scanSelectionMode = false;
 
 async function unlockAudio() {
   if (!preferences.sounds_enabled) return;
@@ -76,6 +80,15 @@ function setBusy(value) {
   busy = value;
   $('progress').classList.toggle('active', value);
   for (const id of ['scan', 'check-self', 'select-updates', 'select-all']) $(id).disabled = value;
+  $('choose-scan').disabled = $('cancel-scan').disabled = value;
+  $('scan-selected').disabled = value || scanPicked.size === 0;
+  $('scan-selected-label').textContent = scanPicked.size ? t('scan_selected_count', {count: scanPicked.size}) : t('scan_selected');
+  $('choose-scan').hidden = scanSelectionMode;
+  $('scan-selected').hidden = $('cancel-scan').hidden = !scanSelectionMode;
+  $('select-updates').hidden = $('update').hidden = scanSelectionMode;
+  $('scan-selection-hint').hidden = !scanSelectionMode;
+  $('select-all').setAttribute('aria-label', t(scanSelectionMode ? 'select_all_scan' : 'select_all'));
+  document.querySelectorAll('.row-scan').forEach(button => { button.disabled = value; });
   $('update-self').disabled = value || !lastSelfCheck?.supported;
   $('update').disabled = value || picked.size === 0;
   $('schedule-save').disabled = value || !!scheduleState?.pending || !!scheduleState?.storage_error;
@@ -118,23 +131,28 @@ function render(items = allItems) {
   const eligible = items.filter(item => item.supported && item.update_available && !item.check_error && !item.is_panel);
   const ids = new Set(eligible.map(item => item.id));
   for (const id of picked) if (!ids.has(id)) picked.delete(id);
+  const scannable = new Set(items.filter(item => !item.is_panel).map(item => item.id));
+  for (const id of scanPicked) if (!scannable.has(id)) scanPicked.delete(id);
+  const selection = scanSelectionMode ? scanPicked : picked;
+  const selectable = scanSelectionMode ? scannable : ids;
   $('count').textContent = items.length;
   $('available-count').textContent = eligible.length;
   $('auto-count').textContent = items.filter(item => item.auto_update_on_startup).length;
   const query = $('filter').value.trim().toLocaleLowerCase();
-  const filtered = items.filter(item => (preferences.show_unavailable || item.is_panel || (item.supported && !item.check_error)) && `${item.name} ${item.current_image} ${item.target_image || ''}`.toLocaleLowerCase().includes(query));
+  const filtered = items.filter(item => (preferences.show_unavailable || item.is_panel || item.scan_pending || recentChecks.has(item.id) || (item.supported && !item.check_error)) && `${item.name} ${item.current_image} ${item.target_image || ''}`.toLocaleLowerCase().includes(query));
   const rows = $('rows');
   rows.replaceChildren();
   if (!filtered.length) {
     const row = element('tr'); const cell = element('td', 'empty', t(items.length && !query && !preferences.show_unavailable ? 'hidden_unavailable' : items.length ? 'no_matches' : 'empty')); cell.colSpan = 7; row.append(cell); rows.append(row);
   }
   for (const item of filtered) {
-    const row = element('tr', picked.has(item.id) ? 'selected' : '');
+    const row = element('tr', selection.has(item.id) ? 'selected' : '');
+    row.classList.toggle('scanning', scanning.has(item.id));
     const cells = Array.from({length: 7}, () => element('td'));
     row.append(...cells);
-    if (ids.has(item.id)) {
-      const check = element('input', 'pick'); check.type = 'checkbox'; check.value = item.id; check.checked = picked.has(item.id); check.setAttribute('aria-label', t('pick', {name: item.name}));
-      check.addEventListener('change', () => { check.checked ? picked.add(item.id) : picked.delete(item.id); row.classList.toggle('selected', check.checked); setBusy(busy); });
+    if (selectable.has(item.id)) {
+      const check = element('input', 'pick'); check.type = 'checkbox'; check.value = item.id; check.checked = selection.has(item.id); check.setAttribute('aria-label', t(scanSelectionMode ? 'pick_scan' : 'pick', {name: item.name}));
+      check.addEventListener('change', () => { check.checked ? selection.add(item.id) : selection.delete(item.id); row.classList.toggle('selected', check.checked); setBusy(busy); });
       cells[0].append(check);
     }
     const stateKey = {restarting: 'restarting_state', error: 'error_state'}[item.status] || item.status || 'unknown';
@@ -148,8 +166,22 @@ function render(items = allItems) {
         finally { setBusy(false); }
       }); cells[2].append(toggle);
     } else cells[2].append(element('span', 'manual-label', t(item.is_compose ? 'manual_compose' : 'unavailable')));
-    const status = item.is_panel ? 'self' : !item.supported ? 'blocked' : item.update_available ? 'available' : item.check_error ? 'unchecked' : 'current';
-    cells[3].append(element('span', `badge ${status}`, t(`${status}_badge`)));
+    const status = scanning.has(item.id) ? 'checking' : item.is_panel ? 'self' : item.scan_pending ? 'pending' : !item.supported ? 'blocked' : item.update_available ? 'available' : item.check_error ? 'unchecked' : 'current';
+    const statusCell = element('div', 'container-check');
+    statusCell.append(element('span', `badge ${status}`, t(`${status}_badge`)));
+    if (!item.is_panel) {
+      const button = element('button', 'row-scan'); button.type = 'button';
+      button.append($('row-scan-icon').content.cloneNode(true), element('span', '', t(scanning.has(item.id) ? 'checking_short' : 'check_one')));
+      button.setAttribute('aria-label', t('check_container', {name: item.name}));
+      button.title = t('check_container', {name: item.name});
+      button.setAttribute('aria-busy', String(scanning.has(item.id)));
+      button.addEventListener('click', () => action(() => scan(!!lastSelfCheck?.update_available, [item.id])));
+      statusCell.append(button);
+    }
+    if (item.checked_at) {
+      statusCell.title = t('last_checked', {date: new Intl.DateTimeFormat(document.documentElement.lang, {dateStyle:'medium', timeStyle:'medium'}).format(new Date(item.checked_at * 1000))});
+    }
+    cells[3].append(statusCell);
     cells[4].className = cells[5].className = 'image';
     cells[4].textContent = item.current_image || '—'; cells[5].textContent = item.target_image || '—';
     cells[6].append(element('div', 'detail', [item.source, item.message].filter(Boolean).join(' · ')));
@@ -197,7 +229,13 @@ async function runJob(path, payload = {}) {
 function presentScan(result) {
   const outcomes = result.updates || [];
   const byName = new Map(outcomes.map(item => [item.name, item]));
-  render((Array.isArray(result) ? result : result.containers || []).map(item => {
+  let containers = Array.isArray(result) ? result : result.containers || [];
+  if (result.partial) {
+    const merged = new Map(allItems.map(item => [item.id, item]));
+    containers.forEach(item => merged.set(item.id, item));
+    containers = [...merged.values()];
+  }
+  render(containers.map(item => {
     const outcome = byName.get(item.name);
     return outcome ? {...item, last_update_result: outcome.result, last_update_ok: outcome.ok} : item;
   }));
@@ -206,22 +244,35 @@ function presentScan(result) {
     showStatus(t('update_done', {ok, failed: outcomes.length - ok}), ok === outcomes.length ? 'ok' : 'error');
     const errors = outcomes.filter(item => !item.ok).map(item => `${item.name || item.id || ''}: ${item.result || item.message || item.error || t('job_error')}`);
     if (errors.length) showWarning(errors.join(' · '));
-  } else showStatus(t('scan_done', {count: allItems.length}), 'ok');
+  } else {
+    const failed = result.partial ? result.containers.filter(item => item.check_error).length : 0;
+    showStatus(t(failed ? 'scan_with_errors' : 'scan_done', {count: result.partial ? result.scanned_count : allItems.length, failed}), failed ? 'error' : 'ok');
+  }
 }
-async function scan(defer = false) {
-  const job = await runJob('/api/scan', {defer_panel_update: defer});
-  presentScan(job.results);
-  await loadLastScan(false);
+async function scan(defer = false, containerIds = null) {
+  const payload = {defer_panel_update: defer};
+  if (containerIds !== null) {
+    payload.container_ids = containerIds;
+    containerIds.forEach(id => recentChecks.add(id));
+  }
+  (containerIds || allItems.filter(item => !item.is_panel).map(item => item.id)).forEach(id => scanning.add(id));
+  render();
+  try {
+    const job = await runJob('/api/scan', payload);
+    scanning.clear();
+    presentScan(job.results);
+    await loadLastScan(false);
+  } finally { scanning.clear(); render(); }
 }
 async function loadLastScan(restoreRows = true) {
   const cached = await api('/api/containers');
   autoScanOnRefresh = cached.auto_scan_on_refresh === true;
   $('auto-scan').checked = autoScanOnRefresh;
+  if (restoreRows) render(cached.containers);
   if (!cached.scanned_at) return;
   const date = new Date(cached.scanned_at * 1000);
   $('last-scan').dateTime = date.toISOString();
   $('last-scan').textContent = new Intl.DateTimeFormat(document.documentElement.lang === 'pl' ? 'pl-PL' : 'en-GB', {dateStyle: 'medium', timeStyle: 'medium'}).format(date);
-  if (restoreRows) render(cached.containers);
 }
 function askPanelUpdate(result) {
   const dialog = $('self-update-dialog');
@@ -270,6 +321,9 @@ async function action(work) {
 $('check-self').addEventListener('click', () => action(checkPanelUpdate));
 $('update-self').addEventListener('click', () => action(checkPanelUpdate));
 $('scan').addEventListener('click', () => action(() => scan(!!lastSelfCheck?.update_available)));
+$('choose-scan').addEventListener('click', () => { scanSelectionMode = true; scanPicked.clear(); render(); });
+$('cancel-scan').addEventListener('click', () => { scanSelectionMode = false; scanPicked.clear(); render(); });
+$('scan-selected').addEventListener('click', () => action(() => scan(!!lastSelfCheck?.update_available, [...scanPicked])));
 $('auto-scan').addEventListener('change', () => action(async () => {
   const enabled = $('auto-scan').checked;
   setBusy(true);
@@ -286,7 +340,7 @@ $('show-all').addEventListener('change', () => action(async () => {
 }));
 $('filter').addEventListener('input', () => render());
 $('select-updates').addEventListener('click', () => { document.querySelectorAll('.pick').forEach(check => picked.add(check.value)); render(); });
-$('select-all').addEventListener('change', event => { document.querySelectorAll('.pick').forEach(check => event.target.checked ? picked.add(check.value) : picked.delete(check.value)); render(); });
+$('select-all').addEventListener('change', event => { const selection = scanSelectionMode ? scanPicked : picked; document.querySelectorAll('.pick').forEach(check => event.target.checked ? selection.add(check.value) : selection.delete(check.value)); render(); });
 $('update').addEventListener('click', () => action(async () => {
   if (!picked.size || !confirm(t('confirm_updates', {count: picked.size}))) return;
   showWarning(); const job = await runJob('/api/update', {container_ids: [...picked]}); picked.clear(); presentScan(job.results); await loadLastScan(false);

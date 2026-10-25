@@ -27,7 +27,7 @@ RUN apt-get update \
     echo "${compose_sha}  /usr/local/bin/docker-compose" | sha256sum --check --status; \
     chmod 0755 /usr/local/bin/docker-compose
 
-COPY updater.py web.py self_update.py i18n.py scheduler.py reports.py notifications.py registry_access.py compose_config.py compose_manager.py cinema_windows.py ./
+COPY VERSION updater.py web.py self_update.py i18n.py scheduler.py reports.py notifications.py registry_access.py compose_config.py compose_manager.py cinema_windows.py ./
 COPY windows ./windows
 COPY templates ./templates
 COPY static ./static

@@ -1284,18 +1284,63 @@ class UpdateService:
             )
         return result
 
-    def scan(self, progress: Callable[[str], None] | None = None) -> list[dict[str, Any]]:
+    def inventory(self) -> list[dict[str, Any]]:
+        """List local containers without loading the catalog or contacting registries."""
+        results = []
+        for container in self.client.containers.list(all=True, ignore_removed=True):
+            if self._is_self_update_helper(container):
+                continue
+            attrs = container.attrs
+            image = str((attrs.get("Config") or {}).get("Image") or "")
+            panel = self._is_self(container)
+            results.append({
+                "id": str(container.id),
+                "name": str(getattr(container, "name", container.id)).lstrip("/"),
+                "current_image": image,
+                "target_image": "",
+                "status": str((attrs.get("State") or {}).get("Status") or getattr(container, "status", "unknown")),
+                "is_panel": panel,
+                "is_compose": self._is_compose(container),
+                "supported": False,
+                "auto_update_supported": False,
+                "update_available": False,
+                "check_error": False,
+                "scan_pending": not panel,
+                "checked_at": None,
+                "message": "To jest panel aktualizujący; pominięto aktualizację samego panelu." if panel
+                           else "Nie sprawdzono jeszcze aktualizacji tego kontenera.",
+            })
+        return results
+
+    def scan(
+        self, progress: Callable[[str], None] | None = None, *, container_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         self._compose_cache.clear()
         self._registry_cache.clear()
-        apps, catalog_error = self._catalog()
         containers = [
             container for container in self.client.containers.list(all=True, ignore_removed=True)
             if not self._is_self_update_helper(container)
         ]
+        # Keep all local metadata for dependency/port checks, but inspect remote
+        # images only for the explicitly requested, exact container IDs.
+        by_id = {str(container.id): container for container in containers}
+        selected_ids = list(dict.fromkeys(container_ids)) if container_ids is not None else list(by_id)
+        if not selected_ids:
+            return []
+        apps, catalog_error = self._catalog() if any(value in by_id for value in selected_ids) else ([], None)
         results = []
-        for index, container in enumerate(containers, start=1):
+        for index, container_id in enumerate(selected_ids, start=1):
+            container = by_id.get(container_id)
+            if container is None:
+                results.append({
+                    "id": container_id, "name": container_id, "status": "error",
+                    "supported": False, "auto_update_supported": False, "update_available": False,
+                    "check_error": True, "missing": True, "scan_pending": False, "checked_at": time.time(),
+                    "message": "Kontener nie jest już dostępny. Odśwież skan.",
+                })
+                continue
             if progress:
-                progress(f"Sprawdzanie kontenera {index}/{len(containers)}: {getattr(container, 'name', container.id)}")
+                progress(f"Sprawdzanie kontenera {index}/{len(selected_ids)}: {getattr(container, 'name', container.id)}")
             try:
                 item = self.inspect_container(container, apps, catalog_error, containers)
                 reason = self.automatic_dependency_blocker(container, containers)
@@ -1313,7 +1358,10 @@ class UpdateService:
                     "source": "",
                     "status": "error",
                     "message": f"Nie udało się odczytać kontenera: {type(exc).__name__}",
+                    "check_error": True,
+                    "auto_update_supported": False,
                 })
+            results[-1].update(checked_at=time.time(), scan_pending=False)
         return results
 
     def _create_config(
