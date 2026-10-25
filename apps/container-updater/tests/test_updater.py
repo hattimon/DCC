@@ -6,7 +6,7 @@ import unittest
 import base64
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.error import URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -242,6 +242,28 @@ class ContainerSafetyTests(unittest.TestCase):
         self.assertTrue(result["check_error"])
         self.assertIn("katalog DCC jest niedostępny", result["message"])
         self.assertIn("raw.githubusercontent.com", result["message"])
+
+
+class LocalImageLookupTests(unittest.TestCase):
+    def test_missing_sdk_image_property_does_not_raise_or_resolve_a_moved_tag(self):
+        from docker.errors import ImageNotFound
+        from docker.models.containers import Container
+
+        image_id = 'sha256:' + 'a' * 64
+        images = Mock()
+        images.get.side_effect = ImageNotFound('original image metadata is missing')
+        client = SimpleNamespace(images=images)
+        container = Container(attrs={'Image': image_id, 'Config': {'Image': 'example/web:latest'}}, client=client)
+
+        self.assertIsNone(UpdateService(client)._local_image(container))
+        self.assertEqual([call.args[0] for call in images.get.call_args_list], [image_id, 'a' * 64])
+        images.pull.assert_not_called()
+
+    def test_cached_image_fallback_is_preserved_when_direct_lookup_fails(self):
+        image = SimpleNamespace(id='original-image')
+        images = SimpleNamespace(get=Mock(side_effect=RuntimeError('lookup unavailable')))
+        container = SimpleNamespace(attrs={'Image': 'original-image'}, image=image)
+        self.assertIs(UpdateService(SimpleNamespace(images=images))._local_image(container), image)
 
 
 class RegistryRetryTests(unittest.TestCase):

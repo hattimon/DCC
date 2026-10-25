@@ -294,6 +294,64 @@ class ManagerAnalysisTests(unittest.TestCase):
         self.assertEqual(checked,[TARGET]);self.assertEqual(result[0]['services'][0]['target_image'],TARGET)
         self.assertEqual(result[0]['status'],'update_available')
 
+    def test_missing_original_image_does_not_hide_other_services_or_projects(self):
+        from docker.errors import ImageNotFound
+        from docker.models.containers import Container
+
+        missing=copy.deepcopy(self.fixture.container.attrs)
+        missing.update(Id='missing-container',Name='/demo-missing-1',Image='sha256:'+'f'*64)
+        missing['Config']['Labels']['com.docker.compose.service']='missing'
+        broken=Container(attrs=missing,client=self.fixture.client)
+        peer=copy.deepcopy(self.fixture.container);peer.id='peer';peer.name='other-web-1'
+        peer.attrs['Config']['Labels']['com.docker.compose.project']='other'
+        self.fixture.containers[:]=[broken,self.fixture.container,peer]
+        get_image=self.fixture.client.images.get
+        def lookup(ref):
+            if ref in ('sha256:'+'f'*64,'f'*64):raise ImageNotFound('PRIVATE_IMAGE_ERROR')
+            return get_image(ref)
+        self.fixture.client.images.get=lookup
+        self.fixture.service._local_image=UpdateService._local_image.__get__(self.fixture.service)
+        checked=[]
+        self.fixture.service._registry_digest=lambda image,local:(checked.append(image) or False,'')
+
+        projects=self.manager.discover(check_updates=True)
+
+        self.assertEqual([project['name'] for project in projects],['demo','other'])
+        services={entry['name']:entry for entry in projects[0]['services']}
+        self.assertIsNone(services['missing']['update_available'])
+        self.assertEqual(services['missing']['check_diagnostics'],['local_image_unavailable'])
+        self.assertFalse(services['web']['update_available'])
+        self.assertIn('local_image_unavailable',projects[0]['blockers'])
+        self.assertEqual(projects[0]['status'],'review_required')
+        self.assertEqual(projects[1]['status'],'up_to_date')
+        self.assertEqual(len(checked),2)
+        self.assertNotIn('PRIVATE_IMAGE_ERROR',json.dumps(projects))
+        self.assertEqual(self.fixture.pulls,[])
+
+    def test_registry_exception_is_reported_per_service_and_does_not_hide_projects(self):
+        peer=copy.deepcopy(self.fixture.container);peer.id='peer'
+        peer.attrs['Config']['Labels']['com.docker.compose.project']='other'
+        self.fixture.containers.append(peer)
+        with patch.object(self.fixture.service,'_registry_digest',side_effect=[RuntimeError('PRIVATE_TOKEN'),(False,'')]):
+            projects=self.manager.discover(check_updates=True)
+        self.assertEqual(len(projects),2)
+        self.assertEqual(projects[0]['services'][0]['check_diagnostics'],['image_check_failed'])
+        self.assertIsNone(projects[0]['services'][0]['update_available'])
+        self.assertEqual(projects[1]['status'],'up_to_date')
+        self.assertNotIn('PRIVATE_TOKEN',json.dumps(projects))
+
+    def test_unknown_replica_prevents_false_up_to_date_in_either_order(self):
+        peer=copy.deepcopy(self.fixture.container);peer.id='peer'
+        for results in ([(None,''),(False,'')],[(False,''),(None,'')],[(None,''),(True,'')]):
+            with self.subTest(results=results):
+                self.fixture.containers[:]=[self.fixture.container,peer]
+                with patch.object(self.fixture.service,'_registry_digest',side_effect=results):
+                    project=self.manager.discover(check_updates=True)[0]
+                self.assertEqual(project['services'][0]['check_diagnostics'],['image_check_failed'])
+                expected=True if any(value is True for value,_ in results) else None
+                self.assertIs(project['services'][0]['update_available'],expected)
+                self.assertEqual(project['status'],'update_available' if expected else 'review_required')
+
     def test_checkboxes_without_pinned_isolated_test_evidence_do_not_prove_compatibility(self):
         self.fixture.approval['profile'].pop('evidence');self.fixture.save_approval()
         self.assertIn('compatibility_unverified',self.manager.analyze('demo')['blockers'])
@@ -605,6 +663,20 @@ class ComposeWebTests(unittest.TestCase):
         self.assertEqual(self.client.post('/api/compose/operations/'+operation['id']+'/approve',json={},headers=headers).status_code,409)
         self.assertEqual(self.client.post('/api/compose/operations/'+operation['id']+'/execute',json={},headers=headers).status_code,409)
         self.assertEqual(self.client.get('/api/compose/projects/demo/history').get_json()['operations'][0]['id'],operation['id'])
+
+    def test_discovery_job_completes_when_one_local_image_is_unavailable(self):
+        self.login()
+        self.fixture.service._local_image=lambda container:None
+        response=self.client.post('/api/compose/discover',json={},headers={'X-CSRF-Token':'fixture-token'})
+        self.assertEqual(response.status_code,202)
+        job=response.get_json()
+        for _ in range(200):
+            job=self.client.get('/api/job?id='+job['id']).get_json()
+            if job['status'] not in ('queued','running'):break
+            time.sleep(.01)
+        self.assertEqual(job['status'],'done')
+        self.assertEqual(job['results']['projects'][0]['services'][0]['check_diagnostics'],['local_image_unavailable'])
+        self.assertEqual(len(self.client.get('/api/compose/projects').get_json()['projects']),1)
 
 
 @unittest.skipUnless(shutil.which('docker-compose'), 'Compose CLI integration runs in the isolated test image')

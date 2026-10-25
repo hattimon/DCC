@@ -550,6 +550,8 @@ for _code, _en, _pl in (
     ('service_consent_required', 'A service has not opted into this update mode.', 'Usługa nie ma zgody na ten tryb aktualizacji.'),
     ('base_missing', 'BASE is missing. Only two-way review is possible; deployment is blocked.', 'Brak BASE. Dostępna jest analiza dwustronna; wdrożenie zablokowane.'),
     ('files_missing', 'The complete Compose file set is unavailable.', 'Brak kompletnego zestawu plików Compose.'),
+    ('local_image_unavailable', 'Docker cannot read the original local image. The container is preserved; updates are blocked until a rollback image is available.', 'Docker nie może odczytać oryginalnego lokalnego obrazu. Kontener pozostaje bez zmian; aktualizacja jest zablokowana do czasu zapewnienia obrazu do wycofania.'),
+    ('image_check_failed', 'This service image could not be checked. Other projects are still shown; retry after resolving image or registry access.', 'Nie udało się sprawdzić obrazu tej usługi. Pozostałe projekty nadal są widoczne; ponów próbę po sprawdzeniu obrazu lub dostępu do rejestru.'),
     ('files_changed', 'Configuration or approval inputs changed. Analyze again.', 'Zmieniły się pliki konfiguracji lub zgody. Wykonaj ponowną analizę.'),
     ('path_unsafe', 'Unsafe path, traversal, symlink or inaccessible file.', 'Niebezpieczna ścieżka, traversal, symlink lub niedostępny plik.'),
     ('write_not_granted', 'Controlled write access to the exact image override file is required.', 'Wymagany kontrolowany zapis do wskazanego pliku override obrazów.'),

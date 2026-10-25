@@ -381,7 +381,8 @@ class SafeComposeManager:
                 labels = (container.attrs.get('Config') or {}).get('Labels') or {}
                 svc = labels.get(COMPOSE_SERVICE_LABEL) or 'unknown'
                 entry = by_service.setdefault(svc, {'name': svc, 'replicas': 0, 'images': [], 'image_ids': [],
-                                                       'update_available': None, 'dependencies': [], 'database': False})
+                                                       'update_available': None, 'dependencies': [], 'database': False,
+                                                       'check_diagnostics': []})
                 entry['replicas'] += 1
                 image = str((container.attrs.get('Config') or {}).get('Image') or '')
                 if image not in entry['images']:
@@ -393,9 +394,25 @@ class SafeComposeManager:
                 entry['database'] |= bool(DATABASE.search(image))
                 item['config_files'] = sorted(set(item['config_files']) | set(str(labels.get(COMPOSE_CONFIG_FILES_LABEL) or '').split(',')))
                 if check_updates:
-                    local = service._local_image(container)
-                    available, _detail = service._registry_digest(entry.get('target_image') or image, local) if local else (None, '')
-                    entry['update_available'] = available
+                    try:
+                        local = service._local_image(container)
+                        if local is None:
+                            entry['check_diagnostics'].append('local_image_unavailable')
+                            item['blockers'].append('local_image_unavailable')
+                            available = None
+                        else:
+                            available, _detail = service._registry_digest(entry.get('target_image') or image, local)
+                            if available is None:
+                                entry['check_diagnostics'].append('image_check_failed')
+                    except Exception:
+                        # A missing image, registry outage or one stale replica
+                        # must not hide every Compose project on the host.
+                        available = None
+                        entry['check_diagnostics'].append('image_check_failed')
+                    if available is True:
+                        entry['update_available'] = True
+                    elif entry['update_available'] is not True:
+                        entry['update_available'] = None if entry['check_diagnostics'] else available
                 item['networks'] = sorted(set(item['networks']) | set((container.attrs.get('NetworkSettings') or {}).get('Networks') or {}))
                 item['volumes'] = sorted(set(item['volumes']) | {str(m.get('Name') or m.get('Source') or '') for m in container.attrs.get('Mounts') or []})
             # Read labels/files through the existing loader for display only. The
@@ -413,6 +430,9 @@ class SafeComposeManager:
             except Exception:
                 item['blockers'].append('compose_validation_failed')
             item['services'] = list(by_service.values())
+            item['blockers'] = sorted(set(item['blockers']))
+            for entry in item['services']:
+                entry['check_diagnostics'] = sorted(set(entry['check_diagnostics']))
             item['databases'] = [entry['name'] for entry in item['services'] if entry['database']]
             if not histories and any(entry['update_available'] for entry in item['services']):
                 item['status'] = 'update_available'

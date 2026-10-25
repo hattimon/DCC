@@ -1080,7 +1080,14 @@ class UpdateService:
         try:
             return self.client.images.get(image_id) if image_id else container.image
         except Exception:
-            return getattr(container, "image", None)
+            # Docker SDK's image property performs another daemon lookup. A
+            # running container can outlive deleted image metadata, so this
+            # fallback may raise ImageNotFound too. Keep inventory readable;
+            # never substitute the current tag for the missing original image.
+            try:
+                return getattr(container, "image", None)
+            except Exception:
+                return None
 
     @staticmethod
     def _named_local_image(container: Any, local_image: Any) -> tuple[str, str | None]:
