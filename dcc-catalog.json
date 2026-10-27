@@ -309,8 +309,8 @@
       "homepage_url": "https://changedetection.io/",
       "icon_text": "📊",
       "upstream_repo": "dgtlmoon/changedetection.io",
-      "latest_release": "0.60.9",
-      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.9",
+      "latest_release": "0.60.10",
+      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.60.10",
       "icon_url": "catalog/media/icons/changedetection-io.png"
     },
     {
@@ -1022,8 +1022,8 @@
       "homepage_url": "https://jellyfin.org/",
       "icon_text": "🎬",
       "upstream_repo": "jellyfin/jellyfin",
-      "latest_release": "v12.3",
-      "latest_release_url": "https://github.com/jellyfin/jellyfin/releases/tag/v12.3",
+      "latest_release": "v12.4",
+      "latest_release_url": "https://github.com/jellyfin/jellyfin/releases/tag/v12.4",
       "icon_url": "catalog/media/icons/jellyfin.png"
     },
     {
@@ -1048,8 +1048,8 @@
       "homepage_url": "https://uptime.kuma.pet/",
       "icon_text": "📊",
       "upstream_repo": "louislam/uptime-kuma",
-      "latest_release": "2.5.7",
-      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.7",
+      "latest_release": "2.5.8",
+      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.8",
       "icon_url": "catalog/media/icons/uptime-kuma.png"
     },
     {
@@ -1720,8 +1720,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.18.0",
-      "latest_release_url": "https://github.com/Mintplex-Labs/anything-llm/releases/tag/v1.18.0",
+      "latest_release": "v1.19.0",
+      "latest_release_url": "https://github.com/Mintplex-Labs/anything-llm/releases/tag/v1.19.0",
       "icon_url": "catalog/media/icons/anythingllm.png"
     },
     {
@@ -1891,8 +1891,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.154.1",
-      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.154.1",
+      "latest_release": "v1.155.0",
+      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.155.0",
       "icon_url": "catalog/media/icons/victoriametrics.png"
     },
     {
