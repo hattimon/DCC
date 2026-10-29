@@ -591,6 +591,19 @@ class UpdateService:
                             or source.startswith(peer_source.rstrip("/") + "/"))
                     ))
                     if overlap:
+                        # Management tools observe directories rather than share
+                        # application data. The updater's read-only binds and a
+                        # host-PID monitor's read-only ancestor views are safe;
+                        # explicit data mounts and other consumers stay blocked.
+                        if peer.get("Type") == "bind" and peer.get("RW") is False:
+                            host_observer = other_host.get("PidMode") == "host" and any(
+                                view.get("Type") == "bind" and view.get("Source") == "/"
+                                and view.get("RW") is False
+                                for view in other.attrs.get("Mounts") or []
+                            )
+                            ancestor_view = source != peer_source and source.startswith(peer_source.rstrip("/") + "/")
+                            if UpdateService._is_self(other) or (host_observer and ancestor_view):
+                                continue
                         return f"Automatyczna aktualizacja zablokowana: trwałe dane współdzieli usługa {other.name}."
         return None
 

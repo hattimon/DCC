@@ -166,6 +166,95 @@ class ContainerSafetyTests(unittest.TestCase):
         peer.attrs['Mounts'][0]['Source'] = '/srv/application'
         self.assertIsNone(service.automatic_dependency_blocker(container, [container, peer]))
 
+    def test_updater_read_only_host_observation_does_not_block_application_update(self):
+        container = self._container(Mounts=[{
+            'Type': 'bind', 'Source': '/root/.n8n', 'Destination': '/home/node/.n8n', 'RW': True,
+        }])
+        panel = SimpleNamespace(id='panel-id', name='dcc-container-updater', attrs={'Mounts': [{
+            'Type': 'bind', 'Source': '/root', 'Destination': '/root', 'RW': False,
+        }]})
+        self.assertIsNone(UpdateService.automatic_dependency_blocker(container, [container, panel]))
+        panel.name = 'renamed-panel'
+        panel.attrs['Config'] = {'Labels': {'com.hattimon.dcc-updater': 'true'}}
+        self.assertIsNone(UpdateService.automatic_dependency_blocker(container, [container, panel]))
+
+    def test_updater_observation_exception_requires_explicit_read_only_bind_mount(self):
+        container = self._container(Mounts=[{
+            'Type': 'bind', 'Source': '/root/.n8n', 'Destination': '/data', 'RW': True,
+        }])
+        for permission in (True, None, 'false'):
+            with self.subTest(permission=permission):
+                mount = {'Type': 'bind', 'Source': '/root', 'Destination': '/root'}
+                if permission is not None:
+                    mount['RW'] = permission
+                panel = SimpleNamespace(id='panel-id', name='dcc-container-updater', attrs={'Mounts': [mount]})
+                self.assertIn('trwałe dane', UpdateService.automatic_dependency_blocker(container, [container, panel]))
+
+    def test_read_only_application_consumer_remains_a_dependency(self):
+        container = self._container(Mounts=[{
+            'Type': 'bind', 'Source': '/root/.n8n', 'Destination': '/data', 'RW': True,
+        }])
+        reader = SimpleNamespace(id='reader-id', name='application-reader', attrs={'Mounts': [{
+            'Type': 'bind', 'Source': '/root', 'Destination': '/root', 'RW': False,
+        }]})
+        self.assertIn('application-reader', UpdateService.automatic_dependency_blocker(container, [container, reader]))
+
+    def test_updater_named_volume_sharing_remains_a_dependency(self):
+        container = self._container(Mounts=[{
+            'Type': 'volume', 'Name': 'shared', 'Destination': '/data', 'RW': True,
+        }])
+        panel = SimpleNamespace(id='panel-id', name='dcc-container-updater', attrs={'Mounts': [{
+            'Type': 'volume', 'Name': 'shared', 'Destination': '/observe', 'RW': False,
+        }]})
+        self.assertIn('trwałe dane', UpdateService.automatic_dependency_blocker(container, [container, panel]))
+
+    def test_updater_read_only_mount_does_not_hide_explicit_or_other_dependencies(self):
+        container = self._container(Mounts=[{
+            'Type': 'bind', 'Source': '/root/.n8n', 'Destination': '/data', 'RW': True,
+        }])
+        panel = SimpleNamespace(id='panel-id', name='dcc-container-updater', attrs={'Mounts': [{
+            'Type': 'bind', 'Source': '/root', 'Destination': '/root', 'RW': False,
+        }]})
+        panel.attrs['HostConfig'] = {'VolumesFrom': [container.id + ':ro']}
+        self.assertIn('VolumesFrom', UpdateService.automatic_dependency_blocker(container, [container, panel]))
+        panel.attrs['HostConfig'] = {'NetworkMode': 'container:' + container.id}
+        self.assertIn('przestrzeń', UpdateService.automatic_dependency_blocker(container, [container, panel]))
+        panel.attrs['HostConfig'] = {}
+        peer = SimpleNamespace(id='peer-id', name='actual-dependent', attrs={'Mounts': [{
+            'Type': 'bind', 'Source': '/root/.n8n', 'Destination': '/data', 'RW': True,
+        }]})
+        self.assertIn('actual-dependent', UpdateService.automatic_dependency_blocker(container, [container, panel, peer]))
+
+    def test_host_monitor_read_only_ancestor_views_do_not_share_application_data(self):
+        container = self._container(Mounts=[{
+            'Type': 'bind', 'Source': '/mnt/nvme/apps/n8n', 'Destination': '/data', 'RW': True,
+        }])
+        monitor = SimpleNamespace(id='monitor-id', name='system-monitor', attrs={
+            'HostConfig': {'PidMode': 'host'},
+            'Mounts': [
+                {'Type': 'bind', 'Source': '/', 'Destination': '/host', 'RW': False},
+                {'Type': 'bind', 'Source': '/mnt/nvme', 'Destination': '/disk', 'RW': False},
+            ],
+        })
+        self.assertIsNone(UpdateService.automatic_dependency_blocker(container, [container, monitor]))
+        monitor.attrs['HostConfig'] = {}
+        self.assertIn('system-monitor', UpdateService.automatic_dependency_blocker(container, [container, monitor]))
+
+    def test_host_monitor_direct_data_mounts_and_writable_views_remain_blocked(self):
+        container = self._container(Mounts=[{
+            'Type': 'bind', 'Source': '/srv/data', 'Destination': '/data', 'RW': True,
+        }])
+        for source, writable in (('/srv/data', False), ('/srv/data/database', False), ('/srv', True)):
+            with self.subTest(source=source, writable=writable):
+                monitor = SimpleNamespace(id='monitor-id', name='system-monitor', attrs={
+                    'HostConfig': {'PidMode': 'host'},
+                    'Mounts': [
+                        {'Type': 'bind', 'Source': '/', 'Destination': '/host', 'RW': False},
+                        {'Type': 'bind', 'Source': source, 'Destination': '/application', 'RW': writable},
+                    ],
+                })
+                self.assertIn('system-monitor', UpdateService.automatic_dependency_blocker(container, [container, monitor]))
+
     def test_digest_only_config_uses_a_unique_local_tag_for_registry_checks(self):
         local_image = SimpleNamespace(attrs={
             "RepoTags": ["ghcr.io/example/rss-bridge:latest"],
