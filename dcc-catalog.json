@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.40.12",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.12",
+      "latest_release": "v0.40.13",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.13",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -427,8 +427,8 @@
       "homepage_url": "https://nodejs.org/",
       "icon_text": "💻",
       "upstream_repo": "nodejs/node",
-      "latest_release": "v26.12.1",
-      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.12.1",
+      "latest_release": "v26.13.0",
+      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.13.0",
       "icon_url": "catalog/media/icons/nodejs.png"
     },
     {
@@ -709,8 +709,8 @@
       "homepage_url": "https://openwebui.com/",
       "icon_text": "💬",
       "upstream_repo": "open-webui/open-webui",
-      "latest_release": "v0.12.4",
-      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.12.4",
+      "latest_release": "v0.12.5",
+      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.12.5",
       "icon_url": "catalog/media/icons/open-webui.png"
     },
     {
