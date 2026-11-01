@@ -21,7 +21,14 @@ $actualHash = (Get-FileHash -Algorithm SHA256 $oldInstaller).Hash.ToLowerInvaria
 if ($actualHash -ne $expectedHash.ToLowerInvariant()) { throw 'The previous Windows installer checksum does not match its published release.' }
 
 function Invoke-DccInstaller([string]$Path,[string[]]$Arguments) {
-    $process = Start-Process -FilePath $Path -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
+    # PowerShell's Start-Process -Wait also waits for descendants. The updater
+    # intentionally launches DCC after a successful handoff, so wait only for
+    # the installer process itself.
+    $process = Start-Process -FilePath $Path -ArgumentList $Arguments -PassThru -WindowStyle Hidden
+    if (-not $process.WaitForExit(300000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "Installer did not exit within five minutes: $Path"
+    }
     if ($process.ExitCode -ne 0) { throw "Installer failed with exit code $($process.ExitCode): $Path" }
 }
 

@@ -10,7 +10,7 @@ old_sums="$root/SHA256SUMS-${old_version}.txt"
 base="https://github.com/hattimon/DCC/releases/download/v${old_version}"
 curl --fail --location --retry 3 "$base/DockerControlCenter_${old_version}_amd64.deb" --output "$old_deb"
 curl --fail --location --retry 3 "$base/SHA256SUMS-${old_version}.txt" --output "$old_sums"
-(cd "$root" && grep "DockerControlCenter_${old_version}_amd64.deb$" "$old_sums" | sha256sum --check)
+(cd "$root" && tr -d '\r' < "$old_sums" | grep -F "DockerControlCenter_${old_version}_amd64.deb" | sha256sum --check)
 
 sudo apt-get update -qq
 sudo apt-get install -y "$old_deb"
