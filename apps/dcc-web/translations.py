@@ -1,5 +1,6 @@
 """Small server-rendered authentication/shell dictionary; operational views use i18n.js."""
 EN={
+'Infrastruktura hosta Docker':'Docker host infrastructure','Odczytywanie infrastruktury…':'Reading infrastructure…',
 'logowanie':'sign in','Nazwa użytkownika':'Username','Hasło':'Password','Pierwsze uruchomienie':'First launch','Witaj ponownie':'Welcome back',
 'Utwórz administratora. Wybierz własne hasło — nie ma hasła domyślnego.':'Create an administrator with your own password. There is no default password.',
 'Zaloguj się, aby otworzyć swoje profile Docker.':'Sign in to open your Docker profiles.',

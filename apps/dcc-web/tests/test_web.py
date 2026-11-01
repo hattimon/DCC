@@ -424,6 +424,34 @@ class WebTests(unittest.TestCase):
         response=self.client.get('/api/containers')
         self.assertTrue(response.json['containers'][0]['PanelLinks'])
 
+    def test_panel_links_deduplicate_dual_stack_without_losing_bindings_or_distinct_hosts(self):
+        ports='0.0.0.0:8788->8788/tcp, [::]:8788->8788/tcp, 127.0.0.1:8788->8788/tcp, 192.0.2.7:8788->8788/tcp, 0.0.0.0:8080->80/tcp'
+        entry=enrich_containers([{'Ports':ports}],{'kind':'local'},'127.0.0.1')[0]
+        self.assertEqual([v['url'] for v in entry['PanelLinks']],['http://127.0.0.1:8788','http://192.0.2.7:8788','http://127.0.0.1:8080'])
+        self.assertEqual(len(entry['PublishedPorts']),5)
+        remote=enrich_containers([{'Ports':ports}],{'kind':'ssh','host':'192.168.1.7'})[0]
+        self.assertEqual(len(remote['PanelLinks']),3)
+
+    def test_infrastructure_is_profile_scoped_and_exposes_only_host_summary(self):
+        response=self.client.get('/api/infrastructure')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['name'],'local-review')
+        self.assertEqual(response.json['cpus'],8)
+        self.assertEqual(response.json['architecture'],'x86_64')
+        self.assertNotIn('credentials',response.json)
+        self.request('logout')
+        self.assertEqual(self.client.get('/api/infrastructure').status_code,401)
+
+    def test_bulk_autostart_preserves_confirmation_scope_and_rejects_duplicates(self):
+        targets=['a'*64,'b'*64]
+        digest=hashlib.sha256(json.dumps(targets,separators=(',',':')).encode()).hexdigest()
+        self.assertEqual(self.request('bulk',{'targets':targets,'action':'autostart-on'}).status_code,409)
+        for action in ('autostart-on','autostart-off'):
+            result=self.wait(self.request('bulk',{'targets':targets,'action':action,'confirmation':self.confirmation('bulk.'+action,digest)}))
+            self.assertTrue(all(v['ok'] for v in result))
+            self.assertIn([action,targets[0]],FakeBackend.commands)
+        self.assertEqual(self.request('bulk',{'targets':[targets[0],targets[0]],'action':'start'}).status_code,400)
+
     def test_port_conflicts_offer_free_ports_and_preview_locks_resolved_configuration(self):
         data=self.request('install/ports',{'ports':[8788]}).json
         self.assertEqual(data['suggested']['8788'],8789)

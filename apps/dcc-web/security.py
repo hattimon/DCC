@@ -8,9 +8,9 @@ from urllib.parse import urlsplit
 
 from flask import abort, g, request, session
 
-CAPABILITIES = {"read", "containers.write", "exec", "images.write", "volumes.write", "networks.write", "compose.write", "install", "update", "destructive"}
+CAPABILITIES = {"host.exec","read", "containers.write", "exec", "images.write", "volumes.write", "networks.write", "compose.write", "install", "update", "destructive"}
 ROLES = {"viewer": {"read"}, "operator": {"read", "containers.write", "exec"}, "admin": CAPABILITIES}
-SECRET_WORDS = re.compile(r"password|passwd|token|secret|authorization|api.?key|credential", re.I)
+SECRET_WORDS = re.compile(r"password|passwd|token|secret|authorization|api.?key|credential|setup.?code", re.I)
 
 
 def redact(value):
@@ -19,7 +19,8 @@ def redact(value):
     if isinstance(value, list):
         return ["%s=••••" % item.split("=", 1)[0] if isinstance(item, str) and "=" in item and SECRET_WORDS.search(item.split("=",1)[0]) else redact(item) for item in value]
     if isinstance(value,str):
-        return re.sub(r"(?i)((?:password|passwd|token|secret|api[_-]?key|authorization)\s*[:=]\s*)\S+",r"\1••••",value)
+        value=re.sub(r"(?im)(authorization\s*:\s*)[^\r\n]+",r"\1••••",value)
+        return re.sub(r"(?i)((?:password|passwd|token|secret|api[_ -]?key|setup[_ -]?code)\s*(?::|=|\bis\b|->)\s*)\S+",r"\1••••",value)
     return value
 
 
@@ -52,6 +53,9 @@ def initialize_security(app, state):
             "Referrer-Policy": "same-origin", "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
             "Cache-Control": "no-store" if not request.path.startswith("/static/") else "no-cache" if request.path.endswith(('.js','.css')) else "private, max-age=3600",
         })
+        if request.path=='/terminal':
+            # xterm creates CSS rules for terminal colours and cell geometry; scripts remain self-only.
+            response.headers['Content-Security-Policy']=response.headers['Content-Security-Policy'].replace("style-src 'self';","style-src 'self' 'unsafe-inline';")
         if app.config.get("SESSION_COOKIE_SECURE"):
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if request.path.startswith("/api/") and request.method not in {"GET", "HEAD", "OPTIONS"}:

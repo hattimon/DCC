@@ -9,7 +9,7 @@ class FakeBackend:
     commands=[]
     unavailable=False
     entries=[
-        {"ID":"a"*64,"Names":"dcc-container-updater","Image":"ghcr.io/hattimon/dcc-container-updater:latest","State":"running","Status":"Up 3 days (healthy)","Ports":"0.0.0.0:8788->8788/tcp","Labels":"com.hattimon.dcc-updater=true"},
+        {"ID":"a"*64,"Names":"dcc-container-updater","Image":"ghcr.io/hattimon/dcc-container-updater:latest","State":"running","Status":"Up 3 days (healthy)","Ports":"0.0.0.0:8788->8788/tcp, [::]:8788->8788/tcp","Labels":"com.hattimon.dcc-updater=true,com.docker.compose.project=review","Networks":"bridge,review_default"},
         {"ID":"b"*64,"Names":"jellyfin","Image":"linuxserver/jellyfin:latest","State":"running","Status":"Up 3 days","Ports":"0.0.0.0:8096->8096/tcp"},
         {"ID":"c"*64,"Names":"redis","Image":"redis:7","State":"running","Status":"Up 2 days","Ports":"0.0.0.0:6379->6379/tcp"},
     ]
@@ -37,6 +37,9 @@ class FakeBackend:
     def run(self,args,**kwargs):
         self.commands.append(list(args))
         return "fixture-result"
+    def stream(self,args,on_output,**kwargs):
+        self.commands.append(list(args))
+        on_output('Pulling test image: 1/1 layers complete\n')
     def json(self,args,**kwargs):
         self.commands.append(list(args))
         if args[:2]==["compose","ls"]:

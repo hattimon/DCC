@@ -11,7 +11,7 @@ import ssl
 import time
 from urllib.parse import urlsplit, urljoin
 
-from dcc_catalog import category_group, localized_categories, catalog_category_sort_key
+from dcc_catalog import category_group, localized_categories, catalog_category_sort_key, image_repository
 from ports import published_ports
 
 OFFICIAL = "https://github.com/hattimon/DCC"
@@ -88,6 +88,15 @@ class Catalogs:
 
     def sources(self):
         return [{key:row[key] for key in ("id","source","enabled","canonical","checked","error")} | {"count":len(json.loads(row["cache"] or "[]"))} for row in self.state.rows("SELECT * FROM sources ORDER BY canonical DESC, source")]
+
+    def host_panel_ports(self):
+        result={}
+        for app in self.all():
+            port=str(app.get('container_port',''))
+            number,_,protocol=port.partition('/')
+            if number.isdigit() and 1<=int(number)<=65535 and protocol in {'','tcp'}:
+                result[image_repository(app['image'])]=int(number)
+        return result
 
     def all(self):
         merged = {}

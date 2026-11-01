@@ -2,8 +2,9 @@
 import ipaddress
 import re
 from urllib.parse import urlsplit
+from dcc_catalog import image_repository
 
-WEB_PORTS={80,443,3000,3001,5000,5001,5006,8000,8001,8080,8081,8082,8086,8090,8096,8100,8443,8788,8789,8888,9000,9001,9090,9443}
+WEB_PORTS={80,443,3000,3001,5000,5001,5006,8000,8001,8080,8081,8082,8086,8090,8096,8100,8123,8443,8788,8789,8888,9000,9001,9090,9443}
 
 
 def parse_bindings(lines):
@@ -38,12 +39,19 @@ def profile_host(profile,fallback='localhost'):
     return urlsplit(endpoint).hostname or fallback
 
 
-def enrich_containers(containers,profile,fallback='localhost'):
+def enrich_containers(containers,profile,fallback='localhost',host_panels=None):
     host=profile_host(profile,fallback)
     for entry in containers:
         ports=published_ports(entry.get('Ports'))
-        links=[]
-        for port in ports:
+        inferred=[]
+        networks=entry.get('Networks') or []
+        if isinstance(networks,str):networks=networks.split(',')
+        native=(host_panels or {}).get(image_repository(entry.get('Image')))
+        if 'host' in networks and native:
+            inferred=[{'host_ip':'0.0.0.0','host_port':int(native),'container_port':int(native),'protocol':'tcp'}]
+        entry['HostNetworkPorts']=[v['host_port'] for v in inferred]
+        links={}
+        for port in [*ports,*inferred]:
             address=port['host_ip']
             remote=profile.get('kind') in {'ssh','balena','tcp'}
             loopback=address in {'127.0.0.1','::1','localhost'}
@@ -55,9 +63,14 @@ def enrich_containers(containers,profile,fallback='localhost'):
             except ValueError:pass
             scheme='https' if port['container_port'] in {443,8443,9443} or port['host_port'] in {443,8443,9443} else 'http'
             # TCP links are inferred from published ports; no claim that the service is HTTP.
-            links.append({'url':f'{scheme}://{target}:{port["host_port"]}','label':f'{target}:{port["host_port"]}','likely_panel':port['container_port'] in WEB_PORTS or port['host_port'] in WEB_PORTS})
+            url=f'{scheme}://{target}:{port["host_port"]}'
+            likely=port['container_port'] in WEB_PORTS or port['host_port'] in WEB_PORTS
+            if url in links:
+                links[url]['likely_panel'] |= likely
+            else:
+                links[url]={'url':url,'label':f'{target}:{port["host_port"]}','likely_panel':likely}
         entry['PublishedPorts']=ports
-        entry['PanelLinks']=links
+        entry['PanelLinks']=list(links.values())
     return containers
 
 

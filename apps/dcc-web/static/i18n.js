@@ -1,6 +1,66 @@
 // Only authored UI strings/template fragments are translated. Interpolated Docker data is preserved.
 let language='EN';
 const pairs=`
+Postęp instalacji|Installation progress
+Instalacja trwa…|Installation in progress…
+Sprawdzanie konfiguracji|Checking configuration
+Pobieranie obrazu|Pulling image
+Tworzenie kontenera|Creating container
+Uruchamianie i kontrola stanu|Starting and checking health
+Odczyt logów i danych dostępowych|Reading logs and access details
+Instalacja zakończona|Installation completed
+Instalacja nie powiodła się|Installation failed
+Kopiuj logi|Copy logs
+Pobierz logi|Download logs
+Pokaż dane dostępowe|Show access details
+Wykryj dane dostępowe|Detect access details
+Dane dostępowe wykryte w logach|Access details detected in logs
+Nie wykryto gotowych danych logowania. Utwórz konto w aplikacji przy pierwszym uruchomieniu.|No ready-made credentials were detected. Create an account in the application on first launch.
+Zamknięcie okna nie przerywa instalacji. Postęp można ponownie otworzyć w sklepie.|Closing this window does not cancel installation. Reopen progress from the store.
+Kontener został utworzony. Sprawdź jego panel i stan uruchomienia.|The container was created. Check its panel and startup status.
+Brak zapisanej instalacji|No saved installation
+Kliknij, aby skopiować pełną ścieżkę obrazu|Click to copy the full image reference
+Zaznacz grupę|Select group
+Grupuj|Group by
+Projekty|Projects
+Projekt|Project
+Lista płaska|Flat list
+Samodzielne kontenery|Standalone containers
+Bez sieci|No network
+kontenerów|containers
+uruchomionych|running
+Zaznacz jeden kontener|Select one container
+Brak uprawnienia profilu|Profile permission required
+Włącz zarządzanie kontenerami|Enable container management
+Profil zezwala na odczyt, ale zarządzanie kontenerami jest wyłączone.|This profile allows reading, but container management is disabled.
+Profil zezwala na odczyt, ale zarządzanie kontenerami jest wyłączone. Możesz włączyć start, stop, restart, pauzę i edycję konfiguracji dla tego profilu.|This profile allows reading, but container management is disabled. You can enable start, stop, restart, pause and configuration editing for this profile.
+Poproś administratora o uprawnienie containers.write.|Ask an administrator to enable containers.write.
+Niektóre operacje nie powiodły się.|Some operations failed.
+Wynik operacji zbiorczej|Bulk operation results
+Infrastruktura hosta Docker|Docker host infrastructure
+Odczytywanie infrastruktury…|Reading infrastructure…
+Nie udało się odczytać infrastruktury hosta Docker.|Could not read Docker host infrastructure.
+Aktywny profil|Active profile
+Język|Language
+Dokumentacja|Documentation
+Wyloguj|Sign out
+Twoje profile. Twoje dane.|Your profiles. Your data.
+Sklep|Store
+Terminal hosta|Host terminal
+Maksymalna liczba sesji terminala|Maximum terminal sessions
+Sprawdzaj aktualizacje panelu przy odświeżaniu|Check panel updates on refresh
+Nowa zakładka|New tab
+Zamknij zakładkę|Close tab
+Połącz|Connect
+Rozłącz|Disconnect
+Kopiuj|Copy
+Otwórz kolejne okno|Open another window
+Włącz terminal dla tego profilu|Enable terminal for this profile
+Połączenie z hostem…|Connecting to host…
+Sesja terminala zakończona.|Terminal session ended.
+Wpisywane polecenia działają na wybranym hoście.|Commands run on the selected host.
+Terminal wymaga osobnego uprawnienia host.exec.|Terminal requires the separate host.exec permission.
+Terminal|Terminal
 Wszystkie|All
 Zainstalowane|Installed
 Zainstalowana|Installed
@@ -24,6 +84,7 @@ Monitoring|Monitoring
 Obrazy|Images
 Obrazy Docker|Docker images
 Wolumeny|Volumes
+Sieć hosta|Host network
 Sieci|Networks
 Sieć|Network
 Sklep aplikacji|App Store
@@ -426,6 +487,7 @@ Operacja nadal trwa. Sprawdź stan Dockera przed ponowieniem.|The operation is s
 Sesja wygasła|Session expired
 Nieprawidłowa odpowiedź serwera|Invalid server response
 Nie udało się wykonać operacji|The operation could not be completed
+Połączono|Connected
 Połączono ·|Connected ·
 Połączono z|Connected to
 Brak połączenia Docker|Docker disconnected
@@ -477,6 +539,6 @@ const keys=Object.keys(messages).filter(key=>messages[key]!==key).sort((a,b)=>b.
 const pattern=new RegExp('(?<![\\p{L}\\p{N}_])(?:'+keys.map(escape).join('|')+')(?![\\p{L}\\p{N}_])','gu');
 export function setLanguage(value){language=value==='PL'?'PL':'EN';if(typeof document!=='undefined')document.documentElement.lang=language.toLowerCase();}
 export function getLanguage(){return language;}
-export function t(value){const text=String(value??''),trim=text.trim();if(language==='PL')return errorPL[text]||(text==='Theme Settings'?'Ustawienia motywu':text);if(messages[trim])return text.replace(trim,messages[trim]);return text;}
+export function t(value){const text=String(value??''),trim=text.trim();if(language==='PL'&&text.startsWith('Terminal session limit ('))return 'Osiągnięto limit sesji terminala '+text.match(/\(\d+\)/)?.[0]+'. Zamknij nieużywaną sesję albo zmień limit w Ustawieniach.';if(language==='PL'&&text==='Close an existing terminal before opening another one')return 'Osiągnięto limit aktywnych sesji terminala. Wliczane są sesje ze wszystkich kart i okien.';if(language==='PL'&&text.startsWith('This profile does not permit the operation: '))return 'Profil nie zezwala na tę operację: '+text.slice(42)+'. Sprawdź uprawnienia profilu.';if(language==='PL')return errorPL[text]||(text==='Theme Settings'?'Ustawienia motywu':text);if(messages[trim])return text.replace(trim,messages[trim]);return text;}
 export function literal(value){return language==='EN'?String(value).replace(pattern,key=>messages[key]):String(value).replace('Theme Settings','Ustawienia motywu');}
 export function html(parts,...values){return parts.map((part,index)=>literal(part)+(index<values.length?String(values[index]??''):'')).join('');}

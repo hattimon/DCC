@@ -1,6 +1,6 @@
-# DCC Web 0.1.0 — local acceptance candidate
+# DCC Web 0.1.0 — source preview
 
-DCC Web is an independently versioned browser interface for Docker Control Center. This candidate is local only: no image, release or deployment has been published. Desktop remains version 1.3.11 and retains its Qt interface and updater.
+DCC Web is an independently versioned browser interface for Docker Control Center. This source preview is available on the codex/desktop-web-1-3-11 branch; no production image or installable store entry has been published yet. Desktop remains version 1.3.11 and retains its Qt interface and updater.
 
 The implementation uses Flask, Waitress, SQLite, native ES modules and CSS. This follows the existing Container Updater stack and avoids adding a frontend framework or a JavaScript build pipeline. It shares `dcc_catalog.py` and the canonical `dcc-catalog.json` with Desktop, and delegates safe container recreation to the existing Container Updater service without modifying that module.
 
@@ -19,11 +19,13 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 ## What works
 
 - Local, Docker context, verified TLS, SSH, Balena and Windows WSL profiles; encrypted credentials and profile/user permissions.
-- Container lifecycle, bulk operations, inspect, bounded exec, configuration recreation, live polling logs/download and resource history.
+- Container lifecycle, project/network/flat grouping and group selection, a sticky bulk toolbar, inspect, exec, configuration recreation, polling logs/download and resource history.
+- Separate host-terminal windows and tabs using verified SSH, Windows ConPTY, Linux PTY and WSL; per-profile host.exec permission, 16 sessions by default with a configurable limit.
 - Images, volumes, networks, Compose projects and explicit import/validation of Compose YAML.
 - Shared App Store: additional GitHub/HTTPS/file catalogs, validation, refresh, cache, fallback, installation previews and volume-preserving uninstall.
 - Five themes, live appearance preview, per-user settings and three local audio packs, disabled initially.
-- Clickable panel endpoints, visible ports, direct bulk controls and grouped container actions.
+- Unique panel endpoints with copy buttons, full image-reference copying, visible ports, direct bulk controls and grouped container actions.
+- Installation phases, bounded redacted logs, copy/download and explicitly revealed encrypted startup access details.
 - OpenAI, compatible endpoints and Ollama assistants for configuration proposals, previews and port conflict resolution.
 - Authentication, CSRF, strict cookies, RBAC, confirmations, bounded jobs, audit and a read-only MCP stdio Preview.
 
@@ -53,3 +55,9 @@ start.ps1, start.sh     local launchers
 [Installation](docs/installation.md) · [Configuration](docs/configuration.md) · [Security](docs/security.md) · [Catalogs](docs/catalogs.md) · [AI assistant](docs/ai.md) · [MCP](docs/mcp.md) · [Themes/audio](docs/themes-audio.md) · [Tests](docs/testing.md)
 
 The running application serves an information page at `/about` and these documents at `/docs/<name>`. Catalog/media references are resolved inside this repository. DCC Web is intentionally not inserted into the 67-entry official catalog while its image is unpublished.
+
+## Preview status
+
+See [CURRENT_STATUS.md](CURRENT_STATUS.md) for the verified checkpoint, remaining work and publication limits. Do not treat planned features as shipped functionality.
+
+Project repository: [hattimon/DCC](https://github.com/hattimon/DCC).

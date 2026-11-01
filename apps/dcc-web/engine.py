@@ -19,6 +19,27 @@ class DockerBackend:
         self.profile = profile
         self.compose_root = compose_root
 
+    def _local_command(self):
+        profile,credentials=self.profile,self.profile.get('credentials',{})
+        kind=profile.get('kind','local')
+        command = ["docker"]
+        if kind == "wsl":
+            if os.name != "nt":
+                raise EngineError("WSL profiles require a Windows host; use an SSH or TLS profile from Linux")
+            command = ["wsl.exe", "--distribution", profile["distro"], "--exec", "docker"]
+        elif kind == "tcp":
+            command += ["--host", profile["endpoint"].replace('https://','tcp://',1), "--tlsverify"]
+            for key, flag in (("tls_ca", "--tlscacert"), ("tls_cert", "--tlscert"), ("tls_key", "--tlskey")):
+                if credentials.get(key):
+                    command += [flag, credentials[key]]
+        elif kind == "tunnel":
+            command += ["--host",profile["endpoint"]]
+        elif profile.get("context"):
+            command += ["--context", profile["context"]]
+        environment = {key:value for key,value in os.environ.items() if not key.startswith("_PYI") and key not in {"PYTHONPATH", "PYTHONHOME", "_MEIPASS2"}}
+        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        return command,environment,flags
+
     def run(self, args, timeout=45, input_data=None):
         if not isinstance(args, list) or not all(isinstance(arg, str) and "\0" not in arg for arg in args):
             raise ValueError("Invalid Docker arguments")
@@ -41,22 +62,7 @@ class DockerBackend:
             finally:
                 client.close()
         else:
-            command = ["docker"]
-            if kind == "wsl":
-                if os.name != "nt":
-                    raise EngineError("WSL profiles require a Windows host; use an SSH or TLS profile from Linux")
-                command = ["wsl.exe", "--distribution", profile["distro"], "--exec", "docker"]
-            elif kind == "tcp":
-                command += ["--host", profile["endpoint"].replace('https://','tcp://',1), "--tlsverify"]
-                for key, flag in (("tls_ca", "--tlscacert"), ("tls_cert", "--tlscert"), ("tls_key", "--tlskey")):
-                    if credentials.get(key):
-                        command += [flag, credentials[key]]
-            elif kind == "tunnel":
-                command += ["--host",profile["endpoint"]]
-            elif profile.get("context"):
-                command += ["--context", profile["context"]]
-            environment = {key:value for key,value in os.environ.items() if not key.startswith("_PYI") and key not in {"PYTHONPATH", "PYTHONHOME", "_MEIPASS2"}}
-            flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            command,environment,flags=self._local_command()
             try:
                 result = subprocess.run([*command, *args], input=input_data, capture_output=True, timeout=timeout, encoding="utf-8", errors="replace", env=environment, creationflags=flags)
             except (OSError, subprocess.TimeoutExpired) as error:
@@ -78,6 +84,54 @@ class DockerBackend:
             raise EngineError("Docker response is too large; reduce the requested range")
         return output
 
+
+    def stream(self,args,on_output,timeout=900):
+        """Stream Docker progress with bounded memory and the same verified transports."""
+        if not isinstance(args,list) or not all(isinstance(v,str) and "\0" not in v for v in args):
+            raise ValueError("Invalid Docker arguments")
+        if self.profile.get("kind") in {"ssh","balena"}:
+            profile=self.profile;credentials=profile.get("credentials",{})
+            client=paramiko.SSHClient();client.load_system_host_keys();client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            try:
+                client.connect(profile["host"],port=profile.get("port",22),username=profile["username"],password=credentials.get("password") or None,passphrase=credentials.get("passphrase") or None,key_filename=profile.get("key_path") or None,timeout=12,auth_timeout=12,banner_timeout=12)
+                channel=client.get_transport().open_session(timeout=12);channel.set_combine_stderr(True)
+                channel.exec_command(shlex.join([profile.get('cli') or ('balena' if profile['kind']=='balena' else 'docker'),*args]));channel.shutdown_write()
+                import codecs
+                decoder=codecs.getincrementaldecoder('utf-8')('replace')
+                deadline=time.monotonic()+timeout
+                while True:
+                    if channel.recv_ready():on_output(decoder.decode(channel.recv(8192)))
+                    elif channel.exit_status_ready():break
+                    elif time.monotonic()>deadline:raise EngineError("Docker operation timed out")
+                    else:time.sleep(.05)
+                remainder=decoder.decode(b'',final=True)
+                if remainder:on_output(remainder)
+                if channel.recv_exit_status():raise EngineError("Docker rejected the operation. Review the installation log.")
+            finally:client.close()
+            return
+        command,environment,flags=self._local_command()
+        expired=threading.Event()
+        try:
+            process=subprocess.Popen([*command,*args],stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace',env=environment,creationflags=flags,bufsize=1)
+        except OSError as error:raise EngineError("Docker is unavailable. Check the selected profile.") from error
+        def timeout_process():
+            expired.set()
+            if process.poll() is None:process.kill()
+        timer=threading.Timer(timeout,timeout_process);timer.daemon=True;timer.start()
+        try:
+            while True:
+                chunk=process.stdout.readline(8192)
+                if not chunk:break
+                on_output(chunk)
+            code=process.wait()
+            if expired.is_set():raise EngineError("Docker operation timed out")
+            if code:raise EngineError("Docker rejected the operation. Review the installation log.")
+        finally:
+            timer.cancel()
+            if process.poll() is None:process.kill()
+            process.stdout.close()
+            process.wait(timeout=5)
+
     def json(self, args, **kwargs):
         text = self.run(args, **kwargs).strip()
         if not text:
@@ -92,7 +146,12 @@ class DockerBackend:
 
     def containers(self):
         data = self.json(["ps", "--all", "--no-trunc", "--format", "{{json .}}"])
-        return data if isinstance(data, list) else [data]
+        values=data if isinstance(data,list) else [data]
+        for entry in values:
+            if not entry.get('State') or entry.get('State')=='unknown':
+                text=str(entry.get('Status','')).lower()
+                entry['State']='paused' if 'paused' in text else 'running' if text.startswith('up ') else 'exited' if text.startswith('exited') else 'restarting' if text.startswith('restarting') else 'created' if text.startswith('created') else 'dead' if text.startswith('dead') else 'unknown'
+        return values
 
     def inspect(self, target):
         return self.json(["inspect", target])[0]
@@ -147,7 +206,7 @@ class Jobs:
         finally:
             with self.lock:self.active.discard(profile)
 
-    def start(self, owner, profile, action, work):
+    def start(self, owner, profile, action, work, progress=False):
         import secrets
         with self.lock:
             if profile in self.active:
@@ -157,12 +216,22 @@ class Jobs:
             job_id = secrets.token_hex(12)
             self.active.add(profile)
             self.history[job_id] = {"id":job_id, "owner":owner, "profile":profile, "action":action, "status":"running", "started":time.time()}
+        def report(**updates):
+            with self.lock:
+                value=self.history[job_id]
+                text=updates.pop('log',None)
+                if text:value['logs']=(value.get('logs','')+str(text))[-200_000:]
+                value.update(updates)
         def run():
             try:
-                result = work()
+                result = work(report) if progress else work()
                 self.history[job_id].update(status="success", result=result)
-            except Exception:
-                self.history[job_id].update(status="error", error="Operation failed; review the selected profile, configuration and Docker state")
+                if progress:self.history[job_id]['phase']='completed'
+            except Exception as error:
+                from security import redact
+                message=redact(str(error)) if isinstance(error,(EngineError,ValueError)) else "Operation failed; review the selected profile, configuration and Docker state"
+                self.history[job_id].update(status="error", error=message)
+                if progress:self.history[job_id]['phase']='failed'
             finally:
                 with self.lock:
                     self.active.discard(profile)
@@ -171,4 +240,4 @@ class Jobs:
                     for key in completed[:-50]:
                         self.history.pop(key, None)
         threading.Thread(target=run, name="dcc-web-operation", daemon=True).start()
-        return {key:value for key,value in self.history[job_id].items() if key != "owner"}
+        return {"id":job_id,"profile":profile,"action":action,"status":"running"}

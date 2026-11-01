@@ -1142,20 +1142,30 @@
       "default_name": "home-assistant",
       "container_port": "8123",
       "host_port": "8123",
-      "extra": "--network=host",
+      "extra": "-v homeassistant_config:/config --restart unless-stopped",
       "command": "",
-      "notes": "Wymaga trybu host. Zalecany mocniejszy sprzet lub Raspberry Pi 4+.",
+      "notes": "Domyślnie używa mapowania portu i trwałego wolumenu /config. Przy pierwszym wejściu utwórz konto właściciela. Dla wykrywania urządzeń przez multicast na Linux można świadomie wybrać sieć hosta; wtedy portów nie mapuje się. Zalecany mocniejszy sprzęt lub Raspberry Pi 4+.",
       "lightweight": false,
       "category_en": "Smart Home 🏠 › IoT",
       "description_en": "Smart home automation hub.",
-      "notes_en": "Requires host network mode. Recommended on stronger hardware or Raspberry Pi 4+.",
+      "notes_en": "Uses a published port and persistent /config volume by default. Create the owner account on first access. On Linux, host networking can be explicitly selected for multicast device discovery; published port remapping does not apply in that mode. Recommended on stronger hardware or Raspberry Pi 4+.",
       "engines": null,
       "archs": null,
       "source_url": "",
-      "docs_url": "",
-      "homepage_url": "",
+      "docs_url": "https://www.home-assistant.io/installation/linux/",
+      "homepage_url": "https://www.home-assistant.io/",
       "icon_text": "🏠",
-      "icon_url": "catalog/media/icons/home-assistant.png"
+      "icon_url": "catalog/media/icons/home-assistant.png",
+      "post_install_hints": [
+        "Otwórz panel na porcie hosta wybranym podczas instalacji.",
+        "Przy pierwszym wejściu utwórz własne konto; Home Assistant nie ma domyślnego loginu i hasła.",
+        "Konfiguracja jest przechowywana w wolumenie homeassistant_config."
+      ],
+      "post_install_hints_en": [
+        "Open the panel at the host port selected during installation.",
+        "Create your own account on first access; Home Assistant has no default username or password.",
+        "Configuration is retained in the homeassistant_config volume."
+      ]
     },
     {
       "name": "Grafana",

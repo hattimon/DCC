@@ -2211,44 +2211,8 @@ def container_name_from_run_args(args: List[str]) -> str:
 
 
 def parse_credentials_from_logs(log_text: str, template: Optional[ImageTemplate] = None, lang: str = "EN") -> List[tuple[str, str]]:
-    text = str(log_text or "")
-    if not text.strip():
-        return []
-    found: List[tuple[str, str]] = []
-    seen = set()
-
-    def add(label: str, value: str):
-        clean_value = str(value or "").strip().strip("'\"`.,;[]()")
-        clean_label = str(label or "Credential").strip()
-        if not clean_value or len(clean_value) > 256:
-            return
-        key = (clean_label.casefold(), clean_value)
-        if key not in seen:
-            seen.add(key)
-            found.append((clean_label, clean_value))
-
-    for rule in (template.credential_patterns if template else []) or []:
-        try:
-            pattern = str(rule.get("regex") or "")
-            label = str(rule.get("label_en") if lang == "EN" and rule.get("label_en") else rule.get("label") or "Credential")
-            for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
-                value = match.groupdict().get("value") if match.groupdict() else None
-                if value is None and match.lastindex:
-                    value = match.group(1)
-                if value:
-                    add(label, value)
-        except re.error:
-            continue
-
-    generic_patterns = [
-        ("Password" if lang == "EN" else "Hasło", r"(?:web\s+)?(?:admin\s+)?password\s*(?:is|:|=|->)\s*(?P<value>[^\s]+)"),
-        ("Username" if lang == "EN" else "Login", r"(?:user(?:name)?|login)\s*(?:is|:|=|->)\s*(?P<value>[^\s]+)"),
-        ("Token", r"(?:access\s+)?token\s*(?:is|:|=|->)\s*(?P<value>[A-Za-z0-9._~+/-]{8,})"),
-    ]
-    for label, pattern in generic_patterns:
-        for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
-            add(label, match.group("value"))
-    return found[:8]
+    from dcc_catalog import parse_access_details
+    return parse_access_details(log_text, (template.credential_patterns if template else []) or [], lang)
 
 
 def normalize_deployment_repository_source(source: str) -> str:

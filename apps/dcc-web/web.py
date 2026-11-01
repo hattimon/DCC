@@ -1,5 +1,6 @@
 """DCC Web: independently versioned, local-first Docker workspace."""
 import argparse
+import base64
 from datetime import timedelta
 import hashlib
 import importlib.util
@@ -28,10 +29,10 @@ from urllib.parse import urlsplit
 
 VERSION = "0.1.0"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
-DEFAULT_SETTINGS = {"theme":"obsidian", "accent":"#73d2c4", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "audio":{"enabled":False,"master":40,"effects":60,"notifications":55,"style":"soft"}}
+DEFAULT_SETTINGS = {"theme":"obsidian", "accent":"#73d2c4", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":False,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 
 
-def create_app(config=None, backend_factory=None):
+def create_app(config=None, backend_factory=None, terminal_factory=None):
     app = Flask(__name__)
     app.config.update(DATA_DIR=os.environ.get("DCC_WEB_DATA", str(Path.home()/".dcc-web")), ALLOWED_HOSTS={"localhost","127.0.0.1","::1"}, SESSION_COOKIE_NAME="dcc_web_session", SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict", SESSION_COOKIE_SECURE=os.environ.get("DCC_WEB_HTTPS")=="1", PUBLIC_ORIGIN=os.environ.get("DCC_WEB_PUBLIC_ORIGIN"), PERMANENT_SESSION_LIFETIME=timedelta(hours=12), MAX_CONTENT_LENGTH=2_000_000, MASTER_KEY=os.environ.get("DCC_WEB_MASTER_KEY"))
     if config:
@@ -70,6 +71,10 @@ def create_app(config=None, backend_factory=None):
     if not state.profiles():
         state.save_profile("local", {"name":"Local Docker", "kind":"local", "permissions":["read"]})
 
+    from host_terminal import HostTerminals
+    terminals=HostTerminals(terminal_factory)
+    app.extensions['dcc_terminals']=terminals
+
     def body():
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
@@ -88,17 +93,17 @@ def create_app(config=None, backend_factory=None):
         if not state.consume(data.get("confirmation", ""), session["sid"], action, profile_id, target):
             abort(409, "A fresh explicit confirmation is required")
 
-    def start_job(p, action, work):
+    def start_job(p, action, work, progress=False):
         owner = g.user["id"]
-        def audited():
+        def audited(report=None):
             try:
-                result = work()
+                result = work(report) if progress else work()
                 state.audit(owner, action, p["id"], 200)
                 return result
             except Exception:
                 state.audit(owner, action, p["id"], 500)
                 raise
-        return jsonify(redact(jobs.start(owner, p["id"], action, audited))), 202
+        return jsonify(redact(jobs.start(owner, p["id"], action, audited,progress=progress))), 202
 
     @app.errorhandler(Exception)
     def error_response(error):
@@ -112,6 +117,8 @@ def create_app(config=None, backend_factory=None):
             code, message = 500, "The request could not be completed"
         if request.path.startswith("/api/"):
             return jsonify(error=message), code
+        if g.get("user"):
+            return render_template("error.html",message=message,code=code),code
         return render_template("login.html", setup=False, error=message), code
 
     @app.get("/api/health")
@@ -188,7 +195,7 @@ def create_app(config=None, backend_factory=None):
         for p in state.profiles():
             if not p.get("users") or g.user["id"] in p["users"] or g.user["role"]=="admin":
                 profiles.append(p)
-        return jsonify(user={key:g.user[key] for key in ("id","name","role")}, profiles=profiles, settings=settings, themes=THEMES, version=VERSION)
+        return jsonify(user={key:g.user[key] for key in ("id","name","role")}, profiles=profiles, settings=settings, themes=THEMES, version=VERSION,features={'host_terminal':True,'access_details':True,'installation_progress':True})
 
     @app.post("/api/confirmations")
     def confirmation():
@@ -250,16 +257,92 @@ def create_app(config=None, backend_factory=None):
         admin()
         return jsonify(schema_version=1, profiles=state.profiles())
 
+
+    @app.get("/terminal")
+    def terminal_page():
+        if not g.user:return redirect("/login")
+        admin()
+        p=profile(request.args.get("profile"))
+        return render_template("terminal.html",profile_id=p["id"])
+
+    def terminal_dimensions(data):
+        cols,rows=int(data.get("cols",120)),int(data.get("rows",32))
+        if not 20<=cols<=300 or not 5<=rows<=120:abort(400,"Invalid terminal dimensions")
+        return cols,rows
+
+    def terminal_session(terminal_id):
+        admin()
+        try:value=terminals.get(terminal_id,g.user["id"],hashlib.sha256(session["sid"].encode()).hexdigest())
+        except KeyError:abort(404,"Terminal session is unavailable")
+        profile(value.profile,"host.exec")
+        return value
+
+    @app.post("/api/host-terminal")
+    def open_host_terminal():
+        admin()
+        browser_host=urlsplit(request.host_url).hostname
+        protected=request.is_secure or (app.config.get('SESSION_COOKIE_SECURE') and str(app.config.get('PUBLIC_ORIGIN','')).startswith('https://'))
+        if not protected and not (request.remote_addr in {'127.0.0.1','::1'} and browser_host in {'localhost','127.0.0.1','::1'}):
+            abort(403,'Host terminals require HTTPS outside the local computer')
+        data=body()
+        p=profile(data.get("profile"),"host.exec")
+        confirmed(data,"host.terminal",p["id"],p["id"])
+        cols,rows=terminal_dimensions(data)
+        preferences=state.rows('SELECT data FROM settings WHERE user_id=?',(g.user['id'],))
+        limit=int(json.loads(preferences[0]['data']).get('terminal_limit',16)) if preferences else 16
+        value=terminals.open(p,g.user["id"],hashlib.sha256(session["sid"].encode()).hexdigest(),cols,rows,limit=limit)
+        state.audit(g.user["id"],"host.terminal.open",p["id"],200)
+        return jsonify(id=value.id,profile=p["id"]),201
+
+    @app.get("/api/host-terminal/<terminal_id>")
+    def host_terminal_output(terminal_id):
+        value=terminal_session(terminal_id)
+        offset=int(request.args.get("offset",0))
+        if offset<0:abort(400,"Invalid terminal output offset")
+        return jsonify(value.output(offset))
+
+    @app.post("/api/host-terminal/<terminal_id>/input")
+    def host_terminal_input(terminal_id):
+        value=terminal_session(terminal_id)
+        data=body().get("data","")
+        if not isinstance(data,str) or not 1<=len(data)<=16384:abort(400,"Invalid terminal input")
+        try:raw=base64.b64decode(data,validate=True)
+        except ValueError:abort(400,"Invalid terminal input")
+        if value.closed:abort(409,"Terminal session ended")
+        value.touched=time.monotonic()
+        value.connection.write(raw)
+        if b"\r" in raw or b"\n" in raw:state.audit(g.user["id"],"host.terminal.command",value.profile,200)
+        return jsonify(ok=True)
+
+    @app.post("/api/host-terminal/<terminal_id>/resize")
+    def resize_host_terminal(terminal_id):
+        value=terminal_session(terminal_id)
+        cols,rows=terminal_dimensions(body())
+        value.connection.resize(cols,rows)
+        return jsonify(ok=True)
+
+    @app.post("/api/host-terminal/<terminal_id>/close")
+    def close_host_terminal(terminal_id):
+        value=terminal_session(terminal_id)
+        terminals.close(terminal_id,g.user["id"],hashlib.sha256(session["sid"].encode()).hexdigest())
+        state.audit(g.user["id"],"host.terminal.close",value.profile,200)
+        return jsonify(ok=True)
+
+    @app.get("/api/infrastructure")
+    def infrastructure():
+        info=backend().info()
+        return jsonify(available=True,name=info.get('Name',''),operating_system=info.get('OperatingSystem',''),os_type=info.get('OSType',''),architecture=info.get('Architecture',''),docker_version=info.get('ServerVersion',''),cpus=info.get('NCPU',0),memory_bytes=info.get('MemTotal',0),kernel_version=info.get('KernelVersion',''))
+
     @app.get("/api/overview")
     def overview():
         engine = backend()
         info, containers = engine.info(), engine.containers()
-        return jsonify(info=redact(info), containers=enrich_containers(containers,engine.profile,urlsplit(request.host_url).hostname or 'localhost'))
+        return jsonify(info=redact(info), containers=enrich_containers(containers,engine.profile,urlsplit(request.host_url).hostname or 'localhost',catalogs.host_panel_ports()))
 
     @app.get("/api/containers")
     def containers():
         engine=backend()
-        values = enrich_containers(engine.containers(),engine.profile,urlsplit(request.host_url).hostname or 'localhost')
+        values = enrich_containers(engine.containers(),engine.profile,urlsplit(request.host_url).hostname or 'localhost',catalogs.host_panel_ports())
         query = request.args.get("q","").casefold()
         status = request.args.get("status","")
         return jsonify(containers=[v for v in values if query in json.dumps(v).casefold() and (not status or v.get("State")==status)])
@@ -290,7 +373,7 @@ def create_app(config=None, backend_factory=None):
     def bulk():
         data = body()
         action, targets = data.get("action"), data.get("targets",[])
-        if action not in {"start","stop","restart","pause","unpause","remove"} or not isinstance(targets,list) or not 1<=len(targets)<=100 or not all(isinstance(v,str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,200}",v) for v in targets):
+        if action not in {"start","stop","restart","pause","unpause","remove","autostart-on","autostart-off"} or not isinstance(targets,list) or not 1<=len(targets)<=100 or len(targets)!=len(set(v for v in targets if isinstance(v,str))) or not all(isinstance(v,str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,200}",v) for v in targets):
             abort(400,"Invalid bulk operation")
         p = profile(data.get("profile"),"destructive" if action=="remove" else "containers.write")
         confirmed(data,"bulk."+action,p["id"],hashlib.sha256(json.dumps(targets,separators=(",",":")).encode()).hexdigest())
@@ -301,8 +384,8 @@ def create_app(config=None, backend_factory=None):
                 try:
                     engine.action(target,action)
                     result.append({"container":target,"ok":True})
-                except EngineError:
-                    result.append({"container":target,"ok":False})
+                except EngineError as error:
+                    result.append({"container":target,"ok":False,"error":redact(str(error))})
             return result
         return start_job(p,"bulk."+action,work)
 
@@ -450,7 +533,10 @@ def create_app(config=None, backend_factory=None):
         if set(plan["warnings"])-set(data.get("acknowledged",[])):
             abort(409,"Acknowledge the Docker socket, privileges and persistent data warnings")
         confirmed(data,"install",p["id"],data.get("app") or plan["name"])
-        return start_job(p,"install",lambda:engine.run(plan["args"],timeout=300))
+        from installation import execute_install
+        language=ui_language()
+        trusted=next((v for v in catalogs.fallback if v.get('name')==app_entry.get('name') and v.get('image')==app_entry.get('image')),None)
+        return start_job(p,"install",lambda report:execute_install(engine,plan,app_entry,report,state.vault,trusted,language),progress=True)
 
     @app.post("/api/build")
     def build_image():
@@ -473,7 +559,30 @@ def create_app(config=None, backend_factory=None):
         if not value or value["owner"]!=g.user["id"]:
             abort(404)
         profile(value["profile"])
-        return jsonify(redact({key:item for key,item in value.items() if key!="owner"}))
+        with jobs.lock:
+            snapshot={key:item for key,item in value.items() if key not in {"owner","access_blob"}}
+        return jsonify(redact(snapshot))
+
+    @app.post("/api/jobs/<job_id>/access")
+    def reveal_install_access(job_id):
+        admin()
+        value=jobs.history.get(job_id)
+        if not value or value['owner']!=g.user['id']:abort(404)
+        profile(value['profile'],'install')
+        blob=value.get('access_blob')
+        details=json.loads(state.vault.decrypt(blob.encode())) if blob else []
+        state.audit(g.user['id'],'install.access.reveal',job_id,200)
+        return jsonify(details=details)
+
+    @app.post("/api/logs/<target>/access")
+    def reveal_log_access(target):
+        admin()
+        data=body()
+        engine=backend(data.get('profile'),'install')
+        from dcc_catalog import parse_access_details
+        details=parse_access_details(engine.logs(target,300),lang=ui_language())
+        state.audit(g.user['id'],'container.access.reveal',target,200)
+        return jsonify(details=[{'label':label,'value':value} for label,value in details])
 
     @app.post("/api/uninstall")
     def uninstall():
@@ -657,6 +766,8 @@ def create_app(config=None, backend_factory=None):
                     value[key]=incoming[key]
             value["intensity"]=max(0,min(100,int(incoming.get("intensity",value["intensity"]))))
             value["refresh"]=max(5,min(300,int(incoming.get("refresh",value["refresh"]))))
+            value["terminal_limit"]=max(1,min(32,int(incoming.get("terminal_limit",value.get("terminal_limit",16)))))
+            value["check_updates_on_refresh"]=bool(incoming.get("check_updates_on_refresh",value.get("check_updates_on_refresh",True)))
             audio = incoming.get("audio",value["audio"])
             value["audio"]={"enabled":bool(audio.get("enabled")),"style":audio.get("style","soft") if audio.get("style","soft") in {"soft","clear","warm"} else "soft",**{key:max(0,min(100,int(audio.get(key,50)))) for key in ("master","effects","notifications")}}
             state.execute("INSERT OR REPLACE INTO settings VALUES(?,?)",(g.user["id"],json.dumps(value)))
