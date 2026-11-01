@@ -48,7 +48,7 @@ if ($LASTEXITCODE -ne 0) {
 if (-not (Test-Path $RepoBuilderExe)) {
     throw 'DCCRepoBuilder.exe was not produced.'
 }
-$RepoBuilderCheck = Start-Process -FilePath $RepoBuilderExe -ArgumentList '--self-check' -Wait -PassThru
+$RepoBuilderCheck = Start-Process -FilePath $RepoBuilderExe -ArgumentList '--self-check' -WindowStyle Hidden -Wait -PassThru
 if ($RepoBuilderCheck.ExitCode -ne 0) {
     throw "DCCRepoBuilder.exe self-check failed with exit code $($RepoBuilderCheck.ExitCode)"
 }
@@ -60,7 +60,8 @@ if (-not (Test-Path $Nsis)) {
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'release') | Out-Null
 Push-Location (Join-Path $Root 'upstream_assets')
 try {
-    & $Nsis 'DockerControlCenter.nsi'
+    $NsisResult = Start-Process -FilePath $Nsis -ArgumentList 'DockerControlCenter.nsi' -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput (Join-Path $Root 'build\nsis.log') -RedirectStandardError (Join-Path $Root 'build\nsis-errors.log')
+    if ($NsisResult.ExitCode -ne 0) { throw "NSIS build failed with exit code $($NsisResult.ExitCode). See build/nsis.log." }
 } finally {
     Pop-Location
 }

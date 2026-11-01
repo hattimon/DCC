@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import{html,t,setLanguage,getLanguage,literal}from'../static/i18n.js';
+setLanguage('EN');
+assert.equal(t('Kontenery'),'Containers');
+assert.equal(literal('<button>Szczegóły</button>'),'<button>Details</button>');
+const data='Kontenery <script>user data</script>';
+assert.equal(html`<h1>Kontenery</h1><p>${data}</p>`,`<h1>Containers</h1><p>${data}</p>`);
+assert.equal(html`<select><option>Bez limitu czasowego</option></select>`,'<select><option>No expiry</option></select>');
+setLanguage('PL');
+assert.equal(getLanguage(),'PL');
+assert.equal(t('Profile'),'Profile');
+assert.equal(html`<h1>Kontenery</h1>`,'<h1>Kontenery</h1>');
+assert.match(t('Configure and enable the AI connection first'),/skonfiguruj/);
+console.log('Frontend localization checks passed');

@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DCC Web public profile export v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "profiles"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "profiles": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "permissions"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "kind": {
+            "enum": [
+              "local",
+              "tcp",
+              "ssh",
+              "balena",
+              "wsl",
+              "tunnel"
+            ]
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string"
+          },
+          "distro": {
+            "type": "string"
+          },
+          "key_path": {
+            "type": "string"
+          },
+          "tls_verify": {
+            "const": true
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "permissions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "read",
+                "containers.write",
+                "exec",
+                "images.write",
+                "volumes.write",
+                "networks.write",
+                "compose.write",
+                "install",
+                "update",
+                "destructive"
+              ]
+            }
+          },
+          "panel_host": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "cli": {
+            "enum": [
+              "",
+              "docker",
+              "balena",
+              "balena-engine"
+            ]
+          }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "credentials"
+              ]
+            },
+            {
+              "required": [
+                "password"
+              ]
+            },
+            {
+              "required": [
+                "token"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

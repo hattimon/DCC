@@ -1,0 +1,751 @@
+"""DCC Web: independently versioned, local-first Docker workspace."""
+import argparse
+from datetime import timedelta
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import sys
+import time
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from flask import Flask, Response, abort, g, jsonify, redirect, render_template, request, send_file, session
+from werkzeug.exceptions import HTTPException
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from catalogs import Catalogs, app_id, install_plan, validate_catalog
+from engine import DockerBackend, EngineError, Jobs
+from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES
+from state import State
+from ports import enrich_containers,inventory
+from urllib.parse import urlsplit
+
+VERSION = "0.1.0"
+THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
+DEFAULT_SETTINGS = {"theme":"obsidian", "accent":"#73d2c4", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "audio":{"enabled":False,"master":40,"effects":60,"notifications":55,"style":"soft"}}
+
+
+def create_app(config=None, backend_factory=None):
+    app = Flask(__name__)
+    app.config.update(DATA_DIR=os.environ.get("DCC_WEB_DATA", str(Path.home()/".dcc-web")), ALLOWED_HOSTS={"localhost","127.0.0.1","::1"}, SESSION_COOKIE_NAME="dcc_web_session", SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict", SESSION_COOKIE_SECURE=os.environ.get("DCC_WEB_HTTPS")=="1", PUBLIC_ORIGIN=os.environ.get("DCC_WEB_PUBLIC_ORIGIN"), PERMANENT_SESSION_LIFETIME=timedelta(hours=12), MAX_CONTENT_LENGTH=2_000_000, MASTER_KEY=os.environ.get("DCC_WEB_MASTER_KEY"))
+    if config:
+        app.config.update(config)
+    state = State(app.config["DATA_DIR"], app.config.get("MASTER_KEY"))
+    app.secret_key = state.session_key
+    catalogs = Catalogs(state, ROOT)
+    jobs = Jobs()
+    factory = backend_factory or DockerBackend
+    app.extensions.update(dcc_state=state, dcc_catalogs=catalogs, dcc_jobs=jobs)
+    initialize_security(app, state)
+    def ui_language():
+        requested=request.args.get('lang')
+        if requested in {'PL','EN'}:return requested
+        if g.get('user'):
+            rows=state.rows('SELECT data FROM settings WHERE user_id=?',(g.user['id'],))
+            if rows:return json.loads(rows[0]['data']).get('language','EN')
+        return request.cookies.get('dcc_web_language','EN') if request.cookies.get('dcc_web_language') in {'PL','EN'} else 'EN'
+
+    @app.context_processor
+    def localized_templates():
+        from translations import translate
+        language=ui_language()
+        return {'language':language,'tr':lambda value:translate(value,language)}
+
+    @app.after_request
+    def remember_language(response):
+        if request.args.get('lang') in {'PL','EN'}:
+            response.set_cookie('dcc_web_language',request.args['lang'],max_age=31536000,samesite='Strict',secure=app.config.get('SESSION_COOKIE_SECURE',False))
+        return response
+    @app.before_request
+    def validate_targets():
+        target=(request.view_args or {}).get("target")
+        if target and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,200}",target):
+            abort(400,"Invalid container identifier")
+    if not state.profiles():
+        state.save_profile("local", {"name":"Local Docker", "kind":"local", "permissions":["read"]})
+
+    def body():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            abort(400, "A JSON object is required")
+        return data
+
+    def profile(profile_id=None, capability="read"):
+        value = state.profile(profile_id or request.args.get("profile", "local"), private=True)
+        authorize(value, capability)
+        return value
+
+    def backend(profile_id=None, capability="read"):
+        return factory(profile(profile_id, capability))
+
+    def confirmed(data, action, profile_id, target):
+        if not state.consume(data.get("confirmation", ""), session["sid"], action, profile_id, target):
+            abort(409, "A fresh explicit confirmation is required")
+
+    def start_job(p, action, work):
+        owner = g.user["id"]
+        def audited():
+            try:
+                result = work()
+                state.audit(owner, action, p["id"], 200)
+                return result
+            except Exception:
+                state.audit(owner, action, p["id"], 500)
+                raise
+        return jsonify(redact(jobs.start(owner, p["id"], action, audited))), 202
+
+    @app.errorhandler(Exception)
+    def error_response(error):
+        if isinstance(error, HTTPException):
+            code, message = error.code, error.description
+        elif isinstance(error, (ValueError, KeyError, TypeError)):
+            code, message = 400, str(error)[:250]
+        elif isinstance(error, EngineError):
+            code, message = 503, str(error)
+        else:
+            code, message = 500, "The request could not be completed"
+        if request.path.startswith("/api/"):
+            return jsonify(error=message), code
+        return render_template("login.html", setup=False, error=message), code
+
+    @app.get("/api/health")
+    def health():
+        return jsonify(status="ok", version=VERSION)
+
+    @app.route("/login", methods=["GET","POST"])
+    @app.route("/setup", methods=["GET","POST"])
+    def login():
+        setup = not state.rows("SELECT id FROM users LIMIT 1")
+        if request.path=="/setup" and not setup:
+            return redirect("/login")
+        if setup and (request.remote_addr not in {"127.0.0.1","::1"} or app.config.get("PUBLIC_ORIGIN")):
+            abort(403, "Initial setup is available only from localhost")
+        error = ""
+        if request.method=="POST":
+            username, password = request.form.get("username",""), request.form.get("password", "")
+            if len(username)>64 or len(password)>256:
+                abort(400,"Invalid credential length")
+            address = hashlib.sha256(str(request.remote_addr).encode()).hexdigest()
+            recent = state.rows("SELECT COUNT(*) AS total FROM attempts WHERE address=? AND at>?", (address,time.time()-600))[0]["total"]
+            if recent >= 8:
+                abort(429, "Too many attempts. Try again in ten minutes.")
+            state.execute("DELETE FROM attempts WHERE at<?", (time.time()-3600,))
+            if setup:
+                if not re.fullmatch(r"[\w.@-]{3,64}", username) or not 12<=len(password)<=256:
+                    error = "Nazwa: 3–64 znaki. Hasło: co najmniej 12 znaków."
+                else:
+                    with state.connect() as db:
+                        db.execute("BEGIN IMMEDIATE")
+                        if db.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
+                            abort(409, "Initial setup has already completed")
+                        db.execute("INSERT INTO users VALUES(?,?,?,?)", (secrets.token_hex(12),username,generate_password_hash(password),"admin"))
+            users = state.rows("SELECT * FROM users WHERE name=?", (username,))
+            if not error and users and check_password_hash(users[0]["password"],password):
+                session.clear()
+                session["sid"], session["csrf"] = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+                session.permanent = True
+                state.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(session["sid"].encode()).hexdigest(),users[0]["id"],time.time()+43200))
+                state.audit(users[0]["id"],"login","session",200)
+                return redirect("/")
+            state.execute("INSERT INTO attempts VALUES(?,?)", (address,time.time()))
+            error = error or "Nieprawidłowa nazwa użytkownika lub hasło."
+        return render_template("login.html", setup=setup, error=error)
+
+    @app.post("/api/logout")
+    def logout():
+        state.execute("DELETE FROM sessions WHERE token=?", (hashlib.sha256(session["sid"].encode()).hexdigest(),))
+        session.clear()
+        return jsonify(ok=True)
+
+    @app.get("/")
+    def index():
+        if not g.user:
+            return redirect("/login")
+        return render_template("index.html", version=VERSION)
+
+    @app.get("/about")
+    def about():
+        return render_template("about.html", version=VERSION)
+
+    @app.get("/docs/<name>")
+    def documentation(name):
+        allowed = {"installation","configuration","security","catalogs","mcp","ai","themes-audio","feature-matrix","testing"}
+        if name not in allowed:
+            abort(404)
+        return Response((Path(__file__).parent/"docs"/(name+".md")).read_text(encoding="utf-8"), mimetype="text/plain")
+
+    @app.get("/api/bootstrap")
+    def bootstrap():
+        rows = state.rows("SELECT data FROM settings WHERE user_id=?", (g.user["id"],))
+        settings = dict(DEFAULT_SETTINGS, **(json.loads(rows[0]["data"]) if rows else {}))
+        profiles = []
+        for p in state.profiles():
+            if not p.get("users") or g.user["id"] in p["users"] or g.user["role"]=="admin":
+                profiles.append(p)
+        return jsonify(user={key:g.user[key] for key in ("id","name","role")}, profiles=profiles, settings=settings, themes=THEMES, version=VERSION)
+
+    @app.post("/api/confirmations")
+    def confirmation():
+        data = body()
+        action, target = str(data.get("action","")), str(data.get("target",""))
+        p = profile(data.get("profile","local"))
+        if len(action)>100 or len(target)>200:
+            abort(400)
+        return jsonify(confirmation=state.confirm(session["sid"],action,p["id"],target),expires_in=120)
+
+    @app.route("/api/profiles", methods=["GET","POST"])
+    def profiles():
+        if request.method=="GET":
+            return jsonify(profiles=[p for p in state.profiles() if not p.get("users") or g.user["id"] in p["users"] or g.user["role"]=="admin"])
+        admin()
+        data = body()
+        value = validate_profile(data)
+        profile_id = secrets.token_hex(10)
+        state.save_profile(profile_id,value,data.get("credentials",{}))
+        return jsonify(id=profile_id),201
+
+    @app.route("/api/profiles/<profile_id>", methods=["PUT","DELETE"])
+    def edit_profile(profile_id):
+        admin()
+        old = profile(profile_id)
+        data = body()
+        if request.method=="DELETE":
+            confirmed(data,"profile.remove",profile_id,profile_id)
+            state.execute("DELETE FROM profiles WHERE id=?",(profile_id,))
+        else:
+            # A partial edit must never silently remove a profile access restriction.
+            merged = {key:value for key,value in old.items() if key not in {"id","credentials"}}
+            merged.update(data)
+            state.save_profile(profile_id,validate_profile(merged),data.get("credentials"))
+        return jsonify(ok=True)
+
+    @app.post("/api/profiles/import")
+    def import_profiles():
+        admin()
+        data = body().get("profiles")
+        if not isinstance(data,list) or len(data)>100:
+            abort(400,"A profiles array is required")
+        added = []
+        for entry in data:
+            if not isinstance(entry,dict):
+                abort(400)
+            if "mode" in entry:
+                target = entry.get("ssh_target", "")
+                username, _, host = target.rpartition("@")
+                entry = {"name":entry["name"],"kind":"ssh" if entry.get("mode")=="ssh" else "tunnel","username":entry.get("ssh_username") or username,"host":host,"port":entry.get("ssh_port") or 22,"endpoint":entry.get("base_url",""),"key_path":entry.get("ssh_key_path",""),"permissions":["read"]}
+            value = validate_profile(entry)
+            ident = secrets.token_hex(10)
+            state.save_profile(ident,value,{})
+            added.append(ident)
+        return jsonify(added=added, note="Credentials are never imported in plaintext; configure them separately")
+
+    @app.get("/api/profiles/export")
+    def export_profiles():
+        admin()
+        return jsonify(schema_version=1, profiles=state.profiles())
+
+    @app.get("/api/overview")
+    def overview():
+        engine = backend()
+        info, containers = engine.info(), engine.containers()
+        return jsonify(info=redact(info), containers=enrich_containers(containers,engine.profile,urlsplit(request.host_url).hostname or 'localhost'))
+
+    @app.get("/api/containers")
+    def containers():
+        engine=backend()
+        values = enrich_containers(engine.containers(),engine.profile,urlsplit(request.host_url).hostname or 'localhost')
+        query = request.args.get("q","").casefold()
+        status = request.args.get("status","")
+        return jsonify(containers=[v for v in values if query in json.dumps(v).casefold() and (not status or v.get("State")==status)])
+
+    @app.get("/api/containers/<target>")
+    def inspect_container(target):
+        return jsonify(redact(backend().inspect(target)))
+
+    @app.post("/api/containers/<target>/<action>")
+    def container_action(target,action):
+        data = body()
+        p = profile(data.get("profile"),"destructive" if action=="remove" else "containers.write")
+        confirmed(data,"container."+action,p["id"],target)
+        return jsonify(output=jobs.execute(p['id'],lambda:factory(p).action(target,action)))
+
+    @app.post("/api/exec/<target>")
+    def exec_container(target):
+        import shlex
+        data = body()
+        p = profile(data.get("profile"),"exec")
+        command = data.get("command", "")
+        if not isinstance(command,str) or not 1<=len(command)<=4096:
+            abort(400,"A container command is required")
+        confirmed(data,"container.exec",p["id"],target)
+        return jsonify(output=jobs.execute(p['id'],lambda:factory(p).run(["exec",target,*shlex.split(command)],timeout=30)))
+
+    @app.post("/api/bulk")
+    def bulk():
+        data = body()
+        action, targets = data.get("action"), data.get("targets",[])
+        if action not in {"start","stop","restart","pause","unpause","remove"} or not isinstance(targets,list) or not 1<=len(targets)<=100 or not all(isinstance(v,str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,200}",v) for v in targets):
+            abort(400,"Invalid bulk operation")
+        p = profile(data.get("profile"),"destructive" if action=="remove" else "containers.write")
+        confirmed(data,"bulk."+action,p["id"],hashlib.sha256(json.dumps(targets,separators=(",",":")).encode()).hexdigest())
+        engine = factory(p)
+        def work():
+            result=[]
+            for target in targets:
+                try:
+                    engine.action(target,action)
+                    result.append({"container":target,"ok":True})
+                except EngineError:
+                    result.append({"container":target,"ok":False})
+            return result
+        return start_job(p,"bulk."+action,work)
+
+    @app.get("/api/logs/<target>")
+    def logs(target):
+        engine = backend()
+        tail = int(request.args.get("tail",200))
+        text = redact(engine.logs(target,tail))
+        query = request.args.get("q","").casefold()
+        if query:
+            text = "\n".join(line for line in text.splitlines() if query in line.casefold())
+        if request.args.get("download")=="1":
+            return Response(text,mimetype="text/plain",headers={"Content-Disposition":"attachment; filename=container.log"})
+        return jsonify(logs=text,lines=len(text.splitlines()))
+
+    @app.get("/api/monitoring")
+    def monitoring():
+        p = profile()
+        values = factory(p).stats()
+        state.sample(p["id"],values)
+        history = state.rows("SELECT at,data FROM samples WHERE profile=? ORDER BY id DESC LIMIT 120",(p["id"],))
+        return jsonify(stats=values,history=[{"at":row["at"],"stats":json.loads(row["data"])} for row in reversed(history)])
+
+    @app.get("/api/resources/<kind>")
+    def resources(kind):
+        if kind not in {"images","volumes","networks"}:
+            abort(404)
+        return jsonify(resources=backend().resources(kind))
+
+    @app.post("/api/resources/<kind>/<action>")
+    def resource_action(kind,action):
+        data = body()
+        if kind not in {"images","volumes","networks"} or action not in {"create","remove","pull","tag","inspect"}:
+            abort(400)
+        target = str(data.get("target",""))
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./:@-]{0,250}",target):
+            abort(400,"Invalid resource name")
+        p = profile(data.get("profile"),"read" if action=="inspect" else "destructive" if action=="remove" else kind+".write")
+        engine = factory(p)
+        command = {"images":"image","volumes":"volume","networks":"network"}[kind]
+        if action=="inspect":
+            return jsonify(redact(engine.json([command,"inspect",target])))
+        confirmed(data,kind+"."+action,p["id"],target)
+        if kind=="volumes" and action=="remove":
+            if data.get("delete_data") is not True:
+                abort(409,"Deleting a volume requires explicit consent to irreversible data loss")
+            for container in engine.containers():
+                if any(m.get("Name")==target for m in engine.inspect(container["ID"]).get("Mounts",[])):
+                    abort(409,"This volume is still attached to a container")
+        args = [command,"rm",target] if action=="remove" else [command,action,target]
+        if kind=="images" and action=="tag":
+            destination = str(data.get("destination",""))
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_./:@-]{0,250}",destination):
+                abort(400)
+            args.append(destination)
+        return start_job(p,kind+"."+action,lambda: engine.run(args,timeout=300))
+
+    @app.get("/api/catalog")
+    def catalog():
+        p = profile()
+        try:
+            installed = factory(p).containers()
+            connected = True
+        except EngineError:
+            installed, connected = [], False
+        result = catalogs.view(request.args.get("lang","PL"),installed,request.args.get("q",""),request.args.get("category","all"),engine_kind="balena" if p["kind"]=="balena" else "docker")
+        return jsonify(**result,connected=connected,sources=catalogs.sources())
+
+    @app.route("/api/catalog/sources",methods=["GET","POST"])
+    def sources():
+        if request.method=="GET":
+            return jsonify(sources=catalogs.sources())
+        admin()
+        data = body()
+        return jsonify(id=catalogs.add(data.get("source",""),data.get("contents"))),201
+
+    @app.route("/api/catalog/sources/<source_id>",methods=["PUT","DELETE"])
+    def edit_source(source_id):
+        admin()
+        rows = state.rows("SELECT * FROM sources WHERE id=?",(source_id,))
+        if not rows:
+            abort(404)
+        if rows[0]["canonical"]:
+            abort(409,"The main DCC catalog cannot be disabled or removed")
+        if request.method=="DELETE":
+            state.execute("DELETE FROM sources WHERE id=?",(source_id,))
+        else:
+            state.execute("UPDATE sources SET enabled=? WHERE id=?",(bool(body().get("enabled")),source_id))
+        return jsonify(ok=True)
+
+    @app.post("/api/catalog/validate")
+    def validate_source():
+        admin()
+        return jsonify(count=len(validate_catalog(body().get("contents"))))
+
+    @app.get("/api/catalog/sources/<source_id>/apps")
+    def source_contents(source_id):
+        rows=state.rows("SELECT cache FROM sources WHERE id=?",(source_id,))
+        if not rows:
+            abort(404)
+        return jsonify(apps=json.loads(rows[0]["cache"] or "[]"))
+
+    @app.get("/media")
+    def media():
+        if not g.user:
+            abort(401)
+        path=(ROOT/request.args.get("path","")).resolve()
+        allowed=[(ROOT/"catalog/media").resolve(),(ROOT/"catalog-assets").resolve()]
+        if not any(path.is_relative_to(root) for root in allowed) or path.suffix.lower() not in {".png",".jpg",".jpeg",".webp"} or not path.is_file():
+            abort(404)
+        return send_file(path,conditional=True)
+
+    @app.post("/api/catalog/refresh")
+    def refresh_catalog():
+        admin()
+        p = profile()
+        return start_job(p,"catalog.refresh",lambda:catalogs.refresh())
+
+    @app.post("/api/install/preview")
+    def preview_install():
+        data = body()
+        p = profile(data.get("profile"),"install")
+        apps = catalogs.all()
+        app_entry = next((item for item in apps if item["id"]==data.get("app")),None)
+        if app_entry is None:
+            # Manual creation uses the same validation and confirmation path.
+            app_entry = {"name":"Manual", "image":data.get("configuration",{}).get("image", ""), "category":"Inne"}
+        plan = install_plan(app_entry,data.get("configuration",{}),factory(p))
+        return jsonify(redact(plan))
+
+    @app.post("/api/install/ports")
+    def installation_ports():
+        data=body()
+        return jsonify(inventory(backend(data.get('profile')),data.get('ports',[])))
+
+    @app.post("/api/install")
+    def install():
+        data = body()
+        p = profile(data.get("profile"),"install")
+        app_entry = next((item for item in catalogs.all() if item["id"]==data.get("app")),None)
+        if app_entry is None:
+            app_entry = {"name":"Manual", "image":data.get("configuration",{}).get("image", ""), "category":"Inne"}
+        engine = factory(p)
+        plan = install_plan(app_entry,data.get("configuration",{}),engine)
+        if set(plan["warnings"])-set(data.get("acknowledged",[])):
+            abort(409,"Acknowledge the Docker socket, privileges and persistent data warnings")
+        confirmed(data,"install",p["id"],data.get("app") or plan["name"])
+        return start_job(p,"install",lambda:engine.run(plan["args"],timeout=300))
+
+    @app.post("/api/build")
+    def build_image():
+        data=body()
+        p=profile(data.get("profile"),"install")
+        entry=next((v for v in catalogs.all() if v["id"]==data.get("app")),None)
+        if not entry or not re.fullmatch(r"https://github\.com/[\w.-]+/[\w.-]+\.git(?:#[\w./:-]+)?",entry.get("build_context","")):
+            abort(400,"Only an explicitly reviewed GitHub build context is accepted")
+        dockerfile=entry.get("build_dockerfile") or "Dockerfile"
+        if ".." in Path(dockerfile).parts or not re.fullmatch(r"[\w./-]+",dockerfile):
+            abort(400,"Invalid build Dockerfile")
+        if data.get("reviewed_source") is not True:
+            abort(409,"Explicit review of the source repository and Dockerfile is required")
+        confirmed(data,"build",p["id"],entry["id"])
+        return start_job(p,"build",lambda:factory(p).run(["build","--tag",entry["image"],"--file",dockerfile,entry["build_context"]],timeout=900))
+
+    @app.get("/api/jobs/<job_id>")
+    def job(job_id):
+        value = jobs.history.get(job_id)
+        if not value or value["owner"]!=g.user["id"]:
+            abort(404)
+        profile(value["profile"])
+        return jsonify(redact({key:item for key,item in value.items() if key!="owner"}))
+
+    @app.post("/api/uninstall")
+    def uninstall():
+        data = body()
+        p = profile(data.get("profile"),"destructive")
+        engine = factory(p)
+        entry = next((v for v in catalogs.view(containers=engine.containers())["apps"] if v["id"]==data.get("app")),None)
+        if not entry or not entry["installed_ids"]:
+            abort(409,"No installed containers match this app")
+        confirmed(data,"uninstall",p["id"],entry["id"])
+        def work():
+            for target in entry["installed_ids"]:
+                value=engine.inspect(target)
+                if value.get("State",{}).get("Running"):
+                    engine.action(target,"stop")
+                engine.action(target,"remove")
+            return {"removed":len(entry["installed_ids"]),"volumes_retained":True}
+        return start_job(p,"uninstall",work)
+
+    def updater_service(p):
+        # Reuse the project's existing safe updater instead of inventing a replacement algorithm.
+        import docker
+        if p["kind"] not in {"local","tcp","ssh","balena","tunnel"}:
+            abort(409,"This adapter cannot expose the Docker API. For WSL use a verified TLS profile or the host Container Updater / Compose.")
+        if p['kind'] in {'ssh','balena'}:
+            from remote_api import ssh_docker_client
+            client=ssh_docker_client(p)
+        elif p['kind']=='tunnel':
+            client=docker.DockerClient(base_url=p['endpoint'],timeout=30)
+        elif p["kind"]=="local":
+            if p.get("context"):
+                context=factory(p).json(["context","inspect",p["context"]])[0]
+                client=docker.DockerClient(base_url=context["Endpoints"]["docker"]["Host"],timeout=30)
+            else:
+                client=docker.from_env(timeout=30)
+        else:
+            credentials=p.get("credentials",{})
+            cert=(credentials["tls_cert"],credentials["tls_key"]) if credentials.get("tls_cert") and credentials.get("tls_key") else None
+            client=docker.DockerClient(base_url=p["endpoint"],tls=docker.tls.TLSConfig(client_cert=cert,ca_cert=credentials.get("tls_ca"),verify=True),timeout=30)
+        module_name="dcc_shared_update_service"
+        if module_name not in sys.modules:
+            spec=importlib.util.spec_from_file_location(module_name,ROOT/"apps/container-updater/updater.py")
+            module=importlib.util.module_from_spec(spec)
+            sys.modules[module_name]=module
+            spec.loader.exec_module(module)
+        return sys.modules[module_name].UpdateService(client,catalog_loader=catalogs.all),client
+
+    @app.post("/api/updates/<target>/<action>")
+    def updates(target,action):
+        data=body()
+        p=profile(data.get("profile"),"read" if action=="check" else "update")
+        if action not in {"check","apply"}:
+            abort(404)
+        confirmed(data,"update."+action,p["id"],target)
+        def work():
+            service,client=updater_service(p)
+            try:
+                if action=="check":
+                    return service.scan(container_ids=[target])
+                container=client.containers.get(target)
+                image=container.attrs.get("Config",{}).get("Image")
+                if not image:
+                    raise ValueError("Container image is unavailable")
+                return service.update_one(container,image)
+            finally:
+                client.close()
+        # Validate adapter compatibility synchronously, before queuing an operation.
+        if p["kind"] not in {"local","tcp","ssh","balena","tunnel"}:
+            abort(409,"Direct updates require local, TLS, verified SSH or an explicitly configured localhost tunnel. WSL can use a TLS profile or Compose.")
+        return start_job(p,"update."+action,work)
+
+    @app.post("/api/configuration/<target>")
+    def configure_container(target):
+        data=body()
+        p=profile(data.get("profile"),"containers.write")
+        authorize(p,"destructive")
+        if p["kind"] not in {"local","tcp","ssh","balena","tunnel"}:
+            abort(409,"Configuration recreation requires local, TLS, verified SSH or a localhost tunnel; WSL can use TLS or Compose.")
+        overrides=data.get("changes",{})
+        if not isinstance(overrides,dict) or set(overrides)-{"environment","command","user","working_dir","ports","restart"}:
+            abort(400,"Unsupported configuration change")
+        confirmed(data,"container.configure",p["id"],target)
+        def work():
+            service,client=updater_service(p)
+            try:
+                container=client.containers.get(target)
+                config=container.attrs.get("Config",{})
+                changes={key:value for key,value in overrides.items() if key not in {"environment","ports","restart"}}
+                host_changes={}
+                if 'ports' in overrides:
+                    from ports import parse_bindings
+                    host_changes['PortBindings']=parse_bindings(overrides['ports'])
+                    changes['ports']=list(host_changes['PortBindings'])
+                if 'restart' in overrides:
+                    if overrides['restart'] not in {'no','always','unless-stopped','on-failure'}:raise ValueError('Invalid restart policy')
+                    host_changes['RestartPolicy']={'Name':overrides['restart'],'MaximumRetryCount':0}
+                if "environment" in overrides:
+                    if not isinstance(overrides["environment"],dict):
+                        raise ValueError("Environment changes must be an object")
+                    env=dict(value.split("=",1) for value in config.get("Env",[]) if "=" in value)
+                    env.update({str(key):str(value) for key,value in overrides["environment"].items()})
+                    changes["environment"]=[key+"="+value for key,value in env.items()]
+                return service.update_one(container,config["Image"],{"config":changes,"host_config":host_changes},_image_already_pulled=True,_expected_image_id=container.image.id)
+            finally:
+                client.close()
+        return start_job(p,"container.configure",work)
+
+    @app.get("/api/compose")
+    def compose_projects():
+        p=profile()
+        projects=factory(p).json(["compose","ls","--all","--format","json"])
+        names={v["Name"] for v in projects}
+        projects += [{"Name":row["name"],"Status":"Przygotowany — jeszcze nie uruchomiony","ConfigFiles":row["file"]} for row in state.rows("SELECT * FROM compose_projects WHERE profile=?",(p["id"],)) if row["name"] not in names]
+        return jsonify(projects=projects)
+
+    @app.post("/api/compose/<project_name>/<action>")
+    def compose_action(project_name,action):
+        import posixpath
+        data = body()
+        p = profile(data.get("profile"),"read" if action in {"ps","config","logs"} else "destructive" if action=="down" else "compose.write")
+        engine = factory(p)
+        projects = engine.json(["compose","ls","--all","--format","json"])
+        selected = next((v for v in projects if v.get("Name")==project_name),None)
+        if not selected:
+            saved=state.rows("SELECT * FROM compose_projects WHERE profile=? AND name=?",(p["id"],project_name))
+            selected={"ConfigFiles":saved[0]["file"]} if saved else None
+        if not selected or not selected.get("ConfigFiles"):
+            abort(409,"Select an existing or prepared Compose project")
+        files=selected["ConfigFiles"].split(",")
+        filename = files[0]
+        directory = str(Path(filename).parent) if re.match(r"^[A-Za-z]:",filename) else posixpath.dirname(filename)
+        project={"name":project_name,"directory":directory,"file":filename,"files":files}
+        if action not in {"ps","config","logs"}:
+            confirmed(data,"compose."+action,p["id"],project_name)
+            return start_job(p,"compose."+action,lambda:engine.compose(project,action))
+        output=engine.compose(project,action)
+        if action=="config":
+            output=json.dumps(redact(json.loads(output)),ensure_ascii=False,indent=2)
+        else:
+            output=redact(output)
+        return jsonify(output=output)
+
+    @app.post("/api/compose/import")
+    def compose_import():
+        data = body()
+        p = profile(data.get("profile"),"compose.write")
+        if p["kind"] not in {"local","tcp"}:
+            abort(409,"Upload Compose files on the Docker CLI host; remote profiles use existing projects")
+        name, content = str(data.get("name","")),str(data.get("content",""))
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,60}",name) or not content or len(content)>500000:
+            abort(400,"Invalid Compose name or content")
+        confirmed(data,"compose.import",p["id"],name)
+        directory = state.directory/"compose"/name
+        directory.mkdir(parents=True,exist_ok=True)
+        filename = directory/"compose.yaml"
+        if filename.exists():
+            abort(409,"This saved project already exists")
+        filename.write_text(content,encoding="utf-8")
+        try:
+            preview = factory(p).compose({"name":name,"directory":str(directory),"file":str(filename)},"config")
+        except Exception:
+            filename.unlink()
+            raise
+        state.execute("INSERT INTO compose_projects VALUES(?,?,?,?)",(p["id"],name,str(filename),str(directory)))
+        return jsonify(name=name,preview=redact(json.loads(preview)),file=str(filename),directory=str(directory))
+
+    @app.route("/api/settings",methods=["GET","PUT"])
+    def settings():
+        rows = state.rows("SELECT data FROM settings WHERE user_id=?",(g.user["id"],))
+        value = dict(DEFAULT_SETTINGS,**(json.loads(rows[0]["data"]) if rows else {}))
+        if request.method=="PUT":
+            incoming = body()
+            if incoming.get('language',value['language']) not in {'PL','EN'}:
+                abort(400,'Choose English or Polish')
+            if incoming.get("theme",value["theme"]) not in THEMES or incoming.get("density","comfortable") not in {"comfortable","compact"}:
+                abort(400,"Invalid appearance setting")
+            if not re.fullmatch(r"#[0-9a-fA-F]{6}",incoming.get("accent",value["accent"])):
+                abort(400,"Invalid accent color")
+            for key in ("theme","accent","effects","density","animations","language"):
+                if key in incoming:
+                    value[key]=incoming[key]
+            value["intensity"]=max(0,min(100,int(incoming.get("intensity",value["intensity"]))))
+            value["refresh"]=max(5,min(300,int(incoming.get("refresh",value["refresh"]))))
+            audio = incoming.get("audio",value["audio"])
+            value["audio"]={"enabled":bool(audio.get("enabled")),"style":audio.get("style","soft") if audio.get("style","soft") in {"soft","clear","warm"} else "soft",**{key:max(0,min(100,int(audio.get(key,50)))) for key in ("master","effects","notifications")}}
+            state.execute("INSERT OR REPLACE INTO settings VALUES(?,?)",(g.user["id"],json.dumps(value)))
+        response=jsonify(value)
+        if request.method=='PUT':response.set_cookie('dcc_web_language',value['language'],max_age=31536000,samesite='Strict',secure=app.config.get('SESSION_COOKIE_SECURE',False))
+        return response
+
+    @app.get("/api/audit")
+    def audit():
+        admin()
+        return jsonify(events=state.rows("SELECT at,user_id,action,target,result FROM audit ORDER BY id DESC LIMIT 100"))
+
+    @app.route("/api/users",methods=["GET","POST"])
+    def users():
+        admin()
+        if request.method=="GET":
+            return jsonify(users=state.rows("SELECT id,name,role FROM users"))
+        data = body()
+        if data.get("role") not in {"admin","operator","viewer"} or not re.fullmatch(r"[\w.@-]{3,64}",data.get("name","")) or not 12<=len(data.get("password",""))<=256:
+            abort(400,"Invalid user name, role or password")
+        state.execute("INSERT INTO users VALUES(?,?,?,?)",(secrets.token_hex(12),data["name"],generate_password_hash(data["password"]),data["role"]))
+        return jsonify(ok=True),201
+
+    @app.put("/api/password")
+    def password():
+        data = body()
+        if not check_password_hash(g.user["password"],data.get("current","")) or not 12<=len(data.get("password",""))<=256:
+            abort(400,"Current password or new password is invalid")
+        state.execute("UPDATE users SET password=? WHERE id=?",(generate_password_hash(data["password"]),g.user["id"]))
+        state.execute("DELETE FROM sessions WHERE user_id=?",(g.user["id"],))
+        session.clear()
+        return jsonify(ok=True)
+
+    # MCP is deliberately a Preview: tested read-only stdio; HTTP transport is not enabled.
+    from mcp_preview import register_mcp
+    register_mcp(app,state,profile)
+    from ai_assistant import register_ai
+    register_ai(app,state,profile,factory,body)
+    return app
+
+
+def main():
+    parser = argparse.ArgumentParser(description="DCC Web local workspace")
+    parser.add_argument("--host",default="127.0.0.1")
+    parser.add_argument("--port",type=int,default=8789)
+    parser.add_argument("--allow-lan",action="store_true")
+    parser.add_argument("--data",default=os.environ.get("DCC_WEB_DATA",str(Path.home()/".dcc-web")))
+    parser.add_argument("--self-check",action="store_true")
+    parser.add_argument("--mcp-stdio",action="store_true")
+    parser.add_argument("--init-admin",action="store_true")
+    args = parser.parse_args()
+    if args.init_admin:
+        import getpass
+        state=State(args.data,os.environ.get("DCC_WEB_MASTER_KEY"))
+        if state.rows("SELECT id FROM users LIMIT 1"):
+            parser.error("Administrator initialization has already completed")
+        username=input("Administrator name: ").strip()
+        password=getpass.getpass("Password (at least 12 characters): ")
+        if not re.fullmatch(r"[\w.@-]{3,64}",username) or not 12<=len(password)<=256:
+            parser.error("Invalid administrator name or password")
+        state.execute("INSERT INTO users VALUES(?,?,?,?)",(secrets.token_hex(12),username,generate_password_hash(password),"admin"))
+        print("Administrator created. No password was written to configuration or logs.")
+        return
+    if args.self_check:
+        validate_catalog(json.loads((ROOT/"dcc-catalog.json").read_text(encoding="utf-8")))
+        print(json.dumps({"app":"DCC Web","version":VERSION,"catalog":"valid"}))
+        return
+    if args.mcp_stdio:
+        from mcp_preview import stdio
+        return stdio(State(args.data,os.environ.get("DCC_WEB_MASTER_KEY")))
+    if args.host not in {"127.0.0.1","localhost","::1"} and not args.allow_lan:
+        parser.error("LAN exposure requires --allow-lan and an HTTPS reverse proxy")
+    allowed = {"127.0.0.1","localhost","::1",args.host,*os.environ.get("DCC_WEB_HOSTS","").split(",")}
+    app = create_app({"DATA_DIR":args.data,"ALLOWED_HOSTS":allowed})
+    if args.allow_lan and not app.extensions["dcc_state"].rows("SELECT id FROM users LIMIT 1"):
+        parser.error("Initialize an administrator locally with --init-admin before enabling LAN access")
+    import threading
+    def refresh_sources():
+        while True:
+            time.sleep(3600)
+            try:
+                app.extensions["dcc_catalogs"].refresh()
+            except Exception:
+                pass
+    threading.Thread(target=refresh_sources,name="dcc-catalog-refresh",daemon=True).start()
+    from waitress import serve
+    print(f"DCC Web {VERSION}: http://{args.host}:{args.port} (initial setup at /login)",flush=True)
+    serve(app,host=args.host,port=args.port,threads=8,channel_timeout=60,ident="DCC-Web")
+
+
+if __name__=="__main__":
+    main()

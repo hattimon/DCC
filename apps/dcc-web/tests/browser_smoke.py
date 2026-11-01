@@ -1,0 +1,163 @@
+"""Real browser QA against review_server.py; never runs mutations on real Docker."""
+import argparse
+import json
+from pathlib import Path
+import time
+
+from playwright.sync_api import sync_playwright,expect
+
+
+def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--url',default='http://127.0.0.1:8790')
+    parser.add_argument('--out',required=True)
+    args=parser.parse_args()
+    out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
+    results={'browser':'Playwright Chromium','fallback':'Browser plugin not available','url':args.url,'checks':[],'screenshots':[],'console_errors':[]}
+    with sync_playwright() as playwright:
+        browser=playwright.chromium.launch(headless=True)
+        context=browser.new_context(viewport={'width':1488,'height':1056},reduced_motion='reduce')
+        context.add_init_script("""window.__playedSounds=[];const NativeAudio=window.Audio;window.Audio=function(...args){const player=new NativeAudio(...args);player.addEventListener('playing',()=>window.__playedSounds.push(player.src));return player;};window.Audio.prototype=NativeAudio.prototype;""")
+        page=context.new_page()
+        page.on('pageerror',lambda error:results['console_errors'].append(str(error)))
+        page.on('console',lambda message:results['console_errors'].append(message.text) if message.type=='error' else None)
+        api_calls=[]
+        page.on('request',lambda req:api_calls.append(req.url) if '/api/' in req.url else None)
+        def screenshot(name):
+            page.screenshot(path=str(out/name),full_page=False)
+            results['screenshots'].append(name)
+        def navigate(view,title):
+            page.goto(args.url+'/#'+view)
+            expect(page.get_by_role('heading',name=title,exact=True)).to_be_visible(timeout=15000)
+            expect(page.locator('.loading')).to_have_count(0)
+        def check(name):results['checks'].append({'name':name,'status':'passed'})
+        page.goto(args.url+'/login?lang=PL')
+        expect(page).to_have_title('DCC Web — logowanie')
+        screenshot('login.png')
+        page.get_by_label('Nazwa użytkownika',exact=True).fill('review-admin')
+        page.get_by_label('Hasło',exact=True).fill('Review-only-password-4488')
+        page.get_by_role('button',name='Otwórz DCC Web').click()
+        expect(page.locator('#ui-language')).to_be_visible()
+        page.locator('#ui-language').select_option('PL')
+        expect(page.get_by_role('heading',name='Przegląd',exact=True)).to_be_visible(timeout=15000)
+        expect(page.get_by_text('local-review',exact=True)).to_be_visible()
+        check('Login, valid session and nonblank overview')
+        screenshot('desktop-obsidian.png')
+        results['startup_api_calls']=len(api_calls)
+        results['startup_timing_ms']=page.evaluate('performance.getEntriesByType("navigation")[0]?.domContentLoadedEventEnd||0')
+
+        navigate('containers','Kontenery')
+        page.get_by_label('Szukaj kontenera',exact=True).fill('redis')
+        expect(page.locator('#containers-table tbody tr')).to_have_count(1)
+        expect(page.locator('#containers-table')).to_contain_text('redis')
+        page.get_by_label('Szukaj kontenera',exact=True).fill('')
+        expect(page.locator('#containers-table tbody tr')).to_have_count(3)
+        check('Container search and status table')
+        page.locator('[data-actions]').first.click()
+        page.locator('#modal select[name=action]').select_option('stop')
+        page.locator('#modal button[type=submit]').click()
+        expect(page.locator('#modal')).to_contain_text('Potwierdź operację')
+        screenshot('confirmation.png')
+        page.locator('#modal input[type=checkbox]').check()
+        page.locator('#modal button[type=submit]').click()
+        expect(page.locator('#toast')).to_contain_text('Operacja zakończona',timeout=10000)
+        check('Explicit single-use confirmation and mocked container stop')
+
+        navigate('store','Sklep aplikacji')
+        tabs=page.locator('[data-category]')
+        assert tabs.all_text_contents()[:4]==['Wszystkie','Zainstalowane','DCC','AI']
+        page.locator('[data-category=DCC]').click()
+        expect(page.locator('.app-tile')).to_have_count(1)
+        expect(page.locator('.app-tile')).to_contain_text('DCC Container Updater')
+        assert int(page.locator('[data-category=DCC]').evaluate('(el)=>getComputedStyle(el).fontWeight'))>=700
+        assert page.locator('.app-tile').bounding_box()['height']<180
+        screenshot('store-dcc.png')
+        page.locator('[data-category="Aktualizacje"]').click()
+        expect(page.locator('.app-tile')).to_have_count(1)
+        page.locator('[data-category=all]').click()
+        page.get_by_label('Szukaj aplikacji',exact=True).fill('alpine')
+        expect(page.locator('.app-tile')).to_have_count(1)
+        page.locator('#store-install').click()
+        expect(page.locator('#modal')).to_contain_text('Konfiguracja: Alpine Linux')
+        screenshot('installation-form.png')
+        page.locator('#modal [name=name]').fill('fixture-alpine')
+        page.locator('#modal button[type=submit]').click()
+        expect(page.locator('#modal')).to_contain_text('Podgląd instalacji')
+        page.locator('#modal button[type=submit]').click()
+        expect(page.locator('#modal')).not_to_be_visible(timeout=10000)
+        check('DCC category order/bold, both Updater filters, store search and confirmed mock install')
+
+        navigate('logs/'+('a'*64),'Logi i diagnostyka')
+        expect(page.locator('#logs-output')).to_contain_text('Server ready')
+        page.get_by_label('Szukaj w logach',exact=True).fill('ERROR')
+        expect(page.locator('#logs-output')).to_contain_text('Example failure')
+        expect(page.locator('#logs-output')).not_to_contain_text('Server ready')
+        screenshot('logs.png')
+        check('Logs, text filter and error highlighting')
+        navigate('monitoring','Monitoring')
+        expect(page.locator('svg.chart')).to_have_count(2)
+        screenshot('monitoring.png')
+        for view,title in [('images','Obrazy Docker'),('volumes','Wolumeny'),('networks','Sieci'),('compose','Docker Compose'),('audit','Dziennik operacji'),('mcp','AI / MCP')]:
+            navigate(view,title)
+            assert page.locator('#content').inner_text().strip()
+        check('Images, volumes, networks, Compose, audit and MCP Preview render')
+        navigate('profiles','Profile połączeń')
+        page.get_by_role('button',name='+ Nowy profil',exact=True).click()
+        expect(page.locator('#modal')).to_contain_text('Uprawnienia profilu')
+        screenshot('profile-form.png')
+        page.locator('#modal [data-close]').first.click()
+        check('Connection profile form and explicit permissions')
+
+        for theme in ('obsidian','violet','ocean','arctic','emerald'):
+            navigate('settings','Ustawienia')
+            page.locator('[data-theme-choice='+theme+']').click()
+            assert page.locator('html').get_attribute('data-theme')==theme
+            if theme=='obsidian':
+                page.locator('#audio-enabled').check()
+                page.get_by_role('button',name='Odsłuchaj efekt',exact=True).click()
+
+                for _ in range(100):
+                    if page.evaluate('window.__playedSounds.length')>0:break
+                    time.sleep(.05)
+                else:raise AssertionError('No local audio playback event')
+                screenshot('settings.png')
+            page.get_by_role('button',name='Zapisz ustawienia',exact=True).click()
+            expect(page.locator('#toast')).to_contain_text('Ustawienia zapisane')
+            navigate('overview','Przegląd')
+            screenshot('desktop-'+theme+'.png')
+        check('Five distinct live themes, persistence, reduced motion and actual local audio playback')
+
+        page.set_viewport_size({'width':1024,'height':900})
+        navigate('overview','Przegląd')
+        assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
+        screenshot('tablet.png')
+        page.set_viewport_size({'width':390,'height':844})
+        navigate('store','Sklep aplikacji')
+        page.get_by_label('Szukaj aplikacji',exact=True).fill('')
+        page.locator('[data-category=DCC]').click()
+        expect(page.locator('.app-tile')).to_have_count(1)
+        assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
+        screenshot('mobile-store.png')
+        page.locator('#menu-toggle').click()
+        expect(page.locator('#navigation')).to_be_visible()
+        page.locator('#navigation [data-nav=monitoring]').click()
+        expect(page.get_by_role('heading',name='Monitoring',exact=True)).to_be_visible()
+        screenshot('mobile-monitoring.png')
+        check('Tablet/phone responsive layout, no page overflow and working mobile navigation')
+
+        page.set_viewport_size({'width':1488,'height':1056})
+        page.evaluate("""async()=>{const r=await fetch('/api/qa/scale',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content},body:JSON.stringify({count:1000})});if(!r.ok)throw Error(await r.text());return r.json();}""")
+        begin=time.perf_counter()
+        navigate('containers','Kontenery')
+        page.get_by_label('Szukaj kontenera',exact=True).fill('')
+        expect(page.locator('#containers-table tbody tr')).to_have_count(1000)
+        results['render_1000_containers_ms']=round((time.perf_counter()-begin)*1000,2)
+        assert results['render_1000_containers_ms']<10000
+        page.evaluate("""async()=>{const r=await fetch('/api/qa/scale',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content},body:JSON.stringify({count:3})});if(!r.ok)throw Error(await r.text());return r.json();}""")
+        check('1000-container fixture API and rendered table')
+        assert not results['console_errors'],results['console_errors']
+        context.close();browser.close()
+    (out/'browser-results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')
+    print(json.dumps(results,ensure_ascii=False,indent=2))
+
+if __name__=='__main__':main()

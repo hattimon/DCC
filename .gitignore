@@ -36,3 +36,6 @@ dcc_catalog_refresh_*.py
 Thumbs.db
 .DS_Store
 .venv-release-*/
+.pip-build-cache/
+apps/dcc-web/.data/
+apps/dcc-web/.review-data/

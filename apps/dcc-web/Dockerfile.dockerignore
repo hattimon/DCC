@@ -1,0 +1,13 @@
+.git
+.venv*
+.pip-build-cache
+.uv-cache
+build
+dist
+release
+**/__pycache__
+**/.data
+**/.review-data
+apps/dcc-web/tests
+apps/container-updater/.testdeps
+apps/container-updater/.pip-tmp

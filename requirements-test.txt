@@ -1,0 +1,5 @@
+-r requirements-build.txt
+Pillow>=10,<14
+
+# Existing Container Updater tests need IANA timezone data on Windows.
+tzdata==2026.5

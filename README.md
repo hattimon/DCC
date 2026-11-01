@@ -12,8 +12,10 @@
 A cross-platform desktop control panel for managing Docker on Windows and Debian-family Linux, locally, through WSL/WSL2, and on remote hosts over SSH or Balena OS.
 
 ### Download Latest Version
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.10/DockerControlCenter-Setup-1.3.10.exe)
-[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.10/DockerControlCenter_1.3.10_amd64.deb)
+**Local acceptance candidate:** 1.3.11 is not published. The links below are prepared for the future approved release; use the local `release/` installers during acceptance.
+
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter-Setup-1.3.11.exe)
+[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter_1.3.11_amd64.deb)
 
 ## What's New in v1.3.10
 
@@ -204,3 +206,11 @@ Projekt DCC jest udostępniany na licencji MIT.
 Third-party assets are covered by their respective licenses or ownership terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom właścicieli.
+
+## 1.3.11 — local review candidate / lokalna wersja do akceptacji
+
+The 1.3.11 packages and DCC Web are prepared locally; publication requires approval.
+DCC Web runs independently from Desktop. See [DCC Web](apps/dcc-web/README.md).
+Pakiety 1.3.11 i DCC Web są przygotowywane lokalnie, bez publikacji na GitHub.
+
+DCC Web includes container operations, profiles, logs, monitoring, Compose, the shared App Store, five themes, local audio, EN/PL, clickable panel endpoints, an AI configuration assistant and scoped read-only MCP Preview. Run `apps/dcc-web/start.ps1` on Windows or follow the [installation instructions](apps/dcc-web/docs/installation.md). The [feature matrix](apps/dcc-web/docs/feature-matrix.md) lists adapter restrictions and functions still specific to Desktop. No Web image has been published or added as a fictitious catalog application.

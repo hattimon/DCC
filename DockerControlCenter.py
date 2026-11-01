@@ -19,6 +19,7 @@ import uuid
 import webbrowser
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from dcc_catalog import DCC_CATEGORY, category_group, localized_categories, catalog_category_sort_key
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -398,7 +399,7 @@ LLM_OPENAI_COMPATIBLE_BASE_URLS = {
     "xai": "https://api.x.ai/v1",
 }
 
-APP_VERSION = "1.3.10"
+APP_VERSION = "1.3.11"
 APP_VERSION_TAG = f"v{APP_VERSION}"
 GITHUB_REPO = "hattimon/DCC"
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
@@ -725,8 +726,8 @@ TEXTS = {
         "info_app_open_repo": "Open repository",
         "info_app_open_release": "Open latest release",
         "info_app_check_updates": "Check updates",
-        "info_app_changelog_title": "Changelog (v1.3.10)",
-        "info_app_changelog": "- Fixed the Windows Infrastructure terminal so it opens visibly.\n- Improved Store heading and catalog-status contrast in Day and Light themes on Windows and Linux.\n- Improved refresh-thread cleanup and pause periodic container refresh while modal dialogs such as the Store are open.\n- Preserved the working 1.3.9 updater handoff, Windows restart behavior and shortcut icon refresh.",
+        "info_app_changelog_title": f"Changelog (v{APP_VERSION})",
+        "info_app_changelog": "- Added the bold DCC Store category and multiple category memberships.\n- Kept Container Updater in DCC and Updates; made its header compact.\n- Added the independent local DCC Web module.\n- Fixed the Windows Infrastructure terminal so it opens visibly.\n- Improved Store heading and catalog-status contrast in Day and Light themes on Windows and Linux.\n- Improved refresh-thread cleanup and pause periodic container refresh while modal dialogs such as the Store are open.\n- Preserved the working 1.3.9 updater handoff, Windows restart behavior and shortcut icon refresh.",
         "info_update_available_title": "Update available",
         "info_update_available_body": "A newer release is available: {release}.",
         "info_update_question": "Update to {release} is available. Install it now?",
@@ -1293,8 +1294,8 @@ TEXTS = {
         "info_app_open_repo": "Otwórz repozytorium",
         "info_app_open_release": "Otwórz najnowsze wydanie",
         "info_app_check_updates": "Sprawdź aktualizacje",
-        "info_app_changelog_title": "Changelog (v1.3.10)",
-        "info_app_changelog": "- Naprawiono terminal Infrastruktury na Windows — otwiera się teraz jako widoczne okno.\n- Poprawiono czytelność nagłówków Sklepu i statusu katalogu w motywach Dzień i Jasny na Windows i Linux.\n- Poprawiono kończenie wątków odświeżania i wstrzymano okresowe odświeżanie kontenerów podczas otwartych okien modalnych, w tym Sklepu.\n- Zachowano działający handoff updatera z 1.3.9, restart Windows i odświeżanie ikon skrótów.",
+        "info_app_changelog_title": f"Changelog (v{APP_VERSION})",
+        "info_app_changelog": "- Dodano pogrubioną kategorię DCC i wiele kategorii jednej aplikacji.\n- Zachowano Updatera w DCC i Aktualizacje; zmniejszono nagłówek.\n- Dodano niezależny, lokalny moduł DCC Web.\n- Naprawiono terminal Infrastruktury na Windows — otwiera się teraz jako widoczne okno.\n- Poprawiono czytelność nagłówków Sklepu i statusu katalogu w motywach Dzień i Jasny na Windows i Linux.\n- Poprawiono kończenie wątków odświeżania i wstrzymano okresowe odświeżanie kontenerów podczas otwartych okien modalnych, w tym Sklepu.\n- Zachowano działający handoff updatera z 1.3.9, restart Windows i odświeżanie ikon skrótów.",
         "info_update_available_title": "Dostępna aktualizacja",
         "info_update_available_body": "Dostępna jest nowsza wersja: {release}.",
         "info_update_question": "Dostępna jest aktualizacja do wersji {release}. Czy wykonać ja teraz?",
@@ -1968,7 +1969,7 @@ class SecretStore:
             self._save()
 
 
-DCC_STORE_CATEGORY = "DCC"
+DCC_STORE_CATEGORY = DCC_CATEGORY
 
 
 @dataclass
@@ -2042,17 +2043,9 @@ class ImageTemplate:
         return self.category_en if lang == "EN" and self.category_en else self.category
 
     def categories_for(self, lang: str) -> List[str]:
-        # Legacy singular category stays primary; plural fields add memberships.
-        extras = self.categories_en if lang == "EN" and self.categories_en else self.categories
-        ordered = [self.category_for(lang), *(extras or [])]
-        result: List[str] = []
-        seen = set()
-        for value in ordered:
-            category = str(value or "").strip()
-            if category and category.casefold() not in seen:
-                seen.add(category.casefold())
-                result.append(category)
-        return result
+        return localized_categories(
+            self.category, self.category_en, self.categories, self.categories_en, lang
+        )
 
     def description_for(self, lang: str) -> str:
         return self.description_en if lang == "EN" and self.description_en else self.description
@@ -2501,39 +2494,6 @@ def deployment_catalog_icon(template: ImageTemplate) -> QIcon:
     return QIcon(pixmap)
 
 
-def catalog_category_sort_key(category: str) -> tuple[int, str]:
-    text = str(category or "").strip()
-    normalized = text.casefold()
-    priorities = [
-        ("ai", 0),
-        ("autom", 1),
-        ("low-code", 2),
-        ("administr", 3),
-        ("monitor", 4),
-        ("narz", 5),
-        ("tools", 5),
-        ("aplikacje www", 6),
-        ("web apps", 6),
-        ("www", 7),
-        ("web /", 7),
-        ("devops", 8),
-        ("smart home", 9),
-        ("media", 10),
-        ("network", 11),
-        ("sie", 11),
-        ("bazy", 12),
-        ("databases", 12),
-        ("messaging", 13),
-        ("cache", 14),
-        ("runtime", 15),
-        ("baza /", 16),
-        ("base /", 16),
-        ("balena", 17),
-    ]
-    for prefix, priority in priorities:
-        if normalized.startswith(prefix):
-            return priority, normalized
-    return 50, normalized
 
 
 def default_image_catalog() -> List[ImageTemplate]:
@@ -6332,19 +6292,13 @@ class NewContainerDialog(QDialog):
 
     def _catalog_category_group(self, category: str) -> str:
         raw = str(category or "")
-        if raw == self.texts["wizard_all_categories"]:
+        if raw in {
+            self.texts["wizard_all_categories"],
+            self.texts["wizard_installed_category"],
+            self.texts["wizard_balena_category"],
+        }:
             return raw
-        if raw == self.texts["wizard_installed_category"]:
-            return raw
-        if raw == self.texts["wizard_balena_category"]:
-            return raw
-        head = re.split(r"\s*[›/]\s*", raw, maxsplit=1)[0].strip()
-        # Repository categories may contain emoji.  Keep them in catalog data,
-        # but do not render them in the navigation because some Qt/font stacks
-        # display them as tofu squares instead of glyphs.
-        while head and not head[-1].isalnum():
-            head = head[:-1].rstrip()
-        return head or raw
+        return category_group(raw)
 
     def _category_icon_kind(self, category: str) -> str:
         value = str(category or "").casefold()
@@ -10918,7 +10872,8 @@ class MainWindow(QMainWindow):
                 name = str(asset.get("name") or "").lower()
                 if any(alias and alias in name for alias in arch_aliases):
                     return asset
-            return deb_assets[0] if deb_assets else None
+            # Never offer an amd64 DEB to an ARM host when no matching asset exists.
+            return None
         for asset in assets:
             name = str(asset.get("name") or "")
             if re.fullmatch(r"DockerControlCenter-Setup-[0-9][0-9A-Za-z._-]*\.exe", name, re.IGNORECASE):
