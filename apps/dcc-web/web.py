@@ -29,9 +29,24 @@ from state import State
 from ports import enrich_containers,inventory
 from urllib.parse import urlsplit
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
 DEFAULT_SETTINGS = {"theme":"obsidian", "accent":"#73d2c4", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
+
+
+def provision_random_admin(state):
+    """Create one strong, log-recoverable administrator for a fresh LAN install."""
+    username = "admin"
+    password = secrets.token_urlsafe(24)
+    with state.connect() as db:
+        db.execute("BEGIN IMMEDIATE")
+        if db.execute("SELECT 1 FROM users LIMIT 1").fetchone():
+            return None
+        db.execute(
+            "INSERT INTO users VALUES(?,?,?,?)",
+            (secrets.token_hex(12), username, generate_password_hash(password), "admin"),
+        )
+    return username, password
 
 
 def create_app(config=None, backend_factory=None, terminal_factory=None):
@@ -845,8 +860,11 @@ def main():
         parser.error("LAN exposure requires --allow-lan and an HTTPS reverse proxy")
     allowed = {"127.0.0.1","localhost","::1",args.host,*os.environ.get("DCC_WEB_HOSTS","").split(",")}
     app = create_app({"DATA_DIR":args.data,"ALLOWED_HOSTS":allowed})
-    if args.allow_lan and not app.extensions["dcc_state"].rows("SELECT id FROM users LIMIT 1"):
-        parser.error("Initialize an administrator locally with --init-admin before enabling LAN access")
+    if args.allow_lan:
+        credentials = provision_random_admin(app.extensions["dcc_state"])
+        if credentials:
+            username, password = credentials
+            print(f"DCC_WEB_INITIAL_CREDENTIALS username={username} password={password}", flush=True)
     import threading
     def refresh_sources():
         while True:

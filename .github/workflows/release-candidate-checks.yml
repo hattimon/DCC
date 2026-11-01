@@ -101,12 +101,13 @@ jobs:
           apt-get install -y ca-certificates curl desktop-file-utils xvfb xauth fonts-dejavu-core
           bash tests/linux_deb_compat_smoke.sh release/DockerControlCenter_1.3.11_amd64.deb
 
-  debian-stable-upgrade-compatibility:
-    # Run the older-package migration in a separate clean container. Reusing
-    # the fresh-install container would downgrade the candidate before testing.
+  debian-bookworm-upgrade-compatibility:
+    # The previous v1.3.10 package depends on policykit-1, which is available
+    # on Bookworm. Test the real apt-based upgrade on that supported base;
+    # Trixie's fresh install is covered separately above.
     needs: debian-upgrade
     runs-on: ubuntu-24.04
-    container: debian:trixie-slim
+    container: debian:bookworm-slim
     steps:
       - uses: actions/checkout@v4
       - name: Download the tested Debian package
@@ -114,13 +115,11 @@ jobs:
         with:
           name: dcc-v1.3.11-linux
           path: release
-      - name: Upgrade older install on Debian stable and preserve profile/settings
+      - name: Upgrade existing v1.3.10 install on Debian Bookworm and preserve profile/settings
         run: |
           apt-get update
           apt-get install -y ca-certificates curl desktop-file-utils xvfb xauth fonts-dejavu-core
           bash tests/linux_deb_upgrade_smoke.sh
-        env:
-          DCC_OLD_DEB_INSTALL_MODE: dpkg-force
 
   web-tests:
     runs-on: ubuntu-24.04
@@ -143,8 +142,8 @@ jobs:
       - name: Upload DCC Web source package
         uses: actions/upload-artifact@v4
         with:
-          name: dcc-web-0.1.0-source
-          path: release/DCC-Web-0.1.0-source.zip
+          name: dcc-web-0.1.1-source
+          path: release/DCC-Web-0.1.1-source.zip
           if-no-files-found: error
       - name: Build the candidate Web image
         run: docker build -f apps/dcc-web/Dockerfile -t dcc-web:release-candidate .
@@ -152,3 +151,32 @@ jobs:
         run: |
           docker run --rm --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true --volume /var/run/docker.sock:/var/run/docker.sock dcc-web:release-candidate python -c 'import os,subprocess; assert os.geteuid()==10001, os.geteuid(); assert os.access("/var/run/docker.sock",os.R_OK|os.W_OK); subprocess.run(["docker","version","--format","{{.Server.Version}}"],check=True,capture_output=True,text=True); subprocess.run(["docker","compose","version"],check=True,capture_output=True,text=True); print("socket group, dropped UID and Compose OK")'
           docker run --rm dcc-web:release-candidate --self-check
+      - name: Verify App Store first-start credentials and restart behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          container=dcc-web-first-run-smoke
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$container" \
+            --publish 127.0.0.1::8789 \
+            --tmpfs /data:rw,nosuid,nodev,noexec,size=16m,uid=10001,gid=10001,mode=0700 \
+            dcc-web:release-candidate >/dev/null
+          port="$(docker inspect --format='{{(index (index .NetworkSettings.Ports "8789/tcp") 0).HostPort}}' "$container")"
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail "http://127.0.0.1:${port}/login" >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail "http://127.0.0.1:${port}/login" >/dev/null
+          logs="$(docker logs "$container" 2>&1)"
+          count="$(grep -c 'DCC_WEB_INITIAL_CREDENTIALS username=admin password=' <<< "$logs")"
+          test "$count" -eq 1
+          password="$(grep -Eo 'DCC_WEB_INITIAL_CREDENTIALS username=admin password=[A-Za-z0-9_-]+' <<< "$logs" | head -n1 | sed 's/.* password=//')"
+          test "${#password}" -ge 24
+          docker restart "$container" >/dev/null
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail "http://127.0.0.1:${port}/login" >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --fail "http://127.0.0.1:${port}/login" >/dev/null
+          test "$(docker logs "$container" 2>&1 | grep -c 'DCC_WEB_INITIAL_CREDENTIALS username=admin password=')" -eq 1
+          echo "Fresh App Store container starts and keeps one generated admin credential across restart."

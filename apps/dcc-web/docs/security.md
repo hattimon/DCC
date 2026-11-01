@@ -4,7 +4,7 @@ DCC Web is a Docker administration application. Docker socket access, privileged
 
 ## Implemented controls
 
-- Scrypt password hashes, no default production password, local-only first setup and a login attempt limit (8 per address/10 minutes).
+- Scrypt password hashes, a one-time random App Store bootstrap credential, interactive local-only setup for standalone mode and a login attempt limit (8 per address/10 minutes).
 - Rotated signed cookie plus server-side hashed session IDs, 12-hour expiry, HttpOnly and SameSite Strict. Secure cookies and HSTS are enabled for configured HTTPS deployments.
 - CSRF checks on every mutation, same-origin checks, hostname allowlist, no permissive CORS, no WebSocket server. Upgrade requests do not expose an alternate unauthenticated channel.
 - Role and profile permissions on API routes, default read-only profiles, revocable profile/tool-scoped MCP tokens stored only as hashes.
@@ -16,7 +16,7 @@ DCC Web is a Docker administration application. Docker socket access, privileged
 
 ## HTTPS / reverse proxy
 
-Keep Waitress listening on `127.0.0.1:8789`, put a trusted TLS reverse proxy in front, preserve the configured Host, and configure `DCC_WEB_HTTPS=1`, `DCC_WEB_PUBLIC_ORIGIN=https://dcc.example.net` and `DCC_WEB_HOSTS=dcc.example.net`. Disable initial browser setup by creating the administrator locally first with `--init-admin`. Restrict access at the firewall or VPN. Do not add a wildcard CORS policy or blindly trust forwarded headers. For a container network, publish only localhost as in `compose.yaml` and proxy that port.
+Keep Waitress listening on `127.0.0.1:8789`, put a trusted TLS reverse proxy in front, preserve the configured Host, and configure `DCC_WEB_HTTPS=1`, `DCC_WEB_PUBLIC_ORIGIN=https://dcc.example.net` and `DCC_WEB_HOSTS=dcc.example.net`. For manual/public deployments, create the administrator locally first with `--init-admin`; the DCC App Store image instead creates a one-time random administrator password on first start and writes it once to container logs so setup cannot be claimed anonymously over the network. Restrict access at the firewall or VPN. Do not add a wildcard CORS policy or blindly trust forwarded headers. For a container network, publish only localhost as in `compose.yaml` and proxy that port.
 
 Example Nginx location (adapt certificates/DNS separately; no production deployment is performed):
 

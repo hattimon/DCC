@@ -1,10 +1,12 @@
-# DCC Web 0.1.0
+# DCC Web 0.1.1
 
 [English](README.md) · [Polski](README.pl.md) · [GitHub repository](https://github.com/hattimon/DCC)
 
 DCC Web is the browser workspace in Docker Control Center. It is independently versioned and complements the Windows and Linux desktop application. The DCC App Store entry opens this page from its **Website** button. Install DCC Web from the **DCC** category in Desktop 1.3.11 or newer.
 
 The implementation uses Flask, Waitress, SQLite, native ES modules and CSS. This follows the existing Container Updater stack and avoids adding a frontend framework or a JavaScript build pipeline. It shares `dcc_catalog.py` and the canonical `dcc-catalog.json` with Desktop, and delegates safe container recreation to the existing Container Updater service without modifying that module.
+
+When installed from the DCC App Store, a fresh container creates the `admin` account with a strong random password. The installation result shows the credentials; the password is also written once to the container logs. Change it after signing in. The standalone local installer still lets you create the administrator interactively.
 
 ## Start on Windows
 
@@ -20,7 +22,7 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 
 ## Install on Windows, macOS or Linux
 
-Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/v1.3.11/DCC-Web-0.1.0-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.1.0` directory:
+Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/v1.3.11/DCC-Web-0.1.1-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.1.1` directory:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py

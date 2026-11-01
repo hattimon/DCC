@@ -198,7 +198,7 @@ class StoreCatalogFeatureTests(unittest.TestCase):
         entries = [item for item in payload["apps"] if item["name"] == "DCC Web"]
         self.assertEqual(len(entries), 1)
         entry = entries[0]
-        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:0.1.0")
+        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:0.1.1")
         self.assertEqual(entry["category"], "DCC")
         self.assertEqual(entry["categories"], ["DCC", "Administracja 🛠", "WWW 🌐"])
         self.assertEqual(entry["categories_en"], ["DCC", "Administration 🛠", "WWW 🌐"])
@@ -209,6 +209,8 @@ class StoreCatalogFeatureTests(unittest.TestCase):
         self.assertIn("/var/run/docker.sock:/var/run/docker.sock", entry["extra"])
         self.assertIn("--cap-drop=ALL", entry["extra"])
         self.assertIn("--cap-add=SETUID", entry["extra"])
+        self.assertIn("losowe hasło administratora", entry["notes"])
+        self.assertIn("random administrator password", entry["notes_en"])
         app = dcc.image_template_from_dict(entry, dcc.DEFAULT_DEPLOYMENT_REPOSITORY)
         self.assertEqual(app.categories_for("PL"), ["DCC", "Administracja 🛠", "WWW 🌐"])
         self.assertEqual(app.categories_for("EN"), ["DCC", "Administration 🛠", "WWW 🌐"])

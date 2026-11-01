@@ -263,7 +263,7 @@
       "name": "DCC Web",
       "categories": ["DCC", "Administracja 🛠", "WWW 🌐"],
       "categories_en": ["DCC", "Administration 🛠", "WWW 🌐"],
-      "image": "ghcr.io/hattimon/dcc-web:0.1.0",
+      "image": "ghcr.io/hattimon/dcc-web:0.1.1",
       "category": "DCC",
       "category_en": "DCC",
       "description": "Przeglądarkowy panel DCC do zarządzania kontenerami, profilami i hostami Docker.",
@@ -287,8 +287,8 @@
       "host_port": "8789",
       "extra": "-v /var/run/docker.sock:/var/run/docker.sock -v dcc_web_data:/data --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true --read-only --tmpfs /tmp:size=64m,mode=1777 --pids-limit=128 --memory=512m --restart unless-stopped",
       "command": "",
-      "notes": "Socket Docker zapewnia panelowi administracyjny dostęp do hosta. Proces serwera działa jako UID 10001 i otrzymuje tylko grupę socketu; SETUID/SETGID służą wyłącznie do obniżenia uprawnień. Dane profili i ustawień są przechowywane w wolumenie dcc_web_data. Przy pierwszym wejściu pod http://<adres-hosta>:<port>/login utwórz konto administratora z hasłem co najmniej 12 znaków. Dostęp HTTP ogranicz do zaufanej sieci; przed udostępnieniem spoza LAN skonfiguruj HTTPS, VPN lub zaufany reverse proxy.",
-      "notes_en": "The Docker socket gives the panel administrative access to the host. The server runs as UID 10001 and receives only the socket group; SETUID/SETGID are used only to drop privileges. Profile and settings data persist in the dcc_web_data volume. On first visit to http://<host-address>:<port>/login, create an administrator account with a password of at least 12 characters. Restrict HTTP to a trusted network; configure HTTPS, a VPN or a trusted reverse proxy before exposing it beyond your LAN.",
+      "notes": "Socket Docker zapewnia panelowi administracyjny dostęp do hosta. Proces serwera działa jako UID 10001 i otrzymuje tylko grupę socketu; SETUID/SETGID służą wyłącznie do obniżenia uprawnień. Dane profili i ustawień są przechowywane w wolumenie dcc_web_data. Przy pierwszym uruchomieniu generowane jest silne, losowe hasło administratora; nazwa użytkownika to admin, a hasło pojawi się w wyniku instalacji i logach kontenera. Zmień je po pierwszym logowaniu. Dostęp HTTP ogranicz do zaufanej sieci; przed udostępnieniem spoza LAN skonfiguruj HTTPS, VPN lub zaufany reverse proxy.",
+      "notes_en": "The Docker socket gives the panel administrative access to the host. The server runs as UID 10001 and receives only the socket group; SETUID/SETGID are used only to drop privileges. Profile and settings data persist in the dcc_web_data volume. On first start, DCC Web generates a strong random administrator password; the username is admin and the password appears in the installation result and container logs. Change it after signing in. Restrict HTTP to a trusted network; configure HTTPS, a VPN or a trusted reverse proxy before exposing it beyond your LAN.",
       "lightweight": false,
       "engines": ["docker"],
       "archs": ["amd64", "arm64"],
@@ -298,13 +298,13 @@
       "icon_text": "◇",
       "post_install_hints": [
         "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",
-        "Przy pierwszym wejściu utwórz własne konto administratora. Nie ma domyślnego loginu ani hasła.",
+        "Zaloguj się jako admin; silne losowe hasło znajdziesz w wyniku instalacji lub logach kontenera. Zmień je po pierwszym logowaniu.",
         "Panel ma administracyjny dostęp do Dockera. Ogranicz go do zaufanej sieci i skonfiguruj HTTPS przed publicznym dostępem.",
         "Profile i ustawienia zachowuje wolumen dcc_web_data."
       ],
       "post_install_hints_en": [
         "Open http://<active-host-address>:<port>/login; if port 8789 is busy, use the port selected by DCC.",
-        "Create your own administrator account on first visit. No default username or password is configured.",
+        "Sign in as admin; find the strong random password in the installation result or container logs. Change it after your first sign-in.",
         "The panel has administrative Docker access. Keep it on a trusted network and configure HTTPS before public access.",
         "The dcc_web_data volume retains profiles and settings."
       ]

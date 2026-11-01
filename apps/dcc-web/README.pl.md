@@ -1,4 +1,4 @@
-# DCC Web 0.1.0
+# DCC Web 0.1.1
 
 [Polski](README.pl.md) · [English](README.md) · [Repozytorium GitHub](https://github.com/hattimon/DCC)
 
@@ -18,11 +18,11 @@ DCC Web to przeglądarkowy panel Docker Control Center, rozwijany jako osobny mo
 
 Zaktualizuj DCC Desktop do wersji 1.3.11 lub nowszej, otwórz **Sklep aplikacji**, wybierz kategorię **DCC** i zainstaluj **DCC Web**. Panel używa trwałego wolumenu `dcc_web_data` i portu hosta wybranego przez DCC (domyślnie 8789).
 
-Przy pierwszym wejściu otwórz `/login` i utwórz własne konto administratora. Nie ma domyślnego hasła.
+Przy instalacji ze Sklepu DCC świeży kontener tworzy konto `admin` z silnym, losowym hasłem. Dane logowania pojawią się w wyniku instalacji, a hasło zostanie jednorazowo zapisane w logach kontenera. Zmień je po zalogowaniu. Instalator samodzielny nadal pozwala interaktywnie utworzyć administratora.
 
 ### Instalacja na Windows, macOS lub Linux
 
-Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/v1.3.11/DCC-Web-0.1.0-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.1.0`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
+Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/v1.3.11/DCC-Web-0.1.1-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.1.1`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py

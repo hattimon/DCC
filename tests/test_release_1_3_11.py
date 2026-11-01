@@ -65,18 +65,19 @@ class Release1311Tests(unittest.TestCase):
             self.assertIn(name,notes)
         readme=(ROOT/'README.md').read_text(encoding='utf-8')
         self.assertIn('/v1.3.11/',readme)
-        self.assertIn('DCC%20Web-v0.1.0',readme)
+        self.assertIn('DCC%20Web-v0.1.1',readme)
         self.assertIn('apps/dcc-web/docs/installation.md',readme)
 
     def test_dcc_web_source_archive_contains_cross_platform_port_installer(self):
+        self.assertEqual((ROOT/'apps'/'dcc-web'/'VERSION').read_text(encoding='utf-8').strip(),'0.1.1')
         with tempfile.TemporaryDirectory() as directory:
-            archive_path=build_archive(Path(directory)/'DCC-Web-0.1.0-source.zip')
+            archive_path=build_archive(Path(directory)/'DCC-Web-0.1.1-source.zip')
             with ZipFile(archive_path) as archive:
                 names=set(archive.namelist())
-                self.assertIn('DCC-Web-0.1.0/apps/dcc-web/install.py',names)
-                self.assertIn('DCC-Web-0.1.0/apps/dcc-web/docs/installation.md',names)
-                self.assertIn('DCC-Web-0.1.0/dcc-catalog.json',names)
-                self.assertNotIn('DCC-Web-0.1.0/apps/dcc-web/tests/test_install.py',names)
+                self.assertIn('DCC-Web-0.1.1/apps/dcc-web/install.py',names)
+                self.assertIn('DCC-Web-0.1.1/apps/dcc-web/docs/installation.md',names)
+                self.assertIn('DCC-Web-0.1.1/dcc-catalog.json',names)
+                self.assertNotIn('DCC-Web-0.1.1/apps/dcc-web/tests/test_install.py',names)
 
     def test_linux_deb_declares_audio_runtime_and_desktop_launch_is_smoke_tested(self):
         builder=(ROOT/'packaging/linux/build_deb.sh').read_text(encoding='utf-8')
@@ -94,8 +95,10 @@ class Release1311Tests(unittest.TestCase):
         self.assertIn('runs-on: ubuntu-22.04',workflow)
         self.assertIn('container: debian:trixie-slim',workflow)
         self.assertIn('tests/linux_deb_compat_smoke.sh',workflow)
-        self.assertIn('debian-stable-upgrade-compatibility:',workflow)
+        self.assertIn('debian-bookworm-upgrade-compatibility:',workflow)
+        self.assertIn('container: debian:bookworm-slim',workflow)
         self.assertIn('Upgrade smoke test must start without docker-control-center already installed.',(ROOT/'tests/linux_deb_upgrade_smoke.sh').read_text(encoding='utf-8'))
+        self.assertIn('Verify App Store first-start credentials and restart behavior',workflow)
         self.assertIn('runs-on: ubuntu-22.04',release_workflow)
         self.assertIn('libpulse0 pkexec openssh-client',release_workflow)
         self.assertNotIn('policykit-1',release_workflow)

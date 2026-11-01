@@ -1,4 +1,4 @@
-# DCC Web 0.1.0 — release candidate for DCC Desktop 1.3.11
+# DCC Web 0.1.1 — release candidate for DCC Desktop 1.3.11
 
 The release candidate is prepared on `codex/desktop-web-1-3-11`. It is not yet a public image or Desktop release. The App Store entry and formatted product page are included in this branch's `dcc-catalog.json` and will ship with Desktop 1.3.11.
 

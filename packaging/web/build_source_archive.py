@@ -8,8 +8,9 @@ import stat
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[2]
-ARCHIVE_ROOT = "DCC-Web-0.1.0"
-OUTPUT = ROOT / "release" / "DCC-Web-0.1.0-source.zip"
+VERSION = (ROOT / "apps" / "dcc-web" / "VERSION").read_text(encoding="utf-8").strip()
+ARCHIVE_ROOT = f"DCC-Web-{VERSION}"
+OUTPUT = ROOT / "release" / f"DCC-Web-{VERSION}-source.zip"
 EXCLUDED_PARTS = {".git", ".venv", ".data", ".review-data", "__pycache__", ".pytest_cache", "node_modules", "tests"}
 
 

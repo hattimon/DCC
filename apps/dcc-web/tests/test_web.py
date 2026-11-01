@@ -16,8 +16,9 @@ APP_ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(APP_ROOT))
 sys.path.insert(0,str(APP_ROOT.parents[1]))
 from cryptography.fernet import Fernet
-from werkzeug.security import generate_password_hash
-from web import create_app,DEFAULT_SETTINGS
+from werkzeug.security import check_password_hash,generate_password_hash
+from web import create_app,DEFAULT_SETTINGS,provision_random_admin
+from state import State
 from security import CAPABILITIES,redact,validate_profile
 from catalogs import Catalogs,install_plan,fetch_public,validate_catalog,image_repo
 from mcp_preview import MCPService,stdio
@@ -27,6 +28,7 @@ from ports import published_ports,enrich_containers,inventory,parse_bindings
 from remote_api import VerifiedProfileAdapter,ssh_docker_client
 from ai_assistant import validate_connection,proposal
 from fixtures import FakeBackend
+from dcc_catalog import parse_access_details
 
 
 class WebTests(unittest.TestCase):
@@ -62,6 +64,23 @@ class WebTests(unittest.TestCase):
                 return value.get('result')
             time.sleep(.01)
         self.fail('Job did not complete')
+
+    def test_lan_first_start_creates_one_random_admin_and_exposes_it_for_install_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state=State(directory,Fernet.generate_key())
+            credentials=provision_random_admin(state)
+            self.assertIsNotNone(credentials)
+            username,password=credentials
+            self.assertEqual(username,'admin')
+            self.assertGreaterEqual(len(password),24)
+            user=state.rows('SELECT name,password FROM users')[0]
+            self.assertEqual(user['name'],'admin')
+            self.assertTrue(check_password_hash(user['password'],password))
+            self.assertNotIn(password.encode(),state.path.read_bytes())
+            self.assertIsNone(provision_random_admin(state))
+            found=parse_access_details(f'DCC_WEB_INITIAL_CREDENTIALS username={username} password={password}',lang='EN')
+            self.assertIn(('Username','admin'),found)
+            self.assertIn(('Password',password),found)
 
     def test_authentication_cookie_and_logout(self):
         self.assertEqual(self.client.get('/').status_code,200)
