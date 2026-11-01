@@ -98,7 +98,7 @@ jobs:
       - name: Install and launch on current Debian stable (MX Linux base)
         run: |
           apt-get update
-          apt-get install -y ca-certificates desktop-file-utils xvfb xauth fonts-dejavu-core
+          apt-get install -y ca-certificates curl desktop-file-utils xvfb xauth fonts-dejavu-core
           bash tests/linux_deb_compat_smoke.sh release/DockerControlCenter_1.3.11_amd64.deb
       - name: Upgrade older install on Debian stable and preserve profile/settings
         env:
