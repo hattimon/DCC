@@ -352,7 +352,7 @@ class WebTests(unittest.TestCase):
     def test_command_transports_use_argument_arrays_verified_tls_and_no_shell(self):
         result=SimpleNamespace(stdout='{}',stderr='',returncode=0)
         for profile,prefix in [({'kind':'local','context':'review'},['docker','--context','review']),({'kind':'tcp','endpoint':'tcp://review:2376','credentials':{'tls_ca':'ca.pem'}},['docker','--host','tcp://review:2376','--tlsverify','--tlscacert','ca.pem']),({'kind':'wsl','distro':'Ubuntu'},['wsl.exe','--distribution','Ubuntu','--exec','docker'])]:
-            with self.subTest(kind=profile['kind']),patch('engine.subprocess.run',return_value=result) as run,patch('engine.os.name','nt'):
+            with self.subTest(kind=profile['kind']),patch('engine.subprocess.run',return_value=result) as run,patch('engine.os.name','nt'),patch('engine.subprocess.CREATE_NO_WINDOW',0,create=True):
                 DockerBackend(profile).info()
                 self.assertEqual(run.call_args.args[0][:len(prefix)],prefix)
                 self.assertFalse(run.call_args.kwargs.get('shell',False))
