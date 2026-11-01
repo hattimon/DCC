@@ -996,8 +996,8 @@
       "homepage_url": "https://about.gitea.com/",
       "icon_text": "🛠",
       "upstream_repo": "go-gitea/gitea",
-      "latest_release": "v28.2.0",
-      "latest_release_url": "https://github.com/go-gitea/gitea/releases/tag/v28.2.0",
+      "latest_release": "v28.3.0",
+      "latest_release_url": "https://github.com/go-gitea/gitea/releases/tag/v28.3.0",
       "icon_url": "catalog/media/icons/gitea.png"
     },
     {
@@ -1048,8 +1048,8 @@
       "homepage_url": "https://uptime.kuma.pet/",
       "icon_text": "📊",
       "upstream_repo": "louislam/uptime-kuma",
-      "latest_release": "2.5.8",
-      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.8",
+      "latest_release": "2.5.9",
+      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.9",
       "icon_url": "catalog/media/icons/uptime-kuma.png"
     },
     {
@@ -1345,8 +1345,8 @@
       "homepage_url": "https://ntfy.sh/",
       "icon_text": "🔔",
       "upstream_repo": "binwiederhier/ntfy",
-      "latest_release": "v2.35.0",
-      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.35.0",
+      "latest_release": "v2.36.0",
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.36.0",
       "icon_url": "catalog/media/icons/ntfy.png"
     },
     {
@@ -1456,8 +1456,8 @@
       "homepage_url": "https://usememos.com/",
       "icon_text": "✍",
       "upstream_repo": "usememos/memos",
-      "latest_release": "v0.31.0",
-      "latest_release_url": "https://github.com/usememos/memos/releases/tag/v0.31.0",
+      "latest_release": "26.10.0",
+      "latest_release_url": "https://github.com/usememos/memos/releases/tag/26.10.0",
       "icon_url": "catalog/media/icons/memos.png"
     },
     {
