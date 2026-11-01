@@ -77,12 +77,9 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           cache-from: type=gha,scope=dcc-web
           cache-to: type=gha,mode=max,scope=dcc-web
-      - name: Make the App Store image public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh api --method PATCH /user/packages/container/dcc-web/visibility -f visibility=public
       - name: Verify anonymous image access
         run: |
+          # The source label links this package to the public repository, so GHCR inherits its visibility.
           docker logout ghcr.io
           docker manifest inspect "ghcr.io/hattimon/dcc-web:${{ steps.version.outputs.version }}" >/dev/null
           echo "The public App Store tag is readable without credentials."
