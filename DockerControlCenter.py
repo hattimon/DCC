@@ -1082,6 +1082,7 @@ TEXTS = {
         "wizard_store_uninstall_done": "Application container(s) removed.",
         "wizard_balena_category": "Balena OS",
         "wizard_installed_category": "Installed",
+        "wizard_updates_category": "Updates",
         "wizard_credentials_title": "Access details detected",
         "wizard_credentials_intro": "DCC found the following access details in the container startup logs. They are shown here only and are not saved by DCC:",
         "wizard_credentials_none": "Deployment completed. No login credentials were detected in the startup logs.",
@@ -1650,6 +1651,7 @@ TEXTS = {
         "wizard_store_uninstall_done": "Kontenery aplikacji zostały usunięte.",
         "wizard_balena_category": "Balena OS",
         "wizard_installed_category": "Zainstalowane",
+        "wizard_updates_category": "Aktualizacje",
         "wizard_credentials_title": "Wykryto dane dostępu",
         "wizard_credentials_intro": "DCC znalazło poniższe dane dostępu w logach startowych kontenera. Są wyświetlane tylko tutaj i DCC ich nie zapisuje:",
         "wizard_credentials_none": "Wdrożenie zakończone. W logach startowych nie wykryto danych logowania.",
@@ -1964,6 +1966,11 @@ class SecretStore:
         if key in self._data:
             self._data.pop(key, None)
             self._save()
+
+
+DCC_STORE_CATEGORY = "DCC"
+
+
 @dataclass
 class ImageTemplate:
     name: str
@@ -2012,6 +2019,8 @@ class ImageTemplate:
     credential_patterns: Optional[List[Dict[str, str]]] = None
     post_install_hints: Optional[List[str]] = None
     post_install_hints_en: Optional[List[str]] = None
+    categories: Optional[List[str]] = None
+    categories_en: Optional[List[str]] = None
 
     def supports_engine(self, engine: str) -> bool:
         engine = str(engine or "").lower().strip()
@@ -2031,6 +2040,19 @@ class ImageTemplate:
 
     def category_for(self, lang: str) -> str:
         return self.category_en if lang == "EN" and self.category_en else self.category
+
+    def categories_for(self, lang: str) -> List[str]:
+        # Legacy singular category stays primary; plural fields add memberships.
+        extras = self.categories_en if lang == "EN" and self.categories_en else self.categories
+        ordered = [self.category_for(lang), *(extras or [])]
+        result: List[str] = []
+        seen = set()
+        for value in ordered:
+            category = str(value or "").strip()
+            if category and category.casefold() not in seen:
+                seen.add(category.casefold())
+                result.append(category)
+        return result
 
     def description_for(self, lang: str) -> str:
         return self.description_en if lang == "EN" and self.description_en else self.description
@@ -2086,10 +2108,18 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
                     "label_en": str(entry.get("label_en") or "").strip(),
                     "regex": regex,
                 })
+    raw_categories = raw.get("categories")
+    raw_categories_en = raw.get("categories_en")
+    categories = [
+        value.strip() for value in raw_categories if isinstance(value, str) and value.strip()
+    ] if isinstance(raw_categories, list) else []
+    categories_en = [
+        value.strip() for value in raw_categories_en if isinstance(value, str) and value.strip()
+    ] if isinstance(raw_categories_en, list) else []
     return ImageTemplate(
         name=name,
         image=image,
-        category=str(raw.get("category") or "Inne").strip() or "Inne",
+        category=str(raw.get("category") or (categories[0] if categories else "Inne")).strip() or "Inne",
         description=str(raw.get("description") or "").strip(),
         default_name=str(raw.get("default_name") or raw.get("container_name") or re.sub(r"[^a-z0-9_.-]+", "-", name.lower()).strip("-") or "app"),
         container_port=str(raw.get("container_port") or "").strip(),
@@ -2098,7 +2128,7 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
         command=str(raw.get("command") or "").strip(),
         notes=str(raw.get("notes") or "").strip(),
         lightweight=bool(raw.get("lightweight", False)),
-        category_en=str(raw.get("category_en") or "").strip(),
+        category_en=str(raw.get("category_en") or (categories_en[0] if categories_en else "")).strip(),
         description_en=str(raw.get("description_en") or "").strip(),
         notes_en=str(raw.get("notes_en") or "").strip(),
         engines=[str(item) for item in (raw.get("engines") or ["docker"]) if str(item).strip()],
@@ -2133,6 +2163,8 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
         credential_patterns=credential_patterns,
         post_install_hints=[str(item).strip() for item in (raw.get("post_install_hints") or []) if str(item).strip()],
         post_install_hints_en=[str(item).strip() for item in (raw.get("post_install_hints_en") or []) if str(item).strip()],
+        categories=categories,
+        categories_en=categories_en,
     )
 
 
@@ -2297,6 +2329,8 @@ def load_bundled_deployment_catalog() -> List[ImageTemplate]:
 
 
 STORE_METADATA_FIELDS = (
+    "categories",
+    "categories_en",
     "store_description",
     "store_description_en",
     "features",
@@ -5593,6 +5627,7 @@ class NewContainerDialog(QDialog):
         self.category_combo = QComboBox()
         self.category_combo.addItem(self.texts["wizard_all_categories"])
         self.category_combo.addItem(self.texts["wizard_installed_category"])
+        self.category_combo.addItem(DCC_STORE_CATEGORY)
         for category in self.catalog_category_names():
             self.category_combo.addItem(category)
         self.category_combo.setVisible(False)
@@ -6317,6 +6352,10 @@ class NewContainerDialog(QDialog):
             return "all"
         if category == self.texts["wizard_installed_category"]:
             return "installed"
+        if category == DCC_STORE_CATEGORY:
+            return "container"
+        if category == self.texts["wizard_updates_category"]:
+            return "updates"
         if category == self.texts["wizard_balena_category"]:
             return "container"
         if value.startswith("ai"):
@@ -6371,7 +6410,12 @@ class NewContainerDialog(QDialog):
             item.setToolTip(category)
             item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
             item.setIcon(make_category_icon(self._category_icon_kind(category), accent, 16))
-            if category in {self.texts["wizard_all_categories"], self.texts["wizard_installed_category"]}:
+            if category in {
+                self.texts["wizard_all_categories"],
+                self.texts["wizard_installed_category"],
+                DCC_STORE_CATEGORY,
+                self.texts["wizard_updates_category"],
+            }:
                 font = item.font()
                 font.setBold(True)
                 item.setFont(font)
@@ -6483,6 +6527,9 @@ class NewContainerDialog(QDialog):
         current = self.editor_tabs.currentWidget()
         if current is None:
             return
+        if current is self.store_tab:
+            # Long descriptions must not add empty space to the app header.
+            self.store_hero_card.setFixedHeight(self.store_hero_card.sizeHint().height())
         current_layout = current.layout()
         if current_layout is not None:
             current_layout.activate()
@@ -6563,12 +6610,23 @@ class NewContainerDialog(QDialog):
         row.addLayout(text_column, 1)
         return card
 
+    def _catalog_category_labels(self, template: ImageTemplate) -> List[str]:
+        return list(dict.fromkeys(
+            self._catalog_category_group(category)
+            for category in template.categories_for(self.lang)
+        ))
+
+    def _catalog_categories_text(self, template: ImageTemplate) -> str:
+        return " · ".join(self._catalog_category_labels(template))
+
     def catalog_category_names(self) -> List[str]:
         categories = {
-            self._catalog_category_group(item.category_for(self.lang))
+            self._catalog_category_group(category)
             for item in self.catalog
-            if item.category_for(self.lang)
+            for category in item.categories_for(self.lang)
         }
+        categories.discard(DCC_STORE_CATEGORY)
+        categories.add(self.texts["wizard_updates_category"])
         if any(item.supports_engine("balena") for item in self.catalog):
             categories.add(self.texts["wizard_balena_category"])
         return sorted(categories, key=catalog_category_sort_key)
@@ -6605,7 +6663,7 @@ class NewContainerDialog(QDialog):
                 and not installed_view
                 and category
                 and category != self.texts["wizard_all_categories"]
-                and self._catalog_category_group(item.category_for(self.lang)) != category
+                and category not in self._catalog_category_labels(item)
             ):
                 continue
             haystack = f"{item.name} {item.image} {item.description_for(self.lang)} {item.notes_for(self.lang)}"
@@ -6613,7 +6671,7 @@ class NewContainerDialog(QDialog):
                 continue
             self.filtered_catalog.append(item)
             description = re.sub(r"\s+", " ", item.description_for(self.lang)).strip()
-            badges = self._catalog_category_group(item.category_for(self.lang))
+            badges = self._catalog_categories_text(item)
             if item.lightweight:
                 badges += " \u00b7 light"
             if "balena" in [str(engine).lower() for engine in (item.engines or [])]:
@@ -6679,7 +6737,7 @@ class NewContainerDialog(QDialog):
             self.update_store_description(None)
             return
         self.app_title_label.setText(template.name)
-        self.app_category_label.setText(self._catalog_category_group(template.category_for(self.lang)))
+        self.app_category_label.setText(self._catalog_categories_text(template))
         self.app_category_label.setVisible(True)
         description = template.description_for(self.lang) or template.image
         if template.latest_release:
@@ -6820,7 +6878,7 @@ class NewContainerDialog(QDialog):
             return
 
         self.store_title_label.setText(template.name)
-        self.store_category_label.setText(self._catalog_category_group(template.category_for(self.lang)))
+        self.store_category_label.setText(self._catalog_categories_text(template))
         self.store_description_label.setText(template.store_description_for(self.lang) or template.description_for(self.lang) or template.image)
         features = template.features_for(self.lang)
         features_text = "\n".join(f"- {item}" for item in features) if features else (template.notes_for(self.lang) or "")
@@ -6957,6 +7015,7 @@ class NewContainerDialog(QDialog):
         self.category_combo.clear()
         self.category_combo.addItem(self.texts["wizard_all_categories"])
         self.category_combo.addItem(self.texts["wizard_installed_category"])
+        self.category_combo.addItem(DCC_STORE_CATEGORY)
         for category in self.catalog_category_names():
             self.category_combo.addItem(category)
         if current:

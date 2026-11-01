@@ -8,6 +8,7 @@ do pola `engines`, a nie do nazwy kategorii.
 
 | PL | EN | Examples / Przykłady |
 |---|---|---|
+| DCC | DCC | DCC Container Updater |
 | AI / Agenci | AI / Agents | Agent Zero |
 | AI / Runtime | AI / Runtime | Ollama |
 | AI / UI | AI / UI | Open WebUI |
@@ -52,3 +53,17 @@ host architecture and its entry contains `"balena"` in `engines`.
 
 Aplikacja może pojawić się na hoście Balena, jeżeli jej obraz OCI/Docker obsługuje
 architekturę hosta, a wpis zawiera `"balena"` w `engines`.
+
+## Official DCC extensions / Oficjalne rozszerzenia DCC
+
+Every official Docker Control Center extension should be assigned to `DCC`
+plus the functional categories that match its purpose. Do not create catalog
+entries for planned extensions until they exist.
+
+Każde oficjalne rozszerzenie Docker Control Center powinno należeć do kategorii
+`DCC` oraz odpowiednich kategorii funkcjonalnych.
+
+The legacy `category` / `category_en` fields remain the primary category.
+Optional `categories` / `categories_en` arrays add further memberships without
+creating a duplicate app; for example: `"category": "Aktualizacje 🔄",
+"category_en": "Updates 🔄", "categories": ["DCC"], "categories_en": ["DCC"]`.

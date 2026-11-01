@@ -180,6 +180,8 @@
     },
     {
       "name": "DCC Container Updater",
+      "categories": ["DCC"],
+      "categories_en": ["DCC"],
       "image": "ghcr.io/hattimon/dcc-container-updater:latest",
       "category": "Aktualizacje 🔄",
       "description": "Panel aktualizacji Docker z opcjonalnym Safe Compose Manager: analiza konfiguracji, trwałe plany i blokady ryzyka danych.",
