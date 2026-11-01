@@ -24,6 +24,7 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 - Preserved the Windows installer handoff and Linux package updater while publishing versioned EXE and DEB assets.
 - Improved DCC Web container controls, host terminals, installation progress and formatted in-panel documentation.
 - Fixed the Windows infrastructure terminal and improved Store contrast and refresh cleanup.
+- Reissued the Linux DEB with the missing `libpulse0` runtime dependency and verified desktop-entry startup under X11.
 
 ### PL
 - Dodano pogrubioną kategorię DCC i wiele kategorii aplikacji; Container Updater nadal należy do Aktualizacji.
@@ -31,6 +32,7 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 - Zachowano przekazanie aktualizacji instalatorowi Windows i instalację pakietu Linux; wydanie zawiera wersjonowane pliki EXE i DEB.
 - Uzupełniono sterowanie kontenerami, terminale hostów, postęp instalacji i formatowaną dokumentację DCC Web.
 - Naprawiono terminal infrastruktury Windows i poprawiono kontrast sklepu oraz kończenie odświeżania.
+- Ponownie udostępniono pakiet DEB z brakującą zależnością `libpulse0`; sprawdzono uruchomienie wpisu pulpitu X11.
 
 ### DCC Web
 
@@ -212,10 +214,8 @@ Third-party assets are covered by their respective licenses or ownership terms. 
 
 Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom właścicieli.
 
-## 1.3.11 — local review candidate / lokalna wersja do akceptacji
+## DCC Web 0.1.0
 
-The 1.3.11 packages and DCC Web are prepared locally; publication requires approval.
-DCC Web runs independently from Desktop. See [DCC Web](apps/dcc-web/README.md).
-Pakiety 1.3.11 i DCC Web są przygotowywane lokalnie, bez publikacji na GitHub.
+DCC Web runs independently from Desktop. See [DCC Web](apps/dcc-web/README.md) and its [GitHub repository](https://github.com/hattimon/DCC).
 
-DCC Web includes container operations, profiles, logs, monitoring, Compose, the shared App Store, five themes, local audio, EN/PL, clickable panel endpoints, an AI configuration assistant and scoped read-only MCP Preview. Run `apps/dcc-web/start.ps1` on Windows or follow the [installation instructions](apps/dcc-web/docs/installation.md). The [feature matrix](apps/dcc-web/docs/feature-matrix.md) lists adapter restrictions and functions still specific to Desktop. No Web image has been published or added as a fictitious catalog application.
+DCC Web includes container operations, profiles, logs, monitoring, Compose, the shared App Store, five themes, local audio, EN/PL, clickable panel endpoints, an AI configuration assistant and scoped read-only MCP Preview. Run `apps/dcc-web/start.ps1` on Windows or follow the [installation instructions](apps/dcc-web/docs/installation.md). The [feature matrix](apps/dcc-web/docs/feature-matrix.md) lists adapter restrictions and functions still specific to Desktop. The DCC Web image is published in GHCR and linked from the App Store catalog.

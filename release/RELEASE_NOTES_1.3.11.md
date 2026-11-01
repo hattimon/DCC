@@ -10,6 +10,7 @@
 - DCC Web help pages render Markdown as formatted, escaped HTML without adding a runtime dependency.
 - Container filters and bulk actions share one row; the search field contracts on narrow screens.
 - Retained the Windows graceful updater handoff/restart and Linux pkexec/apt installation flow.
+- Reissued the Linux DEB with the missing `libpulse0` runtime dependency; CI validates the installed desktop-entry command under X11.
 
 ## Polski
 - Pogrubiona kategoria DCC za Zainstalowane i przed AI; wiele kategorii jednej aplikacji.
@@ -21,13 +22,14 @@
 - Dokumentacja DCC Web wyświetla formatowany, bezpiecznie escapowany Markdown bez nowych zależności.
 - Filtry i operacje na kontenerach mieszczą się w jednym wierszu; wyszukiwarka zwęża się na małym ekranie.
 - Zachowany handoff i restart Windows oraz instalacja przez pkexec/apt na Linux.
+- Ponownie udostępniono DEB z brakującą zależnością `libpulse0`; CI sprawdza uruchomienie polecenia z wpisu pulpitu w X11.
 
 ## Downloads / Pobieranie
 - DockerControlCenter-Setup-1.3.11.exe
 - DockerControlCenter_1.3.11_amd64.deb
 - SHA256SUMS-1.3.11.txt
 
-The existing updater discovers this release through GitHub's latest-release API and selects the platform installer by asset name.
+The existing updater discovers this release through GitHub's latest-release API and selects the platform installer by asset name. The v1.3.11 Linux assets are rebuilt with corrected runtime dependencies; release tag and version remain unchanged.
 
 ## DCC Web 0.1.0
 

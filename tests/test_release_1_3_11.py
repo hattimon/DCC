@@ -54,11 +54,19 @@ class Release1311Tests(unittest.TestCase):
         self.assertEqual(category_group('AI 🤖 › Agenci'),'AI')
         self.assertNotIn('PyQt',(ROOT/'dcc_catalog.py').read_text(encoding='utf-8'))
 
-    def test_prepared_notes_and_readme_reference_new_assets(self):
+    def test_release_notes_and_readme_reference_new_assets(self):
         notes=(ROOT/'release/RELEASE_NOTES_1.3.11.md').read_text(encoding='utf-8')
         for name in ('DockerControlCenter-Setup-1.3.11.exe','DockerControlCenter_1.3.11_amd64.deb','SHA256SUMS-1.3.11.txt'):
             self.assertIn(name,notes)
         self.assertIn('/v1.3.11/',(ROOT/'README.md').read_text(encoding='utf-8'))
+
+    def test_linux_deb_declares_audio_runtime_and_desktop_launch_is_smoke_tested(self):
+        builder=(ROOT/'packaging/linux/build_deb.sh').read_text(encoding='utf-8')
+        smoke=(ROOT/'tests/linux_deb_upgrade_smoke.sh').read_text(encoding='utf-8')
+        self.assertRegex(builder,r'(?m)^Depends:.*\blibpulse0\b')
+        self.assertIn('desktop-file-validate "$desktop_file"',smoke)
+        self.assertIn('xvfb-run -a env',smoke)
+        self.assertIn('"$desktop_exec"',smoke)
 
 
 if __name__=='__main__':unittest.main()
