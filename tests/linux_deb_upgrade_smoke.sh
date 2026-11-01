@@ -18,6 +18,10 @@ else
   APT_GET=(sudo apt-get)
 fi
 "${APT_GET[@]}" update -qq
+if dpkg-query -W -f='${Status}' docker-control-center 2>/dev/null | grep -q 'install ok installed'; then
+  echo "Upgrade smoke test must start without docker-control-center already installed." >&2
+  exit 1
+fi
 old_deb_install_mode="${DCC_OLD_DEB_INSTALL_MODE:-apt}"
 if [[ "$old_deb_install_mode" == "dpkg-force" ]]; then
   # Debian 13 no longer ships the policykit-1 binary package required by the

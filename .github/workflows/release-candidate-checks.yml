@@ -100,10 +100,27 @@ jobs:
           apt-get update
           apt-get install -y ca-certificates curl desktop-file-utils xvfb xauth fonts-dejavu-core
           bash tests/linux_deb_compat_smoke.sh release/DockerControlCenter_1.3.11_amd64.deb
+
+  debian-stable-upgrade-compatibility:
+    # Run the older-package migration in a separate clean container. Reusing
+    # the fresh-install container would downgrade the candidate before testing.
+    needs: debian-upgrade
+    runs-on: ubuntu-24.04
+    container: debian:trixie-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the tested Debian package
+        uses: actions/download-artifact@v4
+        with:
+          name: dcc-v1.3.11-linux
+          path: release
       - name: Upgrade older install on Debian stable and preserve profile/settings
+        run: |
+          apt-get update
+          apt-get install -y ca-certificates curl desktop-file-utils xvfb xauth fonts-dejavu-core
+          bash tests/linux_deb_upgrade_smoke.sh
         env:
           DCC_OLD_DEB_INSTALL_MODE: dpkg-force
-        run: bash tests/linux_deb_upgrade_smoke.sh
 
   web-tests:
     runs-on: ubuntu-24.04

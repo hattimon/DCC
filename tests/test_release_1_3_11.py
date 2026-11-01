@@ -94,6 +94,8 @@ class Release1311Tests(unittest.TestCase):
         self.assertIn('runs-on: ubuntu-22.04',workflow)
         self.assertIn('container: debian:trixie-slim',workflow)
         self.assertIn('tests/linux_deb_compat_smoke.sh',workflow)
+        self.assertIn('debian-stable-upgrade-compatibility:',workflow)
+        self.assertIn('Upgrade smoke test must start without docker-control-center already installed.',(ROOT/'tests/linux_deb_upgrade_smoke.sh').read_text(encoding='utf-8'))
         self.assertIn('runs-on: ubuntu-22.04',release_workflow)
         self.assertIn('libpulse0 pkexec openssh-client',release_workflow)
         self.assertNotIn('policykit-1',release_workflow)
