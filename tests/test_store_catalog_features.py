@@ -193,6 +193,26 @@ class StoreCatalogFeatureTests(unittest.TestCase):
         self.assertEqual(updater.categories_for("PL"), ["Aktualizacje 🔄", "DCC"])
         self.assertEqual(updater.categories_for("EN"), ["Updates 🔄", "DCC"])
 
+    def test_bundled_dcc_web_has_store_page_and_functional_categories(self):
+        payload = json.loads(dcc.BUNDLED_DEPLOYMENT_CATALOG_FILE.read_text(encoding="utf-8"))
+        entries = [item for item in payload["apps"] if item["name"] == "DCC Web"]
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:0.1.0")
+        self.assertEqual(entry["category"], "DCC")
+        self.assertEqual(entry["categories"], ["DCC", "Administracja 🛠", "WWW 🌐"])
+        self.assertEqual(entry["categories_en"], ["DCC", "Administration 🛠", "WWW 🌐"])
+        self.assertIn("/apps/dcc-web", entry["homepage_url"])
+        self.assertIn("/apps/dcc-web/docs", entry["docs_url"])
+        self.assertEqual(entry["container_port"], "8789")
+        self.assertIn("dcc_web_data:/data", entry["extra"])
+        self.assertIn("/var/run/docker.sock:/var/run/docker.sock", entry["extra"])
+        self.assertIn("--cap-drop=ALL", entry["extra"])
+        self.assertIn("--cap-add=SETUID", entry["extra"])
+        app = dcc.image_template_from_dict(entry, dcc.DEFAULT_DEPLOYMENT_REPOSITORY)
+        self.assertEqual(app.categories_for("PL"), ["DCC", "Administracja 🛠", "WWW 🌐"])
+        self.assertEqual(app.categories_for("EN"), ["DCC", "Administration 🛠", "WWW 🌐"])
+
     def test_dcc_updater_is_filterable_in_both_categories_without_duplicates(self):
         for lang, updates in (("PL", "Aktualizacje"), ("EN", "Updates")):
             with self.subTest(lang=lang), patch.object(
@@ -312,12 +332,16 @@ class StoreCatalogFeatureTests(unittest.TestCase):
                 container = _FakeContainer(updater.default_name, updater.image)
                 dialog = dcc.NewContainerDialog(_FakeClient([container]), dcc.TEXTS[lang], lang=lang)
                 dialog.category_combo.setCurrentText("DCC")
-                self.assertEqual([item.name for item in dialog.filtered_catalog], [updater.name])
+                filtered_names = [item.name for item in dialog.filtered_catalog]
+                self.assertEqual(filtered_names.count(updater.name), 1)
+                self.assertEqual(filtered_names.count("DCC Web"), 1)
                 dialog.catalog_list.setCurrentRow(0)
                 dialog.on_external_catalog_refresh_finished([legacy_updater], [])
                 save_cache.assert_called_once_with([legacy_updater])
                 self.assertEqual(dialog.category_combo.currentText(), "DCC")
-                self.assertEqual([item.name for item in dialog.filtered_catalog], [updater.name])
+                filtered_names = [item.name for item in dialog.filtered_catalog]
+                self.assertEqual(filtered_names.count(updater.name), 1)
+                self.assertEqual(filtered_names.count("DCC Web"), 1)
                 for label in (dialog.app_category_label, dialog.store_category_label):
                     self.assertIn("DCC", label.text())
                     self.assertIn(dcc.TEXTS[lang]["wizard_updates_category"], label.text())

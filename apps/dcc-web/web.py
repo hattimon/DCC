@@ -17,10 +17,12 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from flask import Flask, Response, abort, g, jsonify, redirect, render_template, request, send_file, session
+from markupsafe import Markup
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from catalogs import Catalogs, app_id, install_plan, validate_catalog
+from markdown_render import render_markdown
 from engine import DockerBackend, EngineError, Jobs
 from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES
 from state import State
@@ -29,7 +31,7 @@ from urllib.parse import urlsplit
 
 VERSION = "0.1.0"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
-DEFAULT_SETTINGS = {"theme":"obsidian", "accent":"#73d2c4", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":False,"master":40,"effects":60,"notifications":55,"style":"soft"}}
+DEFAULT_SETTINGS = {"theme":"obsidian", "accent":"#73d2c4", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 
 
 def create_app(config=None, backend_factory=None, terminal_factory=None):
@@ -185,7 +187,8 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         allowed = {"installation","configuration","security","catalogs","mcp","ai","themes-audio","feature-matrix","testing"}
         if name not in allowed:
             abort(404)
-        return Response((Path(__file__).parent/"docs"/(name+".md")).read_text(encoding="utf-8"), mimetype="text/plain")
+        source = (Path(__file__).parent/"docs"/(name+".md")).read_text(encoding="utf-8")
+        return render_template("documentation.html", doc_name=name, version=VERSION, rendered_content=Markup(render_markdown(source, allowed)))
 
     @app.get("/api/bootstrap")
     def bootstrap():

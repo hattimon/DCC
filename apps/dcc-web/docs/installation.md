@@ -23,7 +23,7 @@ docker compose -f apps/dcc-web/compose.yaml run --rm --no-deps dcc-web --data /d
 docker compose -f apps/dcc-web/compose.yaml up -d
 ```
 
-The administrator initialization is interactive and must precede the LAN-capable container entry point. The Compose example publishes only host localhost, retains state in `dcc_web_data`, drops Linux capabilities and uses a read-only root filesystem. Set `DCC_DOCKER_GID` to the socket's actual group ID if required. Root-owned named-volume permissions must allow UID 10001; the image prepares `/data` accordingly. A socket mount remains host administration authority despite these restrictions.
+The administrator initialization is interactive and must precede the LAN-capable container entry point. The Compose example publishes only host localhost, retains state in `dcc_web_data`, drops all but the two capabilities used to drop privileges, and uses a read-only root filesystem. The entry point reads the mounted Docker socket's group ID and starts the web process as UID 10001 with only that supplementary group. A socket mount remains host-administrator authority despite these restrictions.
 
 For a standalone health test without a socket, start the image with a separate writable data volume and a local-only listen option. A Windows Docker Desktop socket is only mounted inside the Linux VM in this Compose example; the direct Windows launcher uses Docker CLI instead.
 

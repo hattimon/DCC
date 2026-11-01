@@ -1,0 +1,98 @@
+name: DCC release candidate checks
+
+on:
+  push:
+    branches:
+      - "codex/desktop-web-*"
+    paths:
+      - "DockerControlCenter.py"
+      - "DockerControlCenter.nsi"
+      - "dcc-catalog.json"
+      - "dcc_catalog.py"
+      - "apps/dcc-web/**"
+      - "packaging/**"
+      - "release/**"
+      - "tests/**"
+      - ".github/workflows/release-candidate-checks.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "DockerControlCenter.py"
+      - "DockerControlCenter.nsi"
+      - "dcc-catalog.json"
+      - "dcc_catalog.py"
+      - "apps/dcc-web/**"
+      - "packaging/**"
+      - "release/**"
+      - "tests/**"
+      - ".github/workflows/release-candidate-checks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-upgrade:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test and build dependencies
+        run: |
+          python -m pip install --disable-pip-version-check -r requirements.txt -r requirements-build.txt
+      - name: Install NSIS
+        shell: powershell
+        run: choco install nsis -y --no-progress
+      - name: Run Desktop tests
+        shell: powershell
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Build Windows installer
+        shell: powershell
+        run: |
+          $env:DCC_BUILD_PYTHON = (Get-Command python).Source
+          .\packaging\windows\build_installer.ps1
+      - name: Upgrade v1.3.10 to the candidate in an isolated runner profile
+        shell: powershell
+        run: .\tests\windows_installer_upgrade_smoke.ps1 -CandidateInstaller .\release\DockerControlCenter-Setup-1.3.11.exe
+
+  debian-upgrade:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv libgl1 libegl1 libdbus-1-3 libfontconfig1 libx11-6 libx11-xcb1 libxcb1 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0 libxcb-xkb1 libxkbcommon-x11-0 libpulse0 openssh-client xdg-utils policykit-1
+      - name: Build Debian package
+        run: bash packaging/linux/build_deb.sh
+      - name: Upgrade v1.3.10 and compare user data
+        run: bash tests/linux_deb_upgrade_smoke.sh
+
+  web-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Web dependencies and test
+        run: |
+          python -m pip install --disable-pip-version-check -r apps/dcc-web/requirements.txt
+          python -m compileall -q apps/dcc-web
+          python -m unittest discover -s apps/dcc-web/tests -v
+          node apps/dcc-web/tests/frontend_unit.mjs
+      - name: Build the candidate Web image
+        run: docker build -f apps/dcc-web/Dockerfile -t dcc-web:release-candidate .
+      - name: Verify non-root access to the Docker socket and Compose
+        run: |
+          docker run --rm --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true --volume /var/run/docker.sock:/var/run/docker.sock dcc-web:release-candidate python -c 'import os,subprocess; assert os.geteuid()==10001, os.geteuid(); assert os.access("/var/run/docker.sock",os.R_OK|os.W_OK); subprocess.run(["docker","version","--format","{{.Server.Version}}"],check=True,capture_output=True,text=True); subprocess.run(["docker","compose","version"],check=True,capture_output=True,text=True); print("socket group, dropped UID and Compose OK")'
+          docker run --rm dcc-web:release-candidate --self-check

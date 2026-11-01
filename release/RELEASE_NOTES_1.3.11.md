@@ -1,15 +1,25 @@
-# Docker Control Center v1.3.11 — local review candidate
+# Docker Control Center v1.3.11
 
 ## English
 - Bold DCC category directly after Installed and before AI; apps may belong to several categories.
 - DCC Container Updater remains in Updates and also appears in DCC. Compact application header.
 - Independent DCC Web workspace, shared catalog semantics, themes, audio and MCP preparation.
+- Local DCC Web sound effects are enabled by default and can be disabled in settings.
+- DCC Web 0.1.0 is installable from the DCC, Administration and WWW App Store categories. The Website button opens its formatted GitHub product page.
+- The DCC Web image supports Linux amd64 and arm64. The web process drops to UID 10001 and receives the Docker socket group.
+- DCC Web help pages render Markdown as formatted, escaped HTML without adding a runtime dependency.
+- Container filters and bulk actions share one row; the search field contracts on narrow screens.
 - Retained the Windows graceful updater handoff/restart and Linux pkexec/apt installation flow.
 
 ## Polski
 - Pogrubiona kategoria DCC za Zainstalowane i przed AI; wiele kategorii jednej aplikacji.
 - DCC Container Updater pozostaje w Aktualizacje i jest dostępny także w DCC. Zwarty nagłówek.
 - Niezależny DCC Web, wspólna logika katalogu, motywy, audio i przygotowanie MCP.
+- Lokalne efekty dźwiękowe DCC Web są domyślnie włączone i można je wyłączyć w ustawieniach.
+- DCC Web 0.1.0 można zainstalować z kategorii DCC, Administracja i WWW. Przycisk Strona otwiera sformatowaną prezentację na GitHubie.
+- Obraz DCC Web obsługuje Linux amd64 i arm64; proces panelu działa jako UID 10001 i otrzymuje grupę socketu Docker.
+- Dokumentacja DCC Web wyświetla formatowany, bezpiecznie escapowany Markdown bez nowych zależności.
+- Filtry i operacje na kontenerach mieszczą się w jednym wierszu; wyszukiwarka zwęża się na małym ekranie.
 - Zachowany handoff i restart Windows oraz instalacja przez pkexec/apt na Linux.
 
 ## Downloads / Pobieranie
@@ -17,9 +27,9 @@
 - DockerControlCenter_1.3.11_amd64.deb
 - SHA256SUMS-1.3.11.txt
 
-Local artifacts only. Not published / Wyłącznie artefakty lokalne. Bez publikacji.
+The existing updater discovers this release through GitHub's latest-release API and selects the platform installer by asset name.
 
-## DCC Web 0.1.0 acceptance scope / zakres akceptacji
+## DCC Web 0.1.0
 
 Independent Flask/Waitress module with native browser UI, encrypted Docker profiles, role/profile permissions, confirmed container/resource/Compose operations, logs, monitoring and the shared multi-source store. Five themes and three short local sound packs; provider-neutral read-only MCP stdio Preview with revocable grants and client configuration exporters.
 

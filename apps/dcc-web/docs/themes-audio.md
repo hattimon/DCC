@@ -4,7 +4,7 @@ Five complete variable sets style backgrounds, rail, surfaces, tables, headings,
 
 Settings → Appearance previews changes immediately without a page reload. Save persists per user; cancel restores saved values; reset restores defaults. Accent, intensity, visual effects, density and animations are independent controls. `prefers-reduced-motion` disables motion even when the stored animation setting is enabled. Layout uses a responsive rail, four overview metrics, a container table with resource charts, and a phone navigation drawer.
 
-Audio starts disabled. The user can enable it, adjust Master/effects/notifications levels, select Soft/Clear/Warm and test playback. Sounds start only after a browser gesture. Files are local short WAV assets copied from the project's existing authored audio packs; licensing/provenance is retained in `static/audio/LICENSES.md`. There is no music loop, autoplay intro or recurring sound timer.
+Audio is enabled by default. The user can disable it, adjust Master/effects/notifications levels, select Soft/Clear/Warm and test playback. Sounds start only after a browser gesture. Files are local short WAV assets copied from the project's existing authored audio packs; licensing/provenance is retained in `static/audio/LICENSES.md`. There is no music loop, autoplay intro or recurring sound timer.
 
 Events include click, tab, start, stop, install, update, success, error, warning and notification. Browser autoplay policies can still block playback until the next interaction. The browser QA observes a real `playing` event for the test sound rather than checking only a stored preference.
 

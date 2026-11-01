@@ -175,7 +175,7 @@ class Catalogs:
         return {"apps":result, "categories":["all","installed","DCC",*sorted(groups,key=catalog_category_sort_key)]}
 
 
-ALLOWED_FLAGS = {"-v","--volume","-p","--publish","-e","--env","--restart","--label","--cap-drop","--cap-add","--security-opt","--network","--user","--hostname","--workdir","--entrypoint","--device","--mount","--memory","--cpus","--gpus","--shm-size","--add-host","--pid"}
+ALLOWED_FLAGS = {"-v","--volume","-p","--publish","-e","--env","--restart","--label","--cap-drop","--cap-add","--security-opt","--network","--user","--hostname","--workdir","--entrypoint","--device","--mount","--memory","--cpus","--gpus","--shm-size","--add-host","--pid","--tmpfs","--pids-limit"}
 BOOLEAN_FLAGS = {"--read-only","--init","--privileged"}
 
 

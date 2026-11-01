@@ -1,6 +1,6 @@
 # Shared App Store and catalogs
 
-The canonical root `dcc-catalog.json` keeps all 67 entries. The official source is permanent. Additional GitHub repositories, direct HTTPS JSON URLs and uploaded JSON files use the same Desktop format, including both `dcc-catalog.json` and `catalog.json` filename fallbacks. Files are uploaded, not opened through arbitrary server filesystem paths.
+The canonical root `dcc-catalog.json` keeps all 68 entries, including DCC Web. The official source is permanent. Additional GitHub repositories, direct HTTPS JSON URLs and uploaded JSON files use the same Desktop format, including both `dcc-catalog.json` and `catalog.json` filename fallbacks. Files are uploaded, not opened through arbitrary server filesystem paths.
 
 Legacy `category` / `category_en` remain the primary values. Optional `categories` / `categories_en` add membership without duplicating application definitions. Both interfaces use the pure `dcc_catalog.py` helpers. Category order begins All → Installed → **DCC** → AI; DCC is bold. DCC Container Updater keeps `Aktualizacje 🔄` / `Updates 🔄` and adds DCC. Existing identifiers and installation configuration are retained. Balena-compatible applications also appear under Balena OS.
 

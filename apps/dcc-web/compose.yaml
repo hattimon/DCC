@@ -10,12 +10,11 @@ services:
     volumes:
       - dcc_web_data:/data
       - /var/run/docker.sock:/var/run/docker.sock
-    group_add:
-      - "${DCC_DOCKER_GID:-0}"
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
     cap_drop: [ALL]
+    cap_add: [SETGID, SETUID]
     security_opt: [no-new-privileges:true]
     pids_limit: 128
     mem_limit: 512m

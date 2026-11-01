@@ -1,37 +1,30 @@
-# DCC Web 0.1.0 — source preview checkpoint
+# DCC Web 0.1.0 — release candidate for DCC Desktop 1.3.11
 
-This branch preserves the Desktop 1.3.11 candidate and existing DCC category work. It is a source preview, not a claim that every planned feature is released.
+The release candidate is prepared on `codex/desktop-web-1-3-11`. It is not yet a public image or Desktop release. The App Store entry and formatted product page are included in this branch's `dcc-catalog.json` and will ship with Desktop 1.3.11.
 
 ## Implemented
 
-- Shared categories: All → Installed → bold DCC → AI; Updater remains in DCC and Updates. All three primary Web categories are bold.
-- Unique panel endpoints with open/copy controls, full image-reference copying and themed scrollbars.
-- Project/network/flat grouping, group checkboxes, sticky lifecycle/autostart/diagnostic controls and explicit profile permissions.
-- Active-profile infrastructure in the centered header; Terminal → Store → New container in Overview and Containers.
-- Separate terminal windows/tabs: verified SSH, Windows/Linux PTY and WSL; admin-only host.exec, session ownership and configurable limits (16 by default, up to 32).
-- Host terminals require HTTPS outside localhost; SSH verifies known hosts. Terminal CSS permits inline styles for xterm; scripts remain self-only.
-- Installation phases, streamed image-pull logs, success/failure, copy/download and encrypted startup access details explicitly revealed to the installing administrator.
-- Home Assistant uses a published port and persistent /config volume by default. Host-network panel links can be inferred from catalog metadata.
-- Existing EN/PL, AI proposal adapters, themes/audio, multi-source store and read-only MCP Preview remain available.
+- Shared multi-category store logic: All → Installed → bold DCC → AI; DCC Container Updater remains in Updates and DCC. DCC Web is in DCC, Administration and WWW.
+- DCC Web product page in English and Polish, a formatted in-panel Markdown documentation view, and the Store Website link.
+- Container links and image-reference copying, project/network grouping and selection, bulk actions, profile permissions, installation progress and logs.
+- Centered active-host infrastructure, host terminals, grouped container controls, localized interface, and narrow-screen toolbar layout. At 375 px, search is 96 px wide while filters and actions stay aligned on one row.
+- Local audio defaults to enabled; playback starts after browser interaction and can be disabled in settings.
+- Docker image startup detects the mounted socket's group and drops to UID 10001. The catalog configuration supports its tmpfs and PID-limit options.
 
-## Executed checks
+## Verified locally
 
-- Web unit tests: **54 passed** (50 API/features and 4 terminal ownership/limit/buffer tests).
-- Node translation/grouping tests and JavaScript syntax checks passed.
-- Chromium operator checks: **6 scenarios passed**, no console errors.
-- Real Windows PTY browser smoke: same authenticated session, test command executed, no console errors.
-- Latest in-window tabs, group-header checkboxes and streamed installation UI still need final extended browser acceptance.
-- Fresh Desktop regression after the shared-parser change: **152 passed**, no failures/errors/skips.
-- git diff --check passed. Earlier isolated EXE/DEB and updater acceptance remains separate evidence.
+- Desktop regression: 153 tests passed.
+- Store catalog feature tests: 28 passed.
+- DCC Web tests: 54 passed; frontend localization/grouping checks passed.
+- Docker image built, self-check passed, and a restricted container verified Docker socket access and Compose as UID 10001.
+- Chromium at 375 px confirmed 96 px search width and one-row filter/action alignment.
+- A previous isolated Debian 1.3.10 → 1.3.11 package upgrade preserved profile and settings data.
+- `git diff --check` and Python compilation passed.
 
-## Remaining for subsequent work
+## Publication gates
 
-- Final Web container bootstrap and one-click official App Store entry.
-- Automatic Web update checks on refresh.
-- Optional public HTTPS tunnel extension: installation, pause/disable/uninstall and public URL.
-- Formatted in-app documentation (current routes still display Markdown text) and a polished public information page.
-- Refreshed release artifacts, public release and catalog promotion after final acceptance.
+- The Windows 1.3.10 → 1.3.11 installer upgrade check runs on the hosted Windows CI runner.
+- Candidate CI must pass before publishing the GHCR image and Desktop v1.3.11 release.
+- PR #3 remains unmerged; the canonical `main` catalog stays untouched until the user chooses to merge it.
 
-Private user profiles, credentials, SQLite state, keys, runtime logs and local backups are excluded from Git. The original D:\CODEX\DCC working tree is preserved. Main and PR #2 are not automatically merged. Publishing this source branch does not publish an image, installer release or catalog entry.
-
-Project: [hattimon/DCC](https://github.com/hattimon/DCC).
+Private profiles, credentials, runtime logs and local QA data are excluded from the branch.

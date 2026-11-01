@@ -11,25 +11,30 @@
 
 A cross-platform desktop control panel for managing Docker on Windows and Debian-family Linux, locally, through WSL/WSL2, and on remote hosts over SSH or Balena OS.
 
-### Download Latest Version
-**Local acceptance candidate:** 1.3.11 is not published. The links below are prepared for the future approved release; use the local `release/` installers during acceptance.
+### Download Latest Version — 1.3.11
 
 [![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter-Setup-1.3.11.exe)
 [![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter_1.3.11_amd64.deb)
 
-## What's New in v1.3.10
+## What's New in v1.3.11
 
 ### EN
-- Fixed the Windows infrastructure terminal so it opens visibly.
-- Improved Store heading and catalog-status contrast in Day and Light themes on Windows and Linux.
-- Tightened refresh-thread cleanup and paused automatic container refresh while modal dialogs such as the Store are open.
-- Preserved the working 1.3.9 updater flow, restart behavior and Windows shortcut icon refresh.
+- Added the bold DCC Store category and multiple categories per app; Container Updater remains in Updates.
+- Added DCC Web 0.1.0 as an installable multi-architecture App Store app with a rendered GitHub product page.
+- Preserved the Windows installer handoff and Linux package updater while publishing versioned EXE and DEB assets.
+- Improved DCC Web container controls, host terminals, installation progress and formatted in-panel documentation.
+- Fixed the Windows infrastructure terminal and improved Store contrast and refresh cleanup.
 
 ### PL
-- Naprawiono terminal infrastruktury Windows, aby otwierał się jako widoczne okno.
-- Poprawiono kontrast nagłówków sklepu i statusu katalogu w motywach Dzień i Jasny na Windows i Linux.
-- Poprawiono kończenie wątków odświeżania i wstrzymano auto-odświeżanie kontenerów podczas otwartych okien modalnych, takich jak Sklep.
-- Zachowano działający updater 1.3.9, restart aplikacji i odświeżanie ikon skrótów Windows.
+- Dodano pogrubioną kategorię DCC i wiele kategorii aplikacji; Container Updater nadal należy do Aktualizacji.
+- Dodano DCC Web 0.1.0 jako instalowalną aplikację sklepu dla amd64 i arm64 oraz sformatowaną stronę projektu na GitHubie.
+- Zachowano przekazanie aktualizacji instalatorowi Windows i instalację pakietu Linux; wydanie zawiera wersjonowane pliki EXE i DEB.
+- Uzupełniono sterowanie kontenerami, terminale hostów, postęp instalacji i formatowaną dokumentację DCC Web.
+- Naprawiono terminal infrastruktury Windows i poprawiono kontrast sklepu oraz kończenie odświeżania.
+
+### DCC Web
+
+[DCC Web product page / strona projektu](apps/dcc-web/README.md) · [Polski opis](apps/dcc-web/README.pl.md) · [Repository](https://github.com/hattimon/DCC)
 ## What's New in v1.3.9
 
 ### EN

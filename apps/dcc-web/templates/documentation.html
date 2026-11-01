@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="{{ language.lower() }}" data-theme="obsidian">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="{{ url_for('static',filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static',filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static',filename='docs.css') }}">
+  <title>DCC Web — {{ doc_name }}</title>
+</head>
+<body class="docs-page">
+  <header class="docs-topbar">
+    <a class="brand" href="/about">◇ DCC Web</a>
+    <nav><a href="/about">{{ tr('O projekcie') }}</a><a href="/">{{ tr('Otwórz panel') }}</a></nav>
+  </header>
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <a class="docs-back" href="/about">← {{ tr('Dokumentacja') }}</a>
+      {% for name,label in [('installation','Instalacja i uruchamianie'),('configuration','Profile i konfiguracja'),('security','Bezpieczeństwo'),('catalogs','Sklep i katalogi'),('ai','Asystent AI'),('mcp','AI / MCP Preview'),('themes-audio','Motywy i dźwięki'),('feature-matrix','Macierz funkcji desktop / web'),('testing','Testy i ograniczenia')] %}
+        <a class="docs-nav-link{% if name == doc_name %} active{% endif %}" href="/docs/{{ name }}">{{ tr(label) }}</a>
+      {% endfor %}
+    </aside>
+    <main class="docs-main">
+      <div class="docs-actions"><span>{{ tr('Dokumentacja DCC Web') }}</span><a href="https://github.com/hattimon/DCC/tree/v1.3.11/apps/dcc-web/docs" target="_blank" rel="noopener noreferrer">{{ tr('Źródła na GitHubie') }} ↗</a></div>
+      <article class="markdown-content">{{ rendered_content }}</article>
+      <footer class="docs-footer"><a href="/about">◇ DCC Web</a><a href="https://github.com/hattimon/DCC" target="_blank" rel="noopener noreferrer">{{ tr('Repozytorium DCC na GitHubie') }} ↗</a><span>{{ version }}</span></footer>
+    </main>
+  </div>
+</body>
+</html>

@@ -169,9 +169,9 @@ class WebTests(unittest.TestCase):
         self.wait(self.request('resources/images/pull',{'target':'alpine:3.22','confirmation':nonce}))
         self.assertIn(['image','pull','alpine:3.22'],FakeBackend.commands)
 
-    def test_catalog_same_67_entries_multi_category_search_and_installed(self):
+    def test_catalog_same_68_entries_multi_category_search_and_installed(self):
         catalogs=self.app.extensions['dcc_catalogs']
-        self.assertEqual(len(catalogs.fallback),67)
+        self.assertEqual(len(catalogs.fallback),68)
         for category in ('DCC','Aktualizacje','installed'):
             response=self.client.get('/api/catalog?category='+category)
             matches=[v for v in response.json['apps'] if v['name']=='DCC Container Updater']
@@ -184,7 +184,11 @@ class WebTests(unittest.TestCase):
         current=next(v for v in self.app.extensions['dcc_catalogs'].all() if v['name']=='DCC Container Updater')
         old={k:v for k,v in current.items() if k not in {'categories','categories_en','id'}}
         self.request('catalog/sources',{'source':'legacy.json','contents':{'apps':[old]}})
-        self.assertEqual(len(self.client.get('/api/catalog?category=DCC').json['apps']),1)
+        apps=self.client.get('/api/catalog?category=DCC').json['apps']
+        names=[v['name'] for v in apps]
+        self.assertEqual(names.count('DCC Container Updater'),1)
+        self.assertEqual(names.count('DCC Web'),1)
+        self.assertEqual(len(names),len(set(names)))
 
     def test_catalog_validation_sources_cache_and_main_protection(self):
         self.assertEqual(self.request('catalog/validate',{'contents':{'apps':'wrong'}}).status_code,400)
@@ -198,7 +202,7 @@ class WebTests(unittest.TestCase):
         self.assertEqual(len(self.client.get('/api/catalog?q=Fixture%20app').json['apps']),0)
         with patch('catalogs.fetch_public',side_effect=OSError('offline')):
             self.app.extensions['dcc_catalogs'].refresh('official')
-        self.assertEqual(len(self.app.extensions['dcc_catalogs'].all()),67)
+        self.assertEqual(len(self.app.extensions['dcc_catalogs'].all()),68)
         self.assertTrue(self.app.extensions['dcc_catalogs'].sources()[0]['error'])
 
     def test_catalog_available_when_docker_offline(self):
@@ -275,6 +279,8 @@ class WebTests(unittest.TestCase):
         self.assertNotIn('not-for-browser',response.get_data(as_text=True))
 
     def test_settings_five_themes_audio_clamps_and_persistence(self):
+        self.assertTrue(DEFAULT_SETTINGS['audio']['enabled'])
+        self.assertTrue(self.client.get('/api/settings').json['audio']['enabled'])
         for theme in ('obsidian','violet','ocean','arctic','emerald'):
             response=self.request('settings',{'theme':theme,'accent':'#12ab34','intensity':200,'audio':{'enabled':True,'master':400,'effects':40,'notifications':-10,'style':'warm'}},method='PUT')
             self.assertEqual(response.status_code,200,response.json)
@@ -404,6 +410,15 @@ class WebTests(unittest.TestCase):
             response=self.client.get('/docs/'+name)
             self.assertEqual(response.status_code,200,name)
             self.assertGreater(len(response.data),100)
+            self.assertTrue(response.mimetype=='text/html',name)
+            self.assertIn(b'markdown-content',response.data,name)
+            self.assertIn(b'docs.css',response.data,name)
+        security=self.client.get('/docs/security').get_data(as_text=True)
+        self.assertIn('<h1',security)
+        self.assertIn('<h2',security)
+        self.assertIn('<ul>',security)
+        matrix=self.client.get('/docs/feature-matrix').get_data(as_text=True)
+        self.assertIn('<table>',matrix)
 
     def test_default_english_language_persists_polish_and_english(self):
         self.assertEqual(self.client.get('/api/settings').json['language'],'EN')
