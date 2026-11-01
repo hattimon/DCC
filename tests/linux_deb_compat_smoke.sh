@@ -3,6 +3,7 @@ set -euo pipefail
 
 deb_path="${1:?usage: linux_deb_compat_smoke.sh path/to/package.deb}"
 test -f "$deb_path"
+deb_path="$(readlink -f "$deb_path")"
 
 depends="$(dpkg-deb -f "$deb_path" Depends)"
 grep -Eq '(^|, )[[:space:]]*libpulse0([, ]|$)' <<< "$depends"

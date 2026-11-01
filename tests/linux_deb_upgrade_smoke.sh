@@ -18,7 +18,17 @@ else
   APT_GET=(sudo apt-get)
 fi
 "${APT_GET[@]}" update -qq
-"${APT_GET[@]}" install -y "$old_deb"
+old_deb_install_mode="${DCC_OLD_DEB_INSTALL_MODE:-apt}"
+if [[ "$old_deb_install_mode" == "dpkg-force" ]]; then
+  # Debian 13 no longer ships the policykit-1 binary package required by the
+  # older release. Force-install only to model an existing pre-upgrade install;
+  # the candidate must resolve all dependencies during the actual upgrade.
+  dpkg --force-depends --install "$old_deb"
+else
+  "${APT_GET[@]}" install -y "$old_deb"
+fi
+old_installed="$(dpkg-query -W -f='${Version} ${Architecture}' docker-control-center)"
+test "$old_installed" = "${old_version} amd64"
 mkdir -p "$HOME/.docker-control-center" "$HOME/.config/DockerControlCenter"
 printf '%s\n' 'profile-preservation-sentinel' > "$HOME/.docker-control-center/docker_connection_profiles.json"
 printf '%s\n' 'settings-preservation-sentinel' > "$HOME/.config/DockerControlCenter/DockerControlCenter.conf"
@@ -27,6 +37,7 @@ sha256sum "$HOME/.docker-control-center/docker_connection_profiles.json" "$HOME/
 new_deb="$GITHUB_WORKSPACE/release/DockerControlCenter_${new_version}_amd64.deb"
 test -f "$new_deb"
 "${APT_GET[@]}" install -y "$new_deb"
+"${APT_GET[@]}" check
 installed="$(dpkg-query -W -f='${Version} ${Architecture}' docker-control-center)"
 test "$installed" = "${new_version} amd64"
 depends="$(dpkg-deb -f "$new_deb" Depends)"

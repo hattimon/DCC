@@ -100,6 +100,10 @@ jobs:
           apt-get update
           apt-get install -y ca-certificates desktop-file-utils xvfb xauth fonts-dejavu-core
           bash tests/linux_deb_compat_smoke.sh release/DockerControlCenter_1.3.11_amd64.deb
+      - name: Upgrade older install on Debian stable and preserve profile/settings
+        env:
+          DCC_OLD_DEB_INSTALL_MODE: dpkg-force
+        run: bash tests/linux_deb_upgrade_smoke.sh
 
   web-tests:
     runs-on: ubuntu-24.04
