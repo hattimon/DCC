@@ -1,13 +1,18 @@
 import json
 from pathlib import Path
+import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
+from zipfile import ZipFile
 
 import DockerControlCenter as dcc
 from dcc_catalog import category_group,localized_categories
 
 ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT/'packaging'/'web'))
+from build_source_archive import build_archive
 
 
 class Release1311Tests(unittest.TestCase):
@@ -58,15 +63,40 @@ class Release1311Tests(unittest.TestCase):
         notes=(ROOT/'release/RELEASE_NOTES_1.3.11.md').read_text(encoding='utf-8')
         for name in ('DockerControlCenter-Setup-1.3.11.exe','DockerControlCenter_1.3.11_amd64.deb','SHA256SUMS-1.3.11.txt'):
             self.assertIn(name,notes)
-        self.assertIn('/v1.3.11/',(ROOT/'README.md').read_text(encoding='utf-8'))
+        readme=(ROOT/'README.md').read_text(encoding='utf-8')
+        self.assertIn('/v1.3.11/',readme)
+        self.assertIn('DCC%20Web-v0.1.0',readme)
+        self.assertIn('apps/dcc-web/docs/installation.md',readme)
+
+    def test_dcc_web_source_archive_contains_cross_platform_port_installer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive_path=build_archive(Path(directory)/'DCC-Web-0.1.0-source.zip')
+            with ZipFile(archive_path) as archive:
+                names=set(archive.namelist())
+                self.assertIn('DCC-Web-0.1.0/apps/dcc-web/install.py',names)
+                self.assertIn('DCC-Web-0.1.0/apps/dcc-web/docs/installation.md',names)
+                self.assertIn('DCC-Web-0.1.0/dcc-catalog.json',names)
+                self.assertNotIn('DCC-Web-0.1.0/apps/dcc-web/tests/test_install.py',names)
 
     def test_linux_deb_declares_audio_runtime_and_desktop_launch_is_smoke_tested(self):
         builder=(ROOT/'packaging/linux/build_deb.sh').read_text(encoding='utf-8')
         smoke=(ROOT/'tests/linux_deb_upgrade_smoke.sh').read_text(encoding='utf-8')
         self.assertRegex(builder,r'(?m)^Depends:.*\blibpulse0\b')
+        self.assertRegex(builder,r'(?m)^Depends:.*\bpkexec\b')
+        self.assertNotRegex(builder,r'(?m)^Depends:.*\bpolicykit-1\b')
         self.assertIn('desktop-file-validate "$desktop_file"',smoke)
         self.assertIn('xvfb-run -a env',smoke)
         self.assertIn('"$desktop_exec"',smoke)
+
+    def test_debian_build_and_stable_compatibility_jobs_cover_ubuntu_and_debian(self):
+        workflow=(ROOT/'.github/workflows/release-candidate-checks.yml').read_text(encoding='utf-8')
+        release_workflow=(ROOT/'.github/workflows/release.yml').read_text(encoding='utf-8')
+        self.assertIn('runs-on: ubuntu-22.04',workflow)
+        self.assertIn('container: debian:trixie-slim',workflow)
+        self.assertIn('tests/linux_deb_compat_smoke.sh',workflow)
+        self.assertIn('runs-on: ubuntu-22.04',release_workflow)
+        self.assertIn('libpulse0 pkexec openssh-client',release_workflow)
+        self.assertNotIn('policykit-1',release_workflow)
 
 
 if __name__=='__main__':unittest.main()

@@ -20,6 +20,18 @@ Zaktualizuj DCC Desktop do wersji 1.3.11 lub nowszej, otwórz **Sklep aplikacji*
 
 Przy pierwszym wejściu otwórz `/login` i utwórz własne konto administratora. Nie ma domyślnego hasła.
 
+### Instalacja na Windows, macOS lub Linux
+
+Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/v1.3.11/DCC-Web-0.1.0-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.1.0`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
+
+```powershell
+py -3.12 apps/dcc-web/install.py
+```
+
+Na macOS i Linux użyj `python3 apps/dcc-web/install.py`. Potrzebne są Docker Engine/Desktop i Docker Compose v2. Instalator odczytuje opublikowane porty działających kontenerów oraz sprawdza możliwość lokalnego nasłuchu. Najpierw wybiera port 8789, a gdy jest zajęty, skanuje zakres 8790–8888. Wybrany port zapisuje w konfiguracji użytkownika. Jeśli inny proces zajmie port podczas uruchamiania, instalator ponawia próbę z kolejnym wolnym portem. Konto administratora tworzysz interaktywnie. Panel jest wystawiany tylko lokalnie, a instalator wyświetla końcowy adres. Istniejący kontener `dcc-web-standalone` pozostawia bez zmian.
+
+Możesz też uruchomić panel natywnie przez Python 3.12: utwórz środowisko wirtualne, zainstaluj `apps/dcc-web/requirements.txt` i uruchom `apps/dcc-web/web.py`. W tym wariancie panel korzysta z Docker CLI i kontekstu skonfigurowanego dla bieżącego użytkownika.
+
 ## Bezpieczeństwo
 
 Dostęp do `/var/run/docker.sock` daje panelowi administracyjną kontrolę nad hostem. Proces serwera działa jako UID 10001; kontener odczytuje grupę socketu i zachowuje tylko możliwości potrzebne do obniżenia uprawnień. Ogranicz dostęp HTTP do zaufanej sieci. Przed udostępnieniem panelu poza LAN skonfiguruj HTTPS, VPN lub zaufany reverse proxy.

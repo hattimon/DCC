@@ -12,8 +12,13 @@ curl --fail --location --retry 3 "$base/DockerControlCenter_${old_version}_amd64
 curl --fail --location --retry 3 "$base/SHA256SUMS-${old_version}.txt" --output "$old_sums"
 (cd "$root" && tr -d '\r' < "$old_sums" | grep -F "DockerControlCenter_${old_version}_amd64.deb" | sha256sum --check)
 
-sudo apt-get update -qq
-sudo apt-get install -y "$old_deb"
+if [[ "$EUID" -eq 0 ]]; then
+  APT_GET=(apt-get)
+else
+  APT_GET=(sudo apt-get)
+fi
+"${APT_GET[@]}" update -qq
+"${APT_GET[@]}" install -y "$old_deb"
 mkdir -p "$HOME/.docker-control-center" "$HOME/.config/DockerControlCenter"
 printf '%s\n' 'profile-preservation-sentinel' > "$HOME/.docker-control-center/docker_connection_profiles.json"
 printf '%s\n' 'settings-preservation-sentinel' > "$HOME/.config/DockerControlCenter/DockerControlCenter.conf"
@@ -21,11 +26,13 @@ sha256sum "$HOME/.docker-control-center/docker_connection_profiles.json" "$HOME/
 
 new_deb="$GITHUB_WORKSPACE/release/DockerControlCenter_${new_version}_amd64.deb"
 test -f "$new_deb"
-sudo apt-get install -y "$new_deb"
+"${APT_GET[@]}" install -y "$new_deb"
 installed="$(dpkg-query -W -f='${Version} ${Architecture}' docker-control-center)"
 test "$installed" = "${new_version} amd64"
 depends="$(dpkg-deb -f "$new_deb" Depends)"
 grep -Eq '(^|, )[[:space:]]*libpulse0([, ]|$)' <<< "$depends"
+grep -Eq '(^|, )[[:space:]]*pkexec([, ]|$)' <<< "$depends"
+! grep -Eq '(^|, )[[:space:]]*policykit-1([, ]|$)' <<< "$depends"
 desktop_file=/usr/share/applications/docker-control-center.desktop
 desktop_exec="$(sed -n 's/^Exec=//p' "$desktop_file")"
 test "$desktop_exec" = /usr/bin/docker-control-center
