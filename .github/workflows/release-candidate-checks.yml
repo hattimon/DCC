@@ -156,17 +156,28 @@ jobs:
         run: |
           set -euo pipefail
           container=dcc-web-first-run-smoke
-          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          data_volume="${container}-data"
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if [[ "$status" -ne 0 ]]; then
+              docker inspect --format='state={{.State.Status}} exit={{.State.ExitCode}}' "$container" || true
+              docker logs "$container" 2>&1 | sed -E 's/(password=)[^[:space:]]+/\1[REDACTED]/g' || true
+            fi
+            docker rm -f "$container" >/dev/null 2>&1 || true
+            docker volume rm "$data_volume" >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+          docker volume create "$data_volume" >/dev/null
           docker run -d --name "$container" \
-            --publish 127.0.0.1::8789 \
-            --tmpfs /data:rw,nosuid,nodev,noexec,size=16m,uid=10001,gid=10001,mode=0700 \
+            --volume "$data_volume:/data" \
             dcc-web:release-candidate >/dev/null
-          port="$(docker inspect --format='{{(index (index .NetworkSettings.Ports "8789/tcp") 0).HostPort}}' "$container")"
           for attempt in $(seq 1 30); do
-            if curl --silent --fail "http://127.0.0.1:${port}/login" >/dev/null; then break; fi
+            if docker exec "$container" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8789/login",timeout=2)' >/dev/null 2>&1; then break; fi
             sleep 1
           done
-          curl --silent --fail "http://127.0.0.1:${port}/login" >/dev/null
+          docker exec "$container" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8789/login",timeout=2)' >/dev/null
           logs="$(docker logs "$container" 2>&1)"
           count="$(grep -c 'DCC_WEB_INITIAL_CREDENTIALS username=admin password=' <<< "$logs")"
           test "$count" -eq 1
@@ -174,9 +185,9 @@ jobs:
           test "${#password}" -ge 24
           docker restart "$container" >/dev/null
           for attempt in $(seq 1 30); do
-            if curl --silent --fail "http://127.0.0.1:${port}/login" >/dev/null; then break; fi
+            if docker exec "$container" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8789/login",timeout=2)' >/dev/null 2>&1; then break; fi
             sleep 1
           done
-          curl --silent --fail "http://127.0.0.1:${port}/login" >/dev/null
+          docker exec "$container" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8789/login",timeout=2)' >/dev/null
           test "$(docker logs "$container" 2>&1 | grep -c 'DCC_WEB_INITIAL_CREDENTIALS username=admin password=')" -eq 1
           echo "Fresh App Store container starts and keeps one generated admin credential across restart."
