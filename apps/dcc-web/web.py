@@ -266,8 +266,12 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         allowed = {"installation","configuration","profiles-security","security","catalogs","mcp","ai","themes-audio","feature-matrix","testing"}
         if name not in allowed:
             abort(404)
-        source = (Path(__file__).parent/"docs"/(name+".md")).read_text(encoding="utf-8")
-        return render_template("documentation.html", doc_name=name, version=VERSION, rendered_content=Markup(render_markdown(source, allowed)))
+        labels = {"installation":"Instalacja i uruchamianie","configuration":"Profile i konfiguracja","profiles-security":"Profile, klucze i 2FA","security":"Bezpieczeństwo","catalogs":"Sklep i katalogi","mcp":"AI / MCP Preview","ai":"Asystent AI","themes-audio":"Motywy i dźwięki","feature-matrix":"Macierz funkcji desktop / web","testing":"Testy i ograniczenia"}
+        language = ui_language()
+        docs = Path(__file__).parent/"docs"
+        localized = docs/(name+".pl.md") if language == "PL" else docs/(name+".md")
+        source = (localized if localized.is_file() else docs/(name+".md")).read_text(encoding="utf-8")
+        return render_template("documentation.html", doc_name=name, doc_label=labels[name], version=VERSION, rendered_content=Markup(render_markdown(source, allowed, language=language)))
 
     @app.get("/api/bootstrap")
     def bootstrap():

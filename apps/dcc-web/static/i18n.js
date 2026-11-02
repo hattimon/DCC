@@ -44,7 +44,7 @@ Nowe profile są domyślnie tylko do odczytu. Konfiguracja i klucze są szyfrowa
 Dalej|Next
 Wstecz|Back
 Zaawansowane|Advanced
-Bez klucza — hasło lub agent|No key — password or agent
+Bez klucza|No key
 Indywidualna ścieżka klucza na serwerze Web|Individual key path on the Web server
 Wgraj klucz i zaufany known_hosts w sekcji Klucze i zaufane hosty. Nazwy kluczy są rozpoznawane niezależnie od rozszerzenia.|Upload a key and trusted known_hosts in Keys and trusted hosts. Keys are detected by content, regardless of extension.
 Agent SSH dostępny|SSH agent available
