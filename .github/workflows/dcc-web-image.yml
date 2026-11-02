@@ -65,7 +65,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=DCC Web
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
-            org.opencontainers.image.source=https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web
+            org.opencontainers.image.source=https://github.com/hattimon/DCC/tree/${{ github.ref_name }}/apps/dcc-web
       - name: Build and publish Linux amd64 and arm64
         uses: docker/build-push-action@v7
         with:

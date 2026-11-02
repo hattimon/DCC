@@ -1,4 +1,4 @@
-# DCC Web 0.1.1
+# DCC Web 0.1.2
 
 [Polski](README.pl.md) · [English](README.md) · [Repozytorium GitHub](https://github.com/hattimon/DCC)
 
@@ -22,7 +22,7 @@ Przy instalacji ze Sklepu DCC świeży kontener tworzy konto `admin` z silnym, l
 
 ### Instalacja na Windows, macOS lub Linux
 
-Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/v1.3.11/DCC-Web-0.1.1-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.1.1`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
+Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.2/DCC-Web-0.1.2-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.1.2`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
@@ -40,7 +40,7 @@ Dostęp do `/var/run/docker.sock` daje panelowi administracyjną kontrolę nad h
 
 [Instalacja](docs/installation.md) · [Bezpieczeństwo](docs/security.md) · [Profile](docs/configuration.md) · [Sklep](docs/catalogs.md) · [Funkcje i ograniczenia](docs/feature-matrix.md)
 
-Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web).
+Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web).
 
 
 ## Klucze SSH po imporcie profili
