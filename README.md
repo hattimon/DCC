@@ -1,6 +1,6 @@
 # Docker Control Center
 
-[Jump to Polish / Przejdz do polskiej wersji](#polski)
+[Jump to Polish / Przejdź do polskiej wersji](#polski)
 
 ![Windows](https://img.shields.io/badge/Windows-11%20%2F%2010-0078D6?logo=windows&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
@@ -46,18 +46,19 @@ DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker C
 - Reissued the Linux DEB with the missing `libpulse0` runtime dependency and verified desktop-entry startup under X11.
 
 ### PL
-- Dodano pogrubionÄ… kategoriÄ™ DCC i wiele kategorii aplikacji; Container Updater nadal naleĹĽy do Aktualizacji.
-- Dodano DCC Web 0.1.1 jako instalowalnÄ… aplikacjÄ™ sklepu dla amd64 i arm64 oraz sformatowanÄ… stronÄ™ projektu na GitHubie.
-- Naprawiono pierwsze uruchomienie DCC Web ze sklepu; losowe hasĹ‚o administratora pojawia siÄ™ w wyniku instalacji.
-- Dodano instalator DCC Web dla wielu systemĂłw; skanuje porty kontenerĂłw i wybiera wolny port, gdy 8789 jest zajÄ™ty.
-- Zachowano przekazanie aktualizacji instalatorowi Windows i instalacjÄ™ pakietu Linux; wydanie zawiera wersjonowane pliki EXE i DEB.
-- UzupeĹ‚niono sterowanie kontenerami, terminale hostĂłw, postÄ™p instalacji i formatowanÄ… dokumentacjÄ™ DCC Web.
-- Naprawiono terminal infrastruktury Windows i poprawiono kontrast sklepu oraz koĹ„czenie odĹ›wieĹĽania.
-- Ponownie udostÄ™pniono pakiet DEB z brakujÄ…cÄ… zaleĹĽnoĹ›ciÄ… `libpulse0`; sprawdzono uruchomienie wpisu pulpitu X11.
+- Dodano pogrubioną kategorię DCC i możliwość przypisywania aplikacjom wielu kategorii. Container Updater nadal należy do Aktualizacji.
+- Dodano DCC Web 0.1.1 jako instalowalną aplikację sklepu dla architektur amd64 i arm64 oraz sformatowaną stronę projektu na GitHubie.
+- Naprawiono pierwsze uruchomienie DCC Web ze sklepu. Losowe hasło administratora jest wyświetlane po instalacji.
+- Dodano instalator DCC Web dla wielu systemów. Skanuje porty kontenerów i wybiera wolny port, gdy 8789 jest zajęty.
+- Zachowano przekazywanie aktualizacji do instalatora Windows i instalację pakietu Linux. Wydanie zawiera wersjonowane pliki EXE i DEB.
+- Uzupełniono sterowanie kontenerami, terminale hostów, postęp instalacji i formatowaną dokumentację DCC Web.
+- Naprawiono terminal infrastruktury Windows i poprawiono kontrast sklepu oraz porządkowanie po odświeżaniu.
+- Ponownie udostępniono pakiet DEB z brakującą zależnością `libpulse0`; sprawdzono uruchamianie wpisu pulpitu w X11.
 
 ### DCC Web
 
-[DCC Web product page / strona projektu](apps/dcc-web/README.md) Â· [Installation guide / instrukcja instalacji](apps/dcc-web/docs/installation.md) Â· [Polski opis](apps/dcc-web/README.pl.md) Â· [Repository](https://github.com/hattimon/DCC)
+[DCC Web product page / strona projektu](apps/dcc-web/README.md) · [Installation guide / instrukcja instalacji](apps/dcc-web/docs/installation.md) · [Polski opis](apps/dcc-web/README.pl.md) · [Repository](https://github.com/hattimon/DCC)
+
 ## What's New in v1.3.9
 
 ### EN
@@ -69,10 +70,10 @@ DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker C
 ![Docker Control Center v1.3.5 - English overview](images/release-1.3.5/09-v1.3.5-overview-en.png)
 
 ### PL
-- Dodano proceduralny ambient zaleĹĽny od motywu i SFX operacji Dockera dla wszystkich piÄ™ciu motywĂłw.
-- Nutka steruje caĹ‚ym audio DCC i znajduje siÄ™ przed kontrolkami przezroczystoĹ›ci.
-- Poprawiono wyszukiwanie logĂłw, motywy Day/Light, rozmiary Store, auto-refresh kontenerĂłw oraz Save/Save As w Repo Builderze.
-- Zachowano bezpieczny handoff updatera Windows i wspĂłlny pipeline ikon Windows/Linux.
+- Dodano generowany dźwięk tła zależny od motywu oraz dźwięki operacji Dockera dla wszystkich pięciu motywów.
+- Przycisk dźwięku steruje dźwiękami DCC i znajduje się przed kontrolkami przezroczystości.
+- Poprawiono wyszukiwanie logów, motywy Day i Light, rozmiary sklepu, automatyczne odświeżanie kontenerów oraz funkcje Save i Save As w Repo Builderze.
+- Zachowano bezpieczne przekazywanie aktualizacji do instalatora Windows i wspólny proces obsługi ikon w Windows i Linux.
 
 ![Docker Control Center v1.3.5 - polskie podsumowanie](images/release-1.3.5/08-v1.3.5-overview-pl.png)
 
@@ -146,23 +147,23 @@ Screenshots below use the English UI.
 ## Polski
 
 ### Co robi aplikacja
-- Zarzadza lokalnymi kontenerami Docker z jednego okna.
-- Laczy sie z Dockerem w WSL / WSL2.
-- Laczy sie ze zdalnymi hostami Docker przez SSH lub Balena OS (auto-wykrywanie).
-- Pokazuje logi, inspect, linki WWW i pozwala ustawic autostart kontenerow.
-- Umozliwia tworzenie i edycje komend `docker run` z presetami oraz wsparciem AI.
-- Pozwala przelaczac motywy `Light`, `Dark` i `Black` oraz korzystac z tapet graficznych.
+- Zarządza lokalnymi kontenerami Docker z jednego okna.
+- Łączy się z Dockerem w WSL / WSL2.
+- Łączy się ze zdalnymi hostami Docker przez SSH lub Balena OS (automatyczne wykrywanie).
+- Wyświetla logi, inspect i linki WWW oraz pozwala ustawić autostart kontenerów.
+- Umożliwia tworzenie i edytowanie komend `docker run` z presetami i wsparciem AI.
+- Pozwala przełączać motywy `Light`, `Dark` i `Black` oraz korzystać z tapet graficznych.
 
 ### Zrzuty ekranu
-Ponizsze zrzuty pokazuja interfejs w jezyku angielskim.
+Poniższe zrzuty przedstawiają interfejs w języku angielskim.
 
-`Widok glowny - lokalne kontenery`
+`Widok główny – lokalne kontenery`
 
-![Widok glowny - lokalne kontenery](images/image.png)
+![Widok główny – lokalne kontenery](images/image.png)
 
-`Widok zdalny - kontenery przez SSH`
+`Widok zdalny – kontenery przez SSH`
 
-![Widok zdalny - kontenery przez SSH](images/image1.png)
+![Widok zdalny – kontenery przez SSH](images/image1.png)
 
 `Kreator nowego kontenera`
 
@@ -177,33 +178,33 @@ Ponizsze zrzuty pokazuja interfejs w jezyku angielskim.
 ![Dodawanie nowego profilu zdalnego](images/image4.png)
 
 ### Dystrybucja
-- `Installer`: instaluje aplikacje dla aktualnego uzytkownika Windows.
-- `Portable`: samodzielna wersja EXE bez potrzeby instalacji Pythona.
+- `Installer`: instaluje aplikację dla bieżącego użytkownika Windows.
+- `Portable`: samodzielna wersja EXE bez potrzeby instalowania Pythona.
 
-### Klucz SSH + haslo do klucza
-1. Otworz `Profile polaczen` i dodaj/edytuj profil.
-2. Ustaw `Autoryzacja SSH` na `Klucz + haslo do klucza`.
-3. Wybierz plik klucza i wpisz haslo.
-4. Opcjonalnie: wlacz ssh-agent w Windows (instrukcja w aplikacji).
+### Klucz SSH + hasło do klucza
+1. Otwórz `Profile połączeń` i dodaj lub edytuj profil.
+2. Ustaw `Autoryzacja SSH` na `Klucz + hasło do klucza`.
+3. Wybierz plik klucza i wpisz hasło.
+4. Opcjonalnie włącz ssh-agent w Windows (instrukcja jest dostępna w aplikacji).
 
-### Prywatnosc i bezpieczenstwo
-- Ustawienia uzytkownika sa trzymane per konto Windows w `%APPDATA%\DockerControlCenter`.
-- Klucze API i hasla SSH nie sa przechowywane w repozytorium.
-- Sekrety sa zabezpieczane przez Windows DPAPI dla konkretnego uzytkownika.
-- Publiczne repo nie zawiera prywatnych profili, sekretow, buildow ani lokalnego srodowiska.
+### Prywatność i bezpieczeństwo
+- Ustawienia użytkownika są przechowywane osobno dla każdego konta Windows w `%APPDATA%\DockerControlCenter`.
+- Klucze API i hasła SSH nie są przechowywane w repozytorium.
+- Sekrety są chronione za pomocą Windows DPAPI dla konkretnego użytkownika.
+- Publiczne repozytorium nie zawiera prywatnych profili, sekretów, plików kompilacji ani lokalnych plików środowiska.
 
-### Najwazniejsze funkcje
-- Zarzadzanie lokalnym Dockerem
+### Najważniejsze funkcje
+- Zarządzanie lokalnym Dockerem
 - Wsparcie dla WSL / WSL2
-- Profile SSH z kluczem, haslem do klucza lub haslem
-- Auto-wykrywanie Balena OS (`balena ps` / `balena run`)
-- Katalog 40+ popularnych obrazow, w tym lekkie opcje pod Raspberry Pi
+- Profile SSH z uwierzytelnianiem kluczem, hasłem do klucza lub hasłem
+- Automatyczne wykrywanie Balena OS (`balena ps` / `balena run`)
+- Katalog ponad 40 popularnych obrazów, w tym lekkie opcje dla Raspberry Pi
 - Asystent AI do edycji komend `docker run`
-- Rozne tla dla motywow
+- Różne tła dla motywów
 - Muzyka w tle i futurystyczny interfejs
-- Menu kontekstowe, logi, inspect i otwieranie linkow
+- Menu kontekstowe, logi, inspect i otwieranie linków
 
-### Przykladowe pliki danych
+### Przykładowe pliki danych
 - `docker_connection_profiles.example.json`
 - `%APPDATA%\DockerControlCenter\docker_connection_profiles.json`
 - `%APPDATA%\DockerControlCenter\docker_control_center_secrets.json`
@@ -221,7 +222,7 @@ Ponizsze zrzuty pokazuja interfejs w jezyku angielskim.
 
 If DCC is useful to you, you can support its continued development on Ko-fi.
 
-JeĹĽeli DCC jest dla Ciebie przydatny, moĹĽesz wesprzeÄ‡ dalszy rozwĂłj projektu na Ko-fi.
+Jeżeli DCC jest dla Ciebie przydatny, możesz wesprzeć dalszy rozwój projektu na Ko-fi.
 
 [https://ko-fi.com/hattimon](https://ko-fi.com/hattimon)
 
@@ -229,14 +230,14 @@ JeĹĽeli DCC jest dla Ciebie przydatny, moĹĽesz wesprzeÄ‡ dalszy rozwĂłj
 
 DCC is licensed under the MIT License. See [LICENSE](LICENSE).
 
-Projekt DCC jest udostÄ™pniany na licencji MIT.
+Projekt DCC jest udostępniany na licencji MIT.
 
 Third-party assets are covered by their respective licenses or ownership terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-MateriaĹ‚y podmiotĂłw trzecich podlegajÄ… ich wĹ‚asnym licencjom lub prawom wĹ‚aĹ›cicieli.
+Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom właścicieli.
 
-## DCC Web 0.1.2
+## DCC Web
 
-DCC Web runs independently from Desktop. See [DCC Web](apps/dcc-web/README.md) and its [GitHub repository](https://github.com/hattimon/DCC).
+DCC Web is the browser-based counterpart to DCC Desktop and runs as a separate service. See the [product overview](apps/dcc-web/README.md) and the [GitHub repository](https://github.com/hattimon/DCC).
 
-DCC Web includes container operations, profiles, logs, monitoring, Compose, the shared App Store, five themes, local audio, EN/PL, clickable panel endpoints, an AI configuration assistant and scoped read-only MCP Preview. Run `apps/dcc-web/start.ps1` on Windows or follow the [installation instructions](apps/dcc-web/docs/installation.md). The [feature matrix](apps/dcc-web/docs/feature-matrix.md) lists adapter restrictions and functions still specific to Desktop. The DCC Web image is published in GHCR and linked from the App Store catalog.
+DCC Web provides container management, profiles, logs, monitoring, Compose and the shared App Store, along with themes, local audio, English and Polish, clickable panel links, an AI configuration assistant and a read-only MCP Preview. See the [installation guide](apps/dcc-web/docs/installation.md) and [feature matrix](apps/dcc-web/docs/feature-matrix.md) for setup and adapter limitations. Its Docker image is published in GHCR and listed in the App Store catalog.
