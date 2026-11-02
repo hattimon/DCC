@@ -28,8 +28,8 @@
       "homepage_url": "https://www.agent-zero.ai/",
       "icon_text": "🤖",
       "upstream_repo": "agent0ai/agent-zero",
-      "latest_release": "v2.14",
-      "latest_release_url": "https://github.com/agent0ai/agent-zero/releases/tag/v2.14",
+      "latest_release": "v2.15",
+      "latest_release_url": "https://github.com/agent0ai/agent-zero/releases/tag/v2.15",
       "icon_url": "catalog/media/icons/agent-zero.png"
     },
     {
@@ -180,8 +180,12 @@
     },
     {
       "name": "DCC Container Updater",
-      "categories": ["DCC"],
-      "categories_en": ["DCC"],
+      "categories": [
+        "DCC"
+      ],
+      "categories_en": [
+        "DCC"
+      ],
       "image": "ghcr.io/hattimon/dcc-container-updater:latest",
       "category": "Aktualizacje 🔄",
       "description": "Panel aktualizacji Docker z opcjonalnym Safe Compose Manager: analiza konfiguracji, trwałe plany i blokady ryzyka danych.",
@@ -256,13 +260,21 @@
         }
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "v1.3.10",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/v1.3.10"
+      "latest_release": "v1.3.11",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/v1.3.11"
     },
     {
       "name": "DCC Web",
-      "categories": ["DCC", "Administracja 🛠", "WWW 🌐"],
-      "categories_en": ["DCC", "Administration 🛠", "WWW 🌐"],
+      "categories": [
+        "DCC",
+        "Administracja 🛠",
+        "WWW 🌐"
+      ],
+      "categories_en": [
+        "DCC",
+        "Administration 🛠",
+        "WWW 🌐"
+      ],
       "image": "ghcr.io/hattimon/dcc-web:0.1.2",
       "category": "DCC",
       "category_en": "DCC",
@@ -292,8 +304,13 @@
       "notes": "Socket Docker zapewnia panelowi administracyjny dostęp do hosta. Proces serwera działa jako UID 10001 i otrzymuje tylko grupę socketu; SETUID/SETGID służą wyłącznie do obniżenia uprawnień. Dane profili i ustawień są przechowywane w wolumenie dcc_web_data. Przy pierwszym uruchomieniu generowane jest silne, losowe hasło administratora; nazwa użytkownika to admin, a hasło pojawi się w wyniku instalacji i logach kontenera. Zmień je po pierwszym logowaniu. Dostęp HTTP ogranicz do zaufanej sieci; przed udostępnieniem spoza LAN skonfiguruj HTTPS, VPN lub zaufany reverse proxy.",
       "notes_en": "The Docker socket gives the panel administrative access to the host. The server runs as UID 10001 and receives only the socket group; SETUID/SETGID are used only to drop privileges. Profile and settings data persist in the dcc_web_data volume. On first start, DCC Web generates a strong random administrator password; the username is admin and the password appears in the installation result and container logs. Change it after signing in. Restrict HTTP to a trusted network; configure HTTPS, a VPN or a trusted reverse proxy before exposing it beyond your LAN.",
       "lightweight": false,
-      "engines": ["docker"],
-      "archs": ["amd64", "arm64"],
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "amd64",
+        "arm64"
+      ],
       "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web",
       "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web/docs",
       "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web",
@@ -309,7 +326,10 @@
         "Sign in as admin; find the strong random password in the installation result or container logs. Change it after your first sign-in.",
         "The panel has administrative Docker access. Keep it on a trusted network and configure HTTPS before public access.",
         "The dcc_web_data volume retains profiles and settings."
-      ]
+      ],
+      "upstream_repo": "hattimon/DCC",
+      "latest_release": "v1.3.11",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/v1.3.11"
     },
     {
       "name": "Beszel Hub",
@@ -1486,8 +1506,8 @@
       "homepage_url": "https://github.com/dani-garcia/vaultwarden",
       "icon_text": "🔐",
       "upstream_repo": "dani-garcia/vaultwarden",
-      "latest_release": "1.37.4",
-      "latest_release_url": "https://github.com/dani-garcia/vaultwarden/releases/tag/1.37.4",
+      "latest_release": "1.37.5",
+      "latest_release_url": "https://github.com/dani-garcia/vaultwarden/releases/tag/1.37.5",
       "icon_url": "catalog/media/icons/vaultwarden.png"
     },
     {
@@ -1520,8 +1540,8 @@
       "homepage_url": "https://usememos.com/",
       "icon_text": "✍",
       "upstream_repo": "usememos/memos",
-      "latest_release": "26.10.0",
-      "latest_release_url": "https://github.com/usememos/memos/releases/tag/26.10.0",
+      "latest_release": "26.11.0",
+      "latest_release_url": "https://github.com/usememos/memos/releases/tag/26.11.0",
       "icon_url": "catalog/media/icons/memos.png"
     },
     {
@@ -1604,8 +1624,8 @@
       "homepage_url": "https://actualbudget.org/",
       "icon_text": "💰",
       "upstream_repo": "actualbudget/actual",
-      "latest_release": "v26.10.0",
-      "latest_release_url": "https://github.com/actualbudget/actual/releases/tag/v26.10.0",
+      "latest_release": "v26.11.0",
+      "latest_release_url": "https://github.com/actualbudget/actual/releases/tag/v26.11.0",
       "icon_url": "catalog/media/icons/actual-budget.png"
     },
     {
