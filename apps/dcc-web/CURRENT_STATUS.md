@@ -1,4 +1,4 @@
-# DCC Web 0.1.5
+# DCC Web 0.1.6
 
 The store merges app versions by stable identity and uses the fetched/cached official catalog for membership, with bundled data only as offline fallback. New applications need only a catalog edit.
 

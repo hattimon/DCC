@@ -1,12 +1,14 @@
-# Instalacja DCC Web 0.1.5
+# Instalacja DCC Web 0.1.6
 
 DCC Web działa w Windows, macOS i Linux z rodziny Debian. Wymaga Docker Engine/Docker Desktop z Compose v2 albo Python 3.12 w instalacji natywnej.
 
 ## Instalator Docker Compose
 
-Pobierz i rozpakuj [archiwum źródłowe DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.5/DCC-Web-0.1.5-source.zip), otwórz terminal w katalogu DCC-Web-0.1.5 i uruchom:
+Pobierz i rozpakuj [archiwum źródłowe DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.6/DCC-Web-0.1.6-source.zip), otwórz terminal w katalogu DCC-Web-0.1.6 i uruchom:
 
-    py -3.12 apps/dcc-web/install.py
+```
+py -3.12 apps/dcc-web/install.py
+```
 
 W macOS/Linux użyj: python3 apps/dcc-web/install.py.
 
@@ -22,9 +24,11 @@ W DCC Desktop 1.3.11 lub nowszym przejdź do Sklep aplikacji → DCC, wybierz DC
 
 Wymaga Python 3.12 i Docker CLI. Z katalogu projektu uruchom:
 
-    py -3.12 -m venv .venv-dcc-web
-    .venv-dcc-web\Scripts\python.exe -m pip install -r apps/dcc-web/requirements.txt
-    .venv-dcc-web\Scripts\python.exe apps/dcc-web/web.py --host 127.0.0.1 --port 8789
+```
+py -3.12 -m venv .venv-dcc-web
+.venv-dcc-web\Scripts\python.exe -m pip install -r apps/dcc-web/requirements.txt
+.venv-dcc-web\Scripts\python.exe apps/dcc-web/web.py --host 127.0.0.1 --port 8789
+```
 
 Na macOS/Linux ścieżka interpretera to .venv-dcc-web/bin/python. Domyślne dane są w ~/.dcc-web; opcja --data PATH wybiera inny katalog. Jeśli 8789 jest zajęty, wybierz inny port.
 

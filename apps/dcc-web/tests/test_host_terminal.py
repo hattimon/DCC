@@ -3,14 +3,17 @@ import base64
 from pathlib import Path
 import queue
 import sys
+import tempfile
 import threading
 import time
 import unittest
+from urllib.parse import urlsplit
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from host_terminal import HostTerminals
 
 class FakePTY:
     def __init__(self,profile,cols,rows):
+        self.profile=profile
         self.input=[];self.dimensions=(cols,rows);self.queue=queue.Queue();self.stopped=False
     def read(self):return self.queue.get()
     def write(self,value):self.input.append(value)
@@ -75,5 +78,79 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(len(base64.b64decode(output['data'])),1_000_000)
         self.assertEqual(output['offset'],1_000_020)
         with self.assertRaises(ValueError):session.output(2_000_000,wait=0)
+
+class TerminalTransportTests(unittest.TestCase):
+    def setUp(self):
+        from cryptography.fernet import Fernet
+        from web import create_app
+        from fixtures import FakeBackend
+        self.temp=tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.app=create_app({'TESTING':True,'DATA_DIR':self.temp.name,'MASTER_KEY':Fernet.generate_key(),
+            'ALLOWED_HOSTS':{'localhost','127.0.0.1','::1','192.168.11.20','dcc.example.invalid'}},
+            backend_factory=FakeBackend,terminal_factory=FakePTY)
+        self.manager=self.app.extensions['dcc_terminals']
+        self.addCleanup(lambda:[s.close() for s in list(self.manager.sessions.values())])
+        self.client=self.app.test_client()
+        self.client.get('/login')
+        with self.client.session_transaction() as session:csrf=session['csrf']
+        response=self.client.post('/setup',data={'username':'fixture-admin','password':'Fixture-terminal-password-44','csrf':csrf})
+        self.assertEqual(response.status_code,302)
+        with self.client.session_transaction() as session:self.csrf=session['csrf']
+        self.state=self.app.extensions['dcc_state']
+        self.state.save_profile('ssh',{'name':'Fixture SSH','kind':'ssh','host':'192.168.11.20',
+            'username':'fixture','permissions':['read','host.exec']})
+
+    def open(self,base='http://localhost',origin=True,remote='172.17.0.1',confirmation=True,extra_headers=None,csrf=True):
+        hostname=urlsplit(base).hostname
+        cookie=self.client.get_cookie('dcc_web_session')
+        if hostname!='localhost':
+            self.client.set_cookie('dcc_web_session',cookie.value,domain=hostname)
+        data={'profile':'ssh'}
+        if confirmation:
+            response=self.client.post('/api/confirmations',json={'action':'host.terminal','target':'ssh','profile':'ssh'},
+                headers={'X-CSRF-Token':self.csrf})
+            self.assertEqual(response.status_code,200,response.json)
+            data['confirmation']=response.json['confirmation']
+        headers={'X-CSRF-Token':self.csrf} if csrf else {}
+        if origin:
+            headers['Origin']=base if origin is True else origin
+        headers.update(extra_headers or {})
+        return self.client.post('/api/host-terminal',base_url=base,json=data,headers=headers,
+            environ_overrides={'REMOTE_ADDR':remote})
+
+    def test_loopback_http_works_through_docker_bridge_for_selected_ssh_profile(self):
+        for base in ('http://localhost:8789','http://127.0.0.1:8789','http://[::1]:8789'):
+            with self.subTest(base=base):
+                response=self.open(base)
+                self.assertEqual(response.status_code,201,response.json)
+                terminal=self.manager.sessions[response.json['id']]
+                self.assertEqual(terminal.profile,'ssh')
+                self.assertEqual(terminal.connection.profile['host'],'192.168.11.20')
+
+    def test_loopback_requires_matching_origin_and_csrf(self):
+        for origin in (False,'http://evil.invalid','http://localhost:9999'):
+            with self.subTest(origin=origin):
+                self.assertEqual(self.open(origin=origin).status_code,403)
+        self.assertEqual(self.open(csrf=False).status_code,403)
+        self.assertFalse(self.manager.sessions)
+
+    def test_other_devices_require_https_and_ignore_untrusted_forwarding_headers(self):
+        for base in ('http://192.168.11.20:8789','http://dcc.example.invalid'):
+            with self.subTest(base=base):
+                self.assertEqual(self.open(base,extra_headers={'X-Forwarded-Proto':'https'}).status_code,403)
+        self.assertFalse(self.manager.sessions)
+        response=self.open('https://dcc.example.invalid')
+        self.assertEqual(response.status_code,201,response.json)
+
+    def test_host_permission_and_explicit_confirmation_are_still_required(self):
+        self.assertEqual(self.open(confirmation=False).status_code,409)
+        self.state.save_profile('ssh',{'name':'Read-only SSH','kind':'ssh','host':'192.168.11.20',
+            'username':'fixture','permissions':['read']})
+        response=self.open()
+        self.assertEqual(response.status_code,403,response.json)
+        self.assertIn('host.exec',response.json['error'])
+        self.assertFalse(self.manager.sessions)
+
 
 if __name__=='__main__':unittest.main()

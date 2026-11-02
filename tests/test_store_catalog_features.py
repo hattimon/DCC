@@ -204,14 +204,16 @@ class StoreCatalogFeatureTests(unittest.TestCase):
         entries = [item for item in payload["apps"] if item["name"] == "DCC Web"]
         self.assertEqual(len(entries), 1)
         entry = entries[0]
-        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:0.1.4")
+        release = entry["latest_release"]
+        self.assertRegex(release, r"^dcc-web-v[0-9]+\.[0-9]+\.[0-9]+$")
+        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:" + release.removeprefix("dcc-web-v"))
         self.assertEqual(entry["category"], "Administracja 🛠")
         self.assertEqual(entry["categories"], ["DCC", "Administracja 🛠", "WWW 🌐"])
         self.assertEqual(entry["categories_en"], ["DCC", "Administration 🛠", "WWW 🌐"])
         self.assertIn("/apps/dcc-web", entry["homepage_url"])
         self.assertIn("/apps/dcc-web/docs", entry["docs_url"])
-        self.assertIn("/tree/dcc-web-v0.1.4/apps/dcc-web", entry["source_url"])
-        self.assertIn("/tree/dcc-web-v0.1.4/apps/dcc-web/docs", entry["docs_url"])
+        self.assertIn("/tree/" + release + "/apps/dcc-web", entry["source_url"])
+        self.assertIn("/tree/" + release + "/apps/dcc-web/docs", entry["docs_url"])
         self.assertEqual(entry["homepage_url"], entry["source_url"])
         self.assertEqual(entry["container_port"], "8789")
         self.assertIn("dcc_web_data:/data", entry["extra"])

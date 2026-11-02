@@ -234,7 +234,8 @@ def update_release_metadata(catalog_path: Path) -> tuple[int, int]:
         if current_release and version and current_release != version:
             for key in ("source_url", "docs_url", "homepage_url"):
                 value = str(app.get(key) or "")
-                refreshed_urls[key] = value.replace(current_release, version) if current_release in value else value
+                if current_release in value:
+                    refreshed_urls[key] = value.replace(current_release, version)
         if image_strategy:
             if not release_pattern or not re.fullmatch(release_pattern, version):
                 print(f"WARN {repo}: release tag does not match the configured image-tag rule; keeping catalog entry unchanged")

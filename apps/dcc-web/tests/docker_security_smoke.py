@@ -3,21 +3,25 @@ import base64
 import http.cookiejar
 import io
 import json
+import os
 from pathlib import Path
 import re
 import secrets
 import subprocess
 import tempfile
 import time
+import tomllib
 import urllib.parse
 import urllib.request
+from urllib.error import HTTPError
 
 
 def main():
     import argparse
     import paramiko
     parser=argparse.ArgumentParser()
-    parser.add_argument('--image',default='dcc-web:qa-0.1.5')
+    version=(Path(__file__).resolve().parents[1]/'VERSION').read_text(encoding='utf-8').strip()
+    parser.add_argument('--image',default='dcc-web:qa-'+version)
     parser.add_argument('--old-image',default='ghcr.io/hattimon/dcc-web:0.1.2')
     parser.add_argument('--mount-fixture',help='Explicit readable host directory containing only synthetic marker files')
     args=parser.parse_args()
@@ -53,7 +57,10 @@ def main():
         def api(path,value=None,method=None):
             req=urllib.request.Request(base+'/api/'+path,data=json.dumps(value).encode() if value is not None else None,
                 method=method,headers={'Content-Type':'application/json','X-CSRF-Token':csrf})
-            with opener.open(req,timeout=50) as response:return json.load(response)
+            try:
+                with opener.open(req,timeout=50) as response:return json.load(response)
+            except HTTPError as error:
+                raise RuntimeError(f'QA API {path}: {error.code} {error.read().decode()[:500]}') from None
         key=paramiko.RSAKey.generate(1024);text=io.StringIO();key.write_private_key(text,password='fixture-key-pass')
         private=text.getvalue();known='fixture.invalid '+key.get_name()+' '+key.get_base64()+'\n'
         payload=base64.b64encode(json.dumps({'key':private,'known':known}).encode()).decode()
@@ -66,7 +73,7 @@ def main():
         docker('stop','--time','5',name);docker('rm',name);running=False
         base=start(args.image)
         after=api('bootstrap')
-        assert after['version']=='0.1.5',after['version']
+        assert after['version']==version,after['version']
         assert after['user']['id']==user and after['settings']['theme']=='violet' and after['settings']['language']=='PL'
         assert api('profiles')['profiles']==before
         docker('exec','--user','10001:10001',name,'python','-c',
@@ -74,6 +81,32 @@ def main():
         for category in ('all','DCC','Administracja','WWW'):
             values=api('catalog?q=DCC%20Web&category='+category)['apps']
             assert len(values)==1,'Duplicate catalog entry'
+        grant=api('mcp/grants',{'name':'Synthetic MCP acceptance','client':'OpenAI Codex',
+            'profiles':[ident],'tools':['list_containers'],'unlimited':True})
+        config=tomllib.loads(api('mcp/config/'+grant['id'])['configuration'])['mcp_servers']['dcc']
+        assert config['command']=='docker'
+        assert config['env_vars']==['DCC_MCP_TOKEN']
+        assert config['args'][4]==name,config['args']
+        assert grant['token'] not in json.dumps(config)
+        environment=dict(os.environ,DCC_MCP_TOKEN=grant['token'])
+        messages=[
+            {'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-11-25'}},
+            {'jsonrpc':'2.0','method':'notifications/initialized'},
+            {'jsonrpc':'2.0','id':2,'method':'tools/list'},
+            {'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'list_images','arguments':{'profile':ident}}},
+        ]
+        def mcp_messages(values):
+            result=subprocess.run([config['command'],*config['args']],
+                input=''.join(json.dumps(value)+'\n' for value in values),capture_output=True,
+                text=True,env=environment,timeout=30)
+            assert result.returncode==0,result.stderr[:500]
+            return [json.loads(line) for line in result.stdout.splitlines()]
+        replies=mcp_messages(messages)
+        assert replies[0]['result']['serverInfo']['version']==version
+        assert {tool['name'] for tool in replies[1]['result']['tools']}=={'list_containers'}
+        assert replies[2]['error']['code']==-32001
+        api('mcp/grants/'+grant['id'],method='DELETE')
+        assert mcp_messages(messages[:1])[0]['error']['code']==-32001
         mount_verified=False
         if args.mount_fixture:
             source=str(Path(args.mount_fixture).resolve())
@@ -100,6 +133,7 @@ def main():
         assert inspected['RestartCount']==0
         print(json.dumps({'old_image':args.old_image,'new_image':args.image,'profile_configuration_preserved':True,
             'credentials_and_keys_encrypted':True,'settings_preserved':True,'catalog_unique':True,
+            'mcp_container_stdio_verified':True,
             'read_only_host_mount_verified':mount_verified,'restart_count':inspected['RestartCount']},indent=2))
     finally:
         if running:

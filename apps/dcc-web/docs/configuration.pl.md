@@ -13,7 +13,7 @@ Panel zapisuje stan w katalogu --data lub DCC_WEB_DATA. Baza SQLite przechowuje 
 
 SSH/WSL wykonują operacje w środowisku docelowym. Pliki Compose i ścieżki montowań muszą być dostępne tam. Import Compose zapisuje pliki po stronie backendu. Profile mają domyślnie tylko odczyt; osobno można zezwolić na cykl życia, exec, obrazy, wolumeny, sieci, Compose, instalację, aktualizacje i operacje destrukcyjne. Rola użytkownika dodatkowo ogranicza dostęp. Puste ograniczenie użytkowników oznacza wszystkich zalogowanych, nadal zgodnie z rolą i prawami.
 
-Import przyjmuje profile Web i starsze eksporty Desktop. Przenosi metadane, nie hasła. Sekrety wpisuje się osobno, a puste pola zachowują poprzednią zaszyfrowaną wartość. Eksport pomija hasła, passphrase i TLS.
+Import przyjmuje szyfrowane kopie Web i starsze eksporty Desktop. Jawny eksport Desktop przenosi metadane bez haseł; panel może dopasować wcześniej wgrane klucze po nazwie. Kopia Web jest zawsze szyfrowana osobnym hasłem i może opcjonalnie zawierać zapisane sekrety oraz zarządzane klucze. Puste pola sekretów w edytowanym profilu zachowują poprzednią zaszyfrowaną wartość. Szczegóły opisuje [przewodnik importu i eksportu](profiles-security.md).
 
 | Zmienna | Znaczenie |
 |---|---|

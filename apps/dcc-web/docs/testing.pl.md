@@ -2,16 +2,20 @@
 
 Z katalogu głównego repozytorium:
 
-    python -m unittest discover -s apps/dcc-web/tests -p test_web.py -v
-    python apps/dcc-web/web.py --self-check
-    git diff --check
+```
+python -m unittest discover -s apps/dcc-web/tests -p test_web.py -v
+python apps/dcc-web/web.py --self-check
+git diff --check
+```
 
 Testy używają tymczasowego stanu i jawnego FakeBackend. Produkcyjna aplikacja nie wybiera go. tests/review_server.py udostępnia lokalną trasę QA oraz profil syntetyczny i nie wchodzi do obrazu produkcyjnego.
 
 Test przeglądarki wymaga Python Playwright i Chromium:
 
-    python apps/dcc-web/tests/review_server.py --port 8790 --data PATH_TO_QA_ONLY_DATA
-    python apps/dcc-web/tests/browser_smoke.py --url http://127.0.0.1:8790 --out PATH_TO_SCREENSHOTS
+```
+python apps/dcc-web/tests/review_server.py --port 8790 --data PATH_TO_QA_ONLY_DATA
+python apps/dcc-web/tests/browser_smoke.py --url http://127.0.0.1:8790 --out PATH_TO_SCREENSHOTS
+```
 
 Dane testowe są syntetyczne i opisane w kodzie. Testy obejmują logowanie, wyszukiwanie, potwierdzenia, mock instalacji/zatrzymania, kategorie Updatera, logi, monitoring, Compose/MCP, profile, motywy, dźwięk, układy desktop/tablet/telefon i 1000 wierszy. CSP pozostaje restrykcyjne.
 

@@ -6,15 +6,20 @@ on:
       - "dcc-web-v*"
 
 permissions:
-  actions: write
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   verify:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Validate release inputs before building
+        shell: bash
+        run: |
+          version="$(tr -d '\r\n' < apps/dcc-web/VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$GITHUB_REF_NAME" == "dcc-web-v$version" ]]
+          test -s "apps/dcc-web/RELEASE_NOTES_${version}.md"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -38,6 +43,10 @@ jobs:
 
   publish:
     needs: verify
+    permissions:
+      actions: write
+      contents: write
+      packages: write
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -110,6 +119,7 @@ jobs:
           else
             gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" \
               --title "DCC Web ${{ steps.version.outputs.version }}" \
+              --latest=false \
               --notes-file "$notes"
           fi
       - name: Refresh the official App Store catalog

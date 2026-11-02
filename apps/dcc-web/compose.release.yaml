@@ -1,6 +1,6 @@
 services:
   dcc-web:
-    image: ghcr.io/hattimon/dcc-web:0.1.5
+    image: ghcr.io/hattimon/dcc-web:0.1.6
     container_name: dcc-web-standalone
     ports:
       - "127.0.0.1:${DCC_WEB_PORT:-8789}:8789"

@@ -15,7 +15,7 @@ The launching process must supply `DCC_MCP_TOKEN`. Stdout contains protocol resp
 
 ## Client adapters
 
-`ClientAdapter.export(command,args)` is the provider-independent interface. The Web export uses the real Python executable, server path and private state path from the running installation. It emits no secret. The configuration must run on a machine that can access that state and Docker profiles; a container-internal path is not automatically a valid host path.
+`ClientAdapter.export(command,args)` is the provider-independent interface. Native installations export the real Python executable, server path and private state path. Container installations identify the running DCC Web container through Docker and export `docker exec -i --env DCC_MCP_TOKEN ...`. The container entrypoint runs the MCP process as UID 10001 with the Docker socket group. The configuration contains the token variable name only; supply its value through the client process environment or a supported secret input. Docker CLI must be installed on the client's computer and use the Docker context hosting this container. No client files are modified automatically.
 
 Codex example (replace paths; the token is inherited from the process environment):
 

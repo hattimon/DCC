@@ -4,13 +4,15 @@ Główny dcc-catalog.json zawiera pojedyncze definicje aplikacji, w tym DCC Web.
 
 category/category_en to starsze pola głównej kategorii. Opcjonalne categories/categories_en dodają kolejne kategorie bez kopiowania wpisu aplikacji. Desktop i Web korzystają ze wspólnych helperów dcc_catalog.py. Kolejność kategorii to Wszystkie → Zainstalowane → DCC → AI; DCC jest pogrubione. DCC Container Updater zachowuje Aktualizacje/Updates i dodatkowo należy do DCC. Identyfikatory i konfiguracja instalacji pozostają takie same.
 
-    {"apps":[{"name":"Przykładowe rozszerzenie","image":"example/extension:1","category":"Narzędzia","categories":["DCC"]}]}
+```
+{"apps":[{"name":"Przykładowe rozszerzenie","image":"example/extension:1","category":"Narzędzia","categories":["DCC"]}]}
+```
 
 To przykład dokumentacyjny, nie fikcyjna aplikacja w katalogu. Oficjalne rozszerzenia powinny mieć DCC i pasujące kategorie funkcjonalne. Źródła można sprawdzać, odświeżać, włączać, wyłączać i usuwać; oficjalnego katalogu nie da się wyłączyć. Przy błędzie sieci pozostaje cache. Serwery CLI odświeżają co godzinę i ręcznie; wgrany plik zastępuje się ponownym wgraniem.
 
 ## Jedna aplikacja i najnowszy wpis
 
-DCC Web 0.1.5 scala wersje po nazwie, repozytorium obrazu bez tagu/digestu i domyślnej nazwie kontenera. Kategorie nie tworzą oddzielnych wpisów. Wersje z liczbowymi tagami są porównywane numerycznie, więc starszy cache nie obniży nowszej wersji w tym samym źródle. Dla tagów ruchomych, takich jak latest, i digestów obowiązuje kolejność źródeł. Warianty z różnymi nazwami kontenerów lub repozytoriami pozostają odrębne.
+DCC Web 0.1.6 scala wersje po nazwie, repozytorium obrazu bez tagu/digestu i domyślnej nazwie kontenera. Kategorie nie tworzą oddzielnych wpisów. Wersje z liczbowymi tagami są porównywane numerycznie, więc starszy cache nie obniży nowszej wersji w tym samym źródle. Dla tagów ruchomych, takich jak latest, i digestów obowiązuje kolejność źródeł. Warianty z różnymi nazwami kontenerów lub repozytoriami pozostają odrębne.
 
 Każda aplikacja/wariant powinna występować raz. CI odrzuca duplikaty. Przy nowym wydaniu aktualizuj istniejący wpis. DCC Web wskazuje tagi dcc-web-vX.Y.Z; przed zmianą sprawdza się obrazy amd64 i arm64.
 

@@ -30,3 +30,6 @@ def translate(value,language):
 EN['Język dokumentacji']='Documentation language'
 EN['Dokumentacja DCC Web']='DCC Web documentation'
 EN['Źródła na GitHubie']='Sources on GitHub'
+EN['O projekcie']='About'
+EN['Otwórz panel']='Open panel'
+EN['Repozytorium DCC na GitHubie']='DCC repository on GitHub'

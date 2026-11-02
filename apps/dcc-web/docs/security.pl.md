@@ -20,12 +20,14 @@ Utrzymuj Waitress na 127.0.0.1:8789 i skonfiguruj zaufane reverse proxy TLS. Zac
 
 Przykładowa lokalizacja Nginx — certyfikaty i DNS konfiguruje administrator:
 
-    location / {
-        proxy_pass http://127.0.0.1:8789;
-        proxy_set_header Host dcc.example.net;
-        proxy_set_header X-Forwarded-Proto https;
-        client_max_body_size 2m;
-    }
+```
+location / {
+    proxy_pass http://127.0.0.1:8789;
+    proxy_set_header Host dcc.example.net;
+    proxy_set_header X-Forwarded-Proto https;
+    client_max_body_size 2m;
+}
+```
 
 ## Zakres weryfikacji
 

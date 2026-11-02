@@ -1,6 +1,6 @@
 # Configuration and profiles
 
-State is kept in the directory selected by `--data` / `DCC_WEB_DATA`. SQLite stores users, hashed sessions, encrypted credential blobs, public profile metadata, catalogs, per-user preferences, audit, short-lived confirmations and monitoring samples. It never edits Desktop's profile store or keyring.
+State is kept in the directory selected by `--data` / `DCC_WEB_DATA`. SQLite stores users, hashed sessions, encrypted profiles and credentials, catalogs, per-user preferences, audit, short-lived confirmations and monitoring samples. It never edits Desktop's profile store or keyring.
 
 | Profile kind | Backend |
 |---|---|
@@ -15,7 +15,7 @@ SSH/WSL operations run in their target environment. Compose files and bind mount
 
 Profile permissions start with `read`. Separate capabilities are `containers.write`, `exec`, `images.write`, `volumes.write`, `networks.write`, `compose.write`, `install`, `update`, `destructive`. User roles impose a second limit: viewer reads, operator reads/lifecycle/exec, admin may use enabled profile capabilities. Administrators can restrict profiles to comma-separated user IDs from Settings → users. An empty restriction permits all authenticated users, subject to role/capability checks. A partial API profile edit preserves existing restrictions and credentials.
 
-Import accepts exported Web profiles and legacy Desktop profile lists. It imports connection metadata only; enter credentials separately. Export excludes passwords, passphrases and TLS secrets. Browser forms never repopulate stored secrets. Leaving a credential field empty keeps the encrypted previous value.
+Import accepts encrypted Web backups and legacy Desktop profile lists. A plaintext Desktop export imports connection metadata without passwords and can match keys already uploaded to the vault by filename. Every Web export is encrypted with a separate password and can optionally include saved credentials and managed keys. Browser forms never repopulate stored secrets. Leaving a credential field empty keeps the encrypted previous value. See the [import and export guide](profiles-security.md).
 
 | Environment | Meaning |
 |---|---|
@@ -36,7 +36,7 @@ Verified SSH profiles can use the reused safe UpdateService through Docker SDK H
 
 ## Shared SSH files and Desktop profile imports
 
-A Desktop path such as `C:/Users/name/.ssh/id_ed25519` describes the Desktop computer. It does not copy the key into a Linux container. Import keeps legacy paths unchanged and never transfers private key material or plaintext credentials.
+A Desktop path such as `C:/Users/name/.ssh/id_ed25519` describes the Desktop computer. It does not copy the key into a Linux container. Plaintext Desktop imports cannot transfer secrets; the optional filename match selects a managed key already uploaded to Web. Unmatched paths remain available for deliberate configuration.
 
 In **Profiles → Shared SSH files**, the default managed directory is `<DCC_WEB_DATA>/ssh` (`/data/ssh` in the published container, persisted in `dcc_web_data`). Administrators can upload selected private/public SSH keys and a trusted `known_hosts` from the browser. The first dialog validates files and previews names, sizes and host key fingerprints; a separate explicit confirmation permits storage. Replacing existing files requires a separate opt-in. Upload only over HTTPS or a trusted loopback connection. Prefer a dedicated, passphrase-protected key; enter its passphrase individually in the profile.
 

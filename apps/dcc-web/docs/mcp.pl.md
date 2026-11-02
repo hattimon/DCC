@@ -6,13 +6,15 @@ Administrator tworzy zgodę z nazwą, istniejącymi profilami, narzędziami, kli
 
 Uruchom proces z tym samym prywatnym katalogiem i użytkownikiem systemowym co backend:
 
-    python apps/dcc-web/web.py --data PATH_TO_PRIVATE_STATE --mcp-stdio
+```
+python apps/dcc-web/web.py --data PATH_TO_PRIVATE_STATE --mcp-stdio
+```
 
 Środowisko procesu musi zawierać DCC_MCP_TOKEN. Stdout jest zarezerwowany na protokół, stderr na diagnostykę. Klient musi wykonać initialize i notifications/initialized. Serwer negocjuje wersje 2024-11-05, 2025-03-26, 2025-06-18 i 2025-11-25.
 
 ## Konfiguracja klientów
 
-Eksporter tworzy szablon konfiguracji używający prawdziwego interpretera, ścieżki serwera i prywatnego katalogu. Nie zapisuje tokenu i nie modyfikuje plików klientów. Klient musi działać na komputerze z dostępem do danych i Docker. Ścieżka wewnątrz kontenera nie musi istnieć na hoście.
+Instalacja natywna eksportuje prawdziwy interpreter, ścieżkę serwera i prywatnego katalogu. Instalacja kontenerowa rozpoznaje własny kontener i eksportuje polecenie `docker exec -i --env DCC_MCP_TOKEN ...`. Punkt wejścia uruchamia proces MCP jako UID 10001 z grupą socketu Docker. Token nie jest zapisywany w konfiguracji — przekazuje się jego wartość przez środowisko klienta lub obsługiwane pole sekretu. Na komputerze klienta musi działać Docker CLI z kontekstem wskazującym host tego kontenera. Pliki klienta nie są modyfikowane automatycznie.
 
 Dla Codex ustaw serwer dcc, polecenie python i argumenty ścieżki web.py, --data, prywatny katalog i --mcp-stdio. Token powinien być przekazany przez środowisko. Klienci Claude, Cursor i Windsurf mogą użyć analogicznego wpisu JSON; nie umieszczaj rzeczywistego tokenu we wspólnym pliku. VS Code obsługuje wejście hasła promptString. Sprawdź dokumentację używanej wersji klienta. Testy integracyjne z zewnętrznymi klientami nie zostały wykonane.
 

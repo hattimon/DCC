@@ -80,7 +80,7 @@ class MCPService:
             version=params.get("protocolVersion")
             if version not in {"2024-11-05","2025-03-26","2025-06-18","2025-11-25"}:
                 version="2025-11-25"
-            result={"protocolVersion":version,"capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"dcc-web-readonly-preview","version":"0.1.5"},"instructions":"Read-only Preview. Writes and HTTP transport are not available."}
+            result={"protocolVersion":version,"capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"dcc-web-readonly-preview","version":"0.1.6"},"instructions":"Read-only Preview. Writes and HTTP transport are not available."}
             self.negotiated = True
         elif method=="ping":
             result={}
@@ -132,7 +132,22 @@ def register_mcp(app,state,profile_lookup):
         if not rows:
             abort(404)
         metadata=json.loads(rows[0]["data"])
-        return jsonify(export_client(metadata["client"],sys.executable,[str(Path(__file__).with_name("web.py")),"--data",str(state.directory),"--mcp-stdio"]))
+        args=[str(Path(__file__).with_name("web.py")),"--data",str(state.directory),"--mcp-stdio"]
+        command=sys.executable
+        if os.environ.get("DCC_WEB_CONTAINER_NAME"):
+            import docker
+            from host_setup import local_container
+            client=docker.from_env(timeout=10)
+            try:
+                container=local_container(client)
+                # The entrypoint restores the non-root UID and socket group;
+                # pass only the variable name, never a token in the config.
+                command="docker"
+                args=["exec","-i","--env","DCC_MCP_TOKEN",container.name,
+                    "/usr/local/bin/dcc-web-entrypoint",sys.executable,*args]
+            finally:
+                client.close()
+        return jsonify(export_client(metadata["client"],command,args))
 
 
 def stdio(state,input_stream=None,output_stream=None):
