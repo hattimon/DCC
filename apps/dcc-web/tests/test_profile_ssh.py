@@ -94,12 +94,13 @@ class ProfileSSHTests(unittest.TestCase):
         self.assertEqual(self.upload(altered, preview=False, token=token).status_code, 409)
         result = self.upload(files, preview=False, token=token)
         self.assertEqual(result.status_code, 200, result.json)
-        self.assertEqual((Path(self.temp.name)/'ssh'/'id_ed25519').read_bytes(), self.private)
+        self.assertFalse((Path(self.temp.name)/'ssh'/'id_ed25519').exists())
+        self.assertEqual(self.state.vault.decrypt(self.state.ssh.vault_file('id_ed25519')['private']),self.private)
         self.assertNotIn('BEGIN RSA PRIVATE', self.client.get('/api/profiles/export').get_data(as_text=True))
         self.assertNotIn('BEGIN RSA PRIVATE', json.dumps(self.state.rows('SELECT * FROM audit')))
         if os.name != 'nt':
             self.assertEqual((Path(self.temp.name)/'ssh').stat().st_mode & 0o777, 0o700)
-            self.assertEqual((Path(self.temp.name)/'ssh'/'id_ed25519').stat().st_mode & 0o777, 0o600)
+            self.assertEqual((Path(self.temp.name)/'ssh'/'known_hosts').stat().st_mode & 0o777, 0o600)
 
     def test_overwrite_requires_separate_opt_in_and_changed_existing_file_invalidates_token(self):
         files = [('known_hosts', self.known)]
@@ -238,7 +239,8 @@ class ProfileSSHTests(unittest.TestCase):
         p = self.state.profile(result.json['added'][0],private=True)
         self.assertEqual(p['key_path'],str(root/'id_ed25519'))
         self.assertEqual(p['key_scope'],'shared')
-        self.assertEqual(p['credentials'],{})
+        self.assertNotIn('passphrase',p['credentials'])
+        self.assertEqual(p['credentials']['private_key'].encode(),self.private)
         self.assertEqual(p['permissions'],['read'])
 
     def test_agent_is_explicit_and_does_not_require_the_imported_windows_key_path(self):

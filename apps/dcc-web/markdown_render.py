@@ -14,10 +14,11 @@ def _safe_href(value, allowed_docs):
     value = html.unescape(value).strip()
     if value.startswith("#") or value.startswith("/"):
         return value
-    if value.endswith(".md") and "://" not in value:
-        name = value.rsplit("/", 1)[-1][:-3]
-        return f"/docs/{name}" if name in allowed_docs else None
     parsed = urlsplit(value)
+    if parsed.path.endswith('.md') and not parsed.scheme and not parsed.netloc:
+        name = parsed.path.rsplit('/',1)[-1][:-3]
+        anchor = '#'+parsed.fragment if parsed.fragment and re.fullmatch(r'[A-Za-z0-9_-]+',parsed.fragment) else ''
+        return f'/docs/{name}{anchor}' if name in allowed_docs else None
     if parsed.scheme in {"https", "http", "mailto"} and (parsed.netloc or parsed.scheme == "mailto"):
         return value
     return None

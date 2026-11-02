@@ -10,7 +10,7 @@ from flask import abort, g, request, session
 
 CAPABILITIES = {"host.exec","read", "containers.write", "exec", "images.write", "volumes.write", "networks.write", "compose.write", "install", "update", "destructive"}
 ROLES = {"viewer": {"read"}, "operator": {"read", "containers.write", "exec"}, "admin": CAPABILITIES}
-SECRET_WORDS = re.compile(r"password|passwd|token|secret|authorization|api.?key|credential|setup.?code", re.I)
+SECRET_WORDS = re.compile(r"password|passwd|passphrase|private.?key|token|secret|authorization|api.?key|credential|setup.?code|recovery.?code", re.I)
 
 
 def redact(value):
@@ -34,6 +34,8 @@ def initialize_security(app, state):
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             origin = request.headers.get("Origin")
             expected_origin=app.config.get("PUBLIC_ORIGIN") or request.host_url.rstrip("/")
+            if host in app.config.get('TRUSTED_HTTPS_HOSTS',[]):
+                expected_origin='https://'+request.host
             if origin and origin != expected_origin:
                 abort(403, "Origin rejected")
             supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf", "")
@@ -42,6 +44,8 @@ def initialize_security(app, state):
         sid = session.get("sid", "")
         rows = state.rows("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?", (hashlib.sha256(sid.encode()).hexdigest(), time.time())) if sid else []
         g.user = rows[0] if rows else None
+        if g.user and getattr(state, 'mfa', None) and state.mfa.enabled(g.user['id']) and not session.get('mfa_verified'):
+            g.user = None
         if request.path.startswith("/api/") and request.path != "/api/health" and not g.user:
             abort(401, "Login required")
 
@@ -82,12 +86,12 @@ def validate_profile(data):
     result = {key: data.get(key) for key in ("name", "kind", "endpoint", "host", "port", "username", "key_path", "key_scope", "ssh_auth", "known_hosts_path", "distro", "cli", "context", "users", "panel_host") if data.get(key) is not None}
     if result.get('ssh_auth', 'auto') not in {'auto', 'key', 'agent'}:
         raise ValueError('Invalid SSH authentication method')
-    if result.get("key_scope", "individual") not in {"individual", "shared"}:
+    if result.get("key_scope", "individual") not in {"individual", "shared", "mounted"}:
         raise ValueError("Invalid SSH key scope")
     for key in ("key_path", "known_hosts_path"):
         if key in result and (not isinstance(result[key], str) or len(result[key]) > 500 or "\0" in result[key]):
             raise ValueError("Invalid SSH file path")
-    if result.get("key_scope") == "shared":
+    if result.get("key_scope") in {"shared", "mounted"}:
         from profile_ssh import safe_name
         if result.get("key_path"):
             safe_name(result["key_path"])

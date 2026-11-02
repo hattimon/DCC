@@ -30,9 +30,9 @@ from ports import enrich_containers,inventory
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
-DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#73d2c4", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
+DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 
 
 def provision_random_admin(state):
@@ -56,6 +56,10 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     if config:
         app.config.update(config)
     state = State(app.config["DATA_DIR"], app.config.get("MASTER_KEY"))
+    from mfa import MFA
+    state.mfa = MFA(state)
+    from recovery import Recovery, register_recovery
+    state.recovery = Recovery(state)
     app.secret_key = state.session_key
     catalogs = Catalogs(state, ROOT)
     jobs = Jobs()
@@ -174,10 +178,11 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
                             abort(409, "Initial setup has already completed")
                         db.execute("INSERT INTO users VALUES(?,?,?,?)", (secrets.token_hex(12),username,generate_password_hash(password),"admin"))
             users = state.rows("SELECT * FROM users WHERE name=?", (username,))
-            if not error and users and check_password_hash(users[0]["password"],password):
+            if not error and users and check_password_hash(users[0]["password"],password) and (not state.mfa.enabled(users[0]['id']) or state.mfa.verify(users[0]['id'],request.form.get('otp'))):
                 session.clear()
                 session["sid"], session["csrf"] = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
                 session.permanent = True
+                session['mfa_verified'] = state.mfa.enabled(users[0]['id'])
                 state.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(session["sid"].encode()).hexdigest(),users[0]["id"],time.time()+43200))
                 state.audit(users[0]["id"],"login","session",200)
                 return redirect("/")
@@ -189,6 +194,61 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def logout():
         state.execute("DELETE FROM sessions WHERE token=?", (hashlib.sha256(session["sid"].encode()).hexdigest(),))
         session.clear()
+        return jsonify(ok=True)
+
+    def reauthenticate(data, second_factor=True):
+        address = 'account:' + g.user['id']
+        recent = state.rows('SELECT COUNT(*) AS total FROM attempts WHERE address=? AND at>?', (address,time.time()-600))[0]['total']
+        if recent >= 8:
+            abort(429, 'Too many attempts. Try again in ten minutes.')
+        valid = isinstance(data.get('current_password'), str) and len(data['current_password']) <= 256 and check_password_hash(g.user['password'],data['current_password'])
+        if valid and second_factor and state.mfa.enabled(g.user['id']):
+            valid = state.mfa.verify(g.user['id'],data.get('otp'))
+        if not valid:
+            state.execute('INSERT INTO attempts VALUES(?,?)', (address,time.time()))
+            abort(403, 'Invalid password or 2FA code')
+
+    def revoke_other_sessions():
+        current = hashlib.sha256(session['sid'].encode()).hexdigest()
+        state.execute('DELETE FROM sessions WHERE user_id=? AND token!=?', (g.user['id'],current))
+
+    register_recovery(app,state,reauthenticate)
+    from host_setup import register_host_setup
+    register_host_setup(app,state,reauthenticate,confirmed)
+
+    @app.get('/api/account/2fa')
+    def mfa_status():
+        return jsonify(enabled=state.mfa.enabled(g.user['id']))
+
+    @app.post('/api/account/2fa/setup')
+    def mfa_setup():
+        reauthenticate(body())
+        return jsonify(state.mfa.begin(g.user['id'],g.user['name'],session['sid']))
+
+    @app.post('/api/account/2fa/enable')
+    def mfa_enable():
+        data = body()
+        reauthenticate(data,second_factor=False)
+        try:
+            codes = state.mfa.enable(g.user['id'],data.get('otp'),session['sid'])
+        except ValueError:
+            state.execute('INSERT INTO attempts VALUES(?,?)', ('account:'+g.user['id'],time.time()))
+            raise
+        session['mfa_verified'] = True
+        revoke_other_sessions()
+        return jsonify(recovery_codes=codes)
+
+    @app.post('/api/account/2fa/disable')
+    def mfa_disable():
+        data = body()
+        reauthenticate(data,second_factor=False)
+        try:
+            state.mfa.disable(g.user['id'],data.get('otp'))
+        except ValueError:
+            state.execute('INSERT INTO attempts VALUES(?,?)', ('account:'+g.user['id'],time.time()))
+            raise
+        session['mfa_verified'] = False
+        revoke_other_sessions()
         return jsonify(ok=True)
 
     @app.get("/")
@@ -203,7 +263,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
 
     @app.get("/docs/<name>")
     def documentation(name):
-        allowed = {"installation","configuration","security","catalogs","mcp","ai","themes-audio","feature-matrix","testing"}
+        allowed = {"installation","configuration","profiles-security","security","catalogs","mcp","ai","themes-audio","feature-matrix","testing"}
         if name not in allowed:
             abort(404)
         source = (Path(__file__).parent/"docs"/(name+".md")).read_text(encoding="utf-8")
@@ -292,10 +352,46 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             added.append(ident)
         return jsonify(added=added, note="Credentials are never imported in plaintext; configure them separately")
 
-    @app.get("/api/profiles/export")
+    @app.route("/api/profiles/export",methods=['GET','POST'])
     def export_profiles():
         admin()
-        return jsonify(schema_version=1, profiles=state.profiles())
+        if request.method == 'GET':
+            abort(400,'Use password-protected profile export')
+        from profile_transfer import ProfileTransfer
+        data = body()
+        reauthenticate(data)
+        with state.ssh.lock:
+            return jsonify(ProfileTransfer(state).export(data.get('ids'),data.get('backup_password'),data.get('include_secrets') is True))
+
+    @app.post('/api/profiles/transfer/preview')
+    @app.post('/api/profiles/transfer')
+    def transfer_profiles():
+        admin()
+        from profile_transfer import ProfileTransfer
+        data = body()
+        with state.ssh.lock:
+            transfer = ProfileTransfer(state)
+            plan, prepared, files = transfer.plan(data.get('contents'),data.get('backup_password',''),data.get('indices'),data.get('shared_keys') is True,data.get('replace') is True)
+            if request.path.endswith('/preview'):
+                return jsonify(plan)
+            confirmed(data,'profiles.transfer','workspace',plan['target'])
+            return jsonify(added=transfer.apply(prepared,files))
+
+    @app.post('/api/profiles/check')
+    def check_profile():
+        admin()
+        data = body()
+        value = validate_profile(data.get('configuration',{}))
+        secret = data.get('credentials',{})
+        if not isinstance(secret,dict) or any(not isinstance(v,str) or len(v)>8192 for v in secret.values()):
+            abort(400,'Invalid profile credentials')
+        if data.get('existing_id'):
+            previous = state.profile(str(data['existing_id']),private=True)['credentials']
+            previous.pop('private_key',None)
+            secret = dict(previous,**secret)
+        value = state.ssh.resolve(dict(value,credentials=secret))
+        info = factory(value).info()
+        return jsonify(ok=True,name=info.get('Name'),version=info.get('ServerVersion'))
 
     @app.get("/api/profile-ssh")
     def profile_ssh_settings():
@@ -355,6 +451,20 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             confirmed(request.form, "profiles.ssh.files", "workspace", plan["target"])
             state.ssh.write_files(files)
         return jsonify(ok=True, files=[f["name"] for f in plan["files"]])
+
+    @app.post('/api/profile-ssh/files/delete/preview')
+    @app.post('/api/profile-ssh/files/delete')
+    def ssh_delete():
+        admin()
+        data = body()
+        with state.ssh.lock:
+            plan = state.ssh.delete_plan(data.get('names'))
+            if request.path.endswith('/preview'):
+                return jsonify(plan)
+            confirmed(data, 'profiles.ssh.remove', 'workspace', plan['target'])
+            state.ssh.delete_files(plan)
+            terminals.close_profiles({p['id'] for p in plan['profiles']})
+        return jsonify(ok=True)
 
 
     @app.get("/terminal")

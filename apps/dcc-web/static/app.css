@@ -96,3 +96,6 @@ input[type=range]{accent-color:var(--accent)}
 @media(max-width:900px){.container-toolbar .container-filters input{width:140px;min-width:120px;max-width:140px;flex-basis:140px}.container-toolbar .container-filters select{min-width:105px;padding-left:8px;padding-right:22px}.container-toolbar .container-filters #container-grouping{min-width:100px}}
 @media(max-width:760px){.container-toolbar .container-filters input{width:112px;min-width:96px;max-width:112px;flex-basis:112px}}
 @media(max-width:480px){.container-toolbar .container-filters{gap:6px}.container-toolbar .container-filters input{width:96px;min-width:84px;max-width:96px;flex-basis:96px}}
+
+/* Profile wizard and account settings use the existing theme tokens. */
+[hidden]{display:none!important}.settings-tabs{margin-bottom:18px}.settings-tabs [aria-selected="true"]{border-color:var(--accent);color:var(--accent)}.ssh-file-list{display:grid;gap:10px}.ssh-file-list .check{flex-wrap:wrap}.ssh-file-list .secondary{flex-basis:100%;padding-left:26px}.selectable{user-select:all;overflow-wrap:anywhere}details>.stack{margin-top:16px}

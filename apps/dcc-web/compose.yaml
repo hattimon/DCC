@@ -1,6 +1,6 @@
 services:
   dcc-web:
-    image: dcc-web:local-0.1.3
+    image: dcc-web:local-0.1.4
     build:
       context: ../..
       dockerfile: apps/dcc-web/Dockerfile

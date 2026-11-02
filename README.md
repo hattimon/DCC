@@ -15,7 +15,7 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 
 [![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter-Setup-1.3.12.exe)
 [![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter_1.3.12_amd64.deb)
-[![DCC Web v0.1.3](https://img.shields.io/badge/DCC%20Web-v0.1.3-20bfc8?logo=docker&logoColor=white)](apps/dcc-web/docs/installation.md)
+[![DCC Web v0.1.4](https://img.shields.io/badge/DCC%20Web-v0.1.4-20bfc8?logo=docker&logoColor=white)](apps/dcc-web/docs/installation.md)
 
 DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker Compose or run directly with Python. Its installer checks Docker-published ports and local port availability, uses 8789 when free, and chooses another available port when necessary. See the [installation guide](apps/dcc-web/docs/installation.md).
 
@@ -24,13 +24,13 @@ DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker C
 ### EN
 - One current App Store entry per application across all categories, including after catalog refresh or import.
 - Older cached numeric versions cannot replace newer entries; catalog validation rejects duplicate definitions.
-- DCC Web 0.1.3 ships the same store fix. Legacy catalogs retain Administration for Web and Updates for Updater.
+- DCC Web 0.1.4 ships the same store fix. Legacy catalogs retain Administration for Web and Updates for Updater.
 - Existing Windows installer update handoff and Debian-family package upgrade mechanisms are retained.
 
 ### PL
 - Jeden aktualny wpis aplikacji w sklepie we wszystkich jej kategoriach, również po odświeżeniu i imporcie katalogu.
 - Starsze wersje z pamięci katalogu nie zastępują nowszych; walidacja odrzuca powielone definicje.
-- DCC Web 0.1.3 zawiera tę samą poprawkę. Starsze klienty nadal widzą Web w Administracji i Updater w Aktualizacjach.
+- DCC Web 0.1.4 zawiera tę samą poprawkę. Starsze klienty nadal widzą Web w Administracji i Updater w Aktualizacjach.
 - Zachowano dotychczasowy mechanizm aktualizacji instalatorem Windows i pakietem DEB.
 
 ## What's New in v1.3.11
