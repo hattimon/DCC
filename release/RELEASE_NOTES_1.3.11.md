@@ -12,6 +12,7 @@
 - Container filters and bulk actions share one row; the search field contracts on narrow screens.
 - Added a cross-platform DCC Web installer that scans Docker and local TCP ports, then selects a free port when 8789 is busy.
 - Retained the Windows graceful updater handoff/restart and Linux pkexec/apt installation flow.
+- Refreshed catalog entries replace the bundled image version of the same application, so outdated DCC Web entries do not remain as duplicate installation choices.
 - Reissued the Linux DEB with the missing `libpulse0` runtime dependency and the portable `pkexec` dependency name. CI builds on Ubuntu 22.04, upgrades and launches under X11, and verifies a clean install on Debian 13 (the current MX Linux base).
 
 ## Polski
@@ -25,6 +26,7 @@
 - Dokumentacja DCC Web wyświetla formatowany, bezpiecznie escapowany Markdown bez nowych zależności.
 - Filtry i operacje na kontenerach mieszczą się w jednym wierszu; wyszukiwarka zwęża się na małym ekranie.
 - Zachowany handoff i restart Windows oraz instalacja przez pkexec/apt na Linux.
+- Odświeżony katalog zastępuje wbudowaną wersję obrazu tej samej aplikacji; stary DCC Web nie pozostaje drugą pozycją do instalacji.
 - Ponownie udostępniono DEB z zależnościami `libpulse0` i `pkexec`, zgodnymi z aktualnym Debianem/MX. CI buduje pakiet na Ubuntu 22.04, sprawdza aktualizację i start X11 oraz czystą instalację w Debianie 13.
 - Dodano wieloplatformowy instalator DCC Web, który skanuje używane porty kontenerów i wybiera wolny port, gdy domyślny 8789 jest zajęty.
 

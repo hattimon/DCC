@@ -11,7 +11,7 @@ import ssl
 import time
 from urllib.parse import urlsplit, urljoin
 
-from dcc_catalog import category_group, localized_categories, catalog_category_sort_key, image_repository
+from dcc_catalog import category_group, localized_categories, catalog_category_sort_key, image_repository, catalog_application_key
 from ports import published_ports
 
 OFFICIAL = "https://github.com/hattimon/DCC"
@@ -101,10 +101,10 @@ class Catalogs:
     def all(self):
         merged = {}
         for app in self.fallback:
-            merged[(app["name"].lower(), app["image"].lower())] = dict(app)
+            merged[catalog_application_key(app["name"], app["image"], app.get("default_name") or app.get("container_name"))] = dict(app)
         for row in self.state.rows("SELECT cache FROM sources WHERE enabled=1 ORDER BY canonical DESC, rowid"):
             for app in json.loads(row["cache"] or "[]"):
-                key = app["name"].lower(), app["image"].lower()
+                key = catalog_application_key(app["name"], app["image"], app.get("default_name") or app.get("container_name"))
                 old = merged.get(key, {})
                 new = dict(old, **app)
                 for field in ("categories","categories_en","store_description","store_description_en","features","features_en","icon_url","hero_image_url","gallery","build_context","build_dockerfile"):

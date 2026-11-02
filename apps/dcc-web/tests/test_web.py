@@ -199,6 +199,19 @@ class WebTests(unittest.TestCase):
         self.assertEqual(len(self.client.get('/api/catalog?q=CoNtAiNeR%20UpDaTeR').json['apps']),1)
         self.assertEqual(len(self.client.get('/api/catalog?q=nonexistent-fixture-app').json['apps']),0)
 
+    def test_live_catalog_replaces_bundled_web_version_without_duplicate_or_id_change(self):
+        catalogs = self.app.extensions['dcc_catalogs']
+        current = next(app for app in catalogs.all() if app['name'] == 'DCC Web')
+        catalogs.fallback = [dict(app, image='ghcr.io/hattimon/dcc-web:0.1.0')
+                             if app['name'] == 'DCC Web' else dict(app) for app in catalogs.fallback]
+        response = self.client.get('/api/catalog?q=DCC%20Web&category=DCC')
+        apps = response.json['apps']
+        self.assertEqual(len(apps), 1)
+        self.assertEqual(apps[0]['image'], 'ghcr.io/hattimon/dcc-web:0.1.1')
+        self.assertEqual(apps[0]['id'], current['id'])
+        self.assertEqual(apps[0]['category_labels'], ['DCC', 'Administracja', 'WWW'])
+        self.assertEqual(self.client.get('/api/catalog?q=dcc-web:0.1.0').json['apps'], [])
+
     def test_legacy_override_keeps_dcc_membership(self):
         current=next(v for v in self.app.extensions['dcc_catalogs'].all() if v['name']=='DCC Container Updater')
         old={k:v for k,v in current.items() if k not in {'categories','categories_en','id'}}
