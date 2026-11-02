@@ -510,10 +510,70 @@ Zatrzymaj i usuń kontenery aplikacji|Stop and remove application containers
 Wolumeny i montowane katalogi pozostaną zachowane; dane tylko w warstwie kontenera mogą zostać utracone.|Volumes and mounted directories are retained; data only in the container writable layer can be lost.
 Potwierdzasz przegląd repozytorium|You confirm review of the repository
 Docker zbuduje obraz; kod źródłowy nie będzie wykonywany bezpośrednio na hoście.|Docker builds the image; source code is not executed directly on the host.
+Wspólne pliki SSH|Shared SSH files
+To folder na serwerze lub w kontenerze DCC Web. Ścieżki z Windows nie są automatycznie dostępne w kontenerze.|This folder belongs to the DCC Web server or container. Windows paths are not automatically available inside a container.
+Pliki:|Files:
+Zmień folder|Change directory
+Kopiuj ścieżkę|Copy path
+Wgraj pliki SSH|Upload SSH files
+Jak skopiować pliki|How to copy files
+Folder zewnętrzny jest używany tylko do odczytu. Pliki skopiuj na serwer lub zamontuj folder w kontenerze.|External directories are read-only in this panel. Copy files on the server or mount the directory into the container.
+Użyj wspólnego folderu|Use shared directory
+Usuń zaznaczone profile|Delete selected profiles
+Zaznacz wszystkie profile|Select all profiles
+Zaznaczone profile:|Selected profiles:
+Wspólny folder|Shared directory
+Ścieżka indywidualna|Individual path
+Brak wybranych profili SSH lub Balena|No SSH or Balena profiles selected
+Usunięte zostaną tylko wybrane profile i ich zapisane hasła. Kontenery, wolumeny oraz pliki SSH pozostaną zachowane. Aktywne terminale tych profili zostaną zamknięte.|Only selected profiles and their stored credentials will be deleted. Containers, volumes and SSH files are retained. Their active terminals will be closed.
+Wybrane profile SSH i Balena będą korzystać ze wspólnego folderu i pliku known_hosts. Nazwy kluczy zostaną zachowane. Pozostałe profile nie zostaną zmienione.|Selected SSH and Balena profiles will use the shared directory and known_hosts file. Key filenames are preserved. Other profiles remain unchanged.
+Pominięte profile:|Skipped profiles:
+Folder na serwerze DCC Web|Directory on the DCC Web server
+Folder zarządzany przyjmuje pliki z przeglądarki. Inny folder musi istnieć na serwerze; w kontenerze zamontuj go tylko do odczytu. Zmiana obejmie wyłącznie profile korzystające ze wspólnego folderu.|Browser uploads go to the managed directory. Other directories must already exist on the server; mount them read-only in containers. Only profiles using the shared directory are affected.
+Zmiana folderu nie przenosi ani nie usuwa plików. Profile z indywidualnymi ścieżkami pozostaną bez zmian.|Changing the directory does not move or delete files. Profiles with individual paths remain unchanged.
+Wybierz klucze i zaufany plik known_hosts z własnego komputera. Zawartość kluczy nie będzie wyświetlana ani eksportowana.|Select keys and a trusted known_hosts file from your computer. Key contents will not be displayed or exported.
+Pliki SSH|SSH files
+Zastąp istniejące pliki|Replace existing files
+Maksymalnie 20 plików, 128 KiB na plik i 1 MiB łącznie. Pliki zachowają swoje nazwy. Nie kopiuj pliku config. Weryfikuj odciski kluczy hostów z zaufanego źródła.|Up to 20 files, 128 KiB each and 1 MiB total. Filenames are retained. Do not copy SSH config. Verify host key fingerprints using a trusted source.
+Zezwalam na zapis wybranych plików SSH w prywatnym folderze DCC Web. Administrator serwera i osoby z dostępem do wolumenu mogą odczytać te pliki. Zalecany jest osobny klucz z passphrase. Przesyłaj przez HTTPS lub lokalne połączenie.|I allow the selected SSH files to be stored in the private DCC Web directory. Server administrators and people with volume access can read them. A dedicated passphrase-protected key is recommended. Upload over HTTPS or a local connection.
+Zastąpienie pliku|Replacing existing file
+Pliki SSH zostały zapisane|SSH files saved
+Najprościej użyć Wgraj pliki SSH i wybrać pliki w oknie systemowym. Przeglądarka nie może otworzyć folderu serwera w lokalnym Eksploratorze.|Use Upload SSH files to select files in the system dialog. A browser cannot open the server directory in your local file explorer.
+Przykład dla lokalnego kontenera o nazwie dcc-web. Folder źródłowy wybierasz samodzielnie. Polecenia wykonuj na hoście Dockera.|Example for a local container named dcc-web. Choose the source directory yourself and run commands on the Docker host.
+PowerShell — kopia wybranego klucza i known_hosts|PowerShell — copy a selected key and known_hosts
+Użyj folderu źródłowego zamontowanego tylko do odczytu.|Use a source directory mounted read-only.
+Polecenia dotyczą domyślnego folderu /data/ssh w obrazie kontenerowym. Nie kopiuj całego folderu SSH. Hasło klucza ustaw osobno w profilu. Zmiana kluczy nie przyznaje uprawnień do operacji Docker.|Commands target the default /data/ssh directory in the container image. Do not copy your entire SSH directory. Set the key passphrase separately in the profile. Changing keys does not grant Docker operation permissions.
+Po imporcie wybierz profile SSH i użyj wspólnego folderu. Wgraj klucze oraz zaufany known_hosts; ścieżka C:/Users/... nie działa wewnątrz kontenera Linux.|After import, select SSH profiles and use the shared directory. Upload keys and trusted known_hosts; C:/Users/... paths do not work inside Linux containers.
+Źródło klucza SSH|SSH key source
+Klucz SSH — pełna ścieżka lub nazwa pliku we wspólnym folderze|SSH key — full path or filename in the shared directory
+known_hosts — indywidualna ścieżka (opcjonalnie)|known_hosts — individual path (optional)
 `;
 const messages=Object.fromEntries(pairs.trim().split('\n').map(line=>line.split('|')));
 const reverse=Object.fromEntries(Object.entries(messages).filter(([a,b])=>a!==b).map(([a,b])=>[b,a]));
 const errorPL={
+"Use a simple SSH filename without directories":"Podaj prostą nazwę pliku SSH bez katalogów.",
+"SSH paths must not contain symbolic links":"Ścieżki SSH nie mogą zawierać dowiązań symbolicznych.",
+"Copy a trusted known_hosts file into the shared SSH directory first":"Najpierw wgraj zaufany plik known_hosts do wspólnego folderu SSH.",
+"The SSH key is missing from the shared directory; upload it in Profiles":"Brakuje klucza we wspólnym folderze. Wgraj go w zakładce Profile.",
+"SSH files must be nonempty text files no larger than 128 KiB":"Pliki SSH muszą zawierać tekst i mieć od 1 B do 128 KiB.",
+"SSH files must contain UTF-8 text":"Pliki SSH muszą zawierać tekst UTF-8.",
+"Invalid known_hosts entry; copy verified entries from a trusted SSH client":"Nieprawidłowy known_hosts. Skopiuj zweryfikowane wpisy z zaufanego klienta SSH.",
+"known_hosts must contain at least one verified host key":"known_hosts musi zawierać co najmniej jeden zweryfikowany klucz hosta.",
+"Invalid SSH public key":"Nieprawidłowy klucz publiczny SSH.",
+"Only SSH private keys, public keys and known_hosts can be uploaded":"Można przesyłać wyłącznie klucze SSH i plik known_hosts.",
+"Invalid or unsupported SSH private key":"Nieprawidłowy lub nieobsługiwany klucz prywatny SSH.",
+"Provide an absolute directory on the DCC Web server":"Podaj bezwzględną ścieżkę folderu na serwerze DCC Web.",
+"The external SSH directory must already exist and be readable by DCC Web":"Zewnętrzny folder SSH musi istnieć i być dostępny do odczytu dla DCC Web.",
+"Select between 1 and 100 profiles":"Zaznacz od 1 do 100 profili.",
+"A selected profile no longer exists; refresh the list":"Wybrany profil już nie istnieje. Odśwież listę.",
+"Browser uploads are allowed only in the managed private SSH directory":"Przesyłanie plików jest możliwe tylko do zarządzanego prywatnego folderu SSH.",
+"Select at most 20 SSH files with a total size of 1 MiB":"Wybierz maksymalnie 20 plików SSH, łącznie do 1 MiB.",
+"Duplicate SSH filenames are not allowed":"Nazwy przesyłanych plików SSH nie mogą się powtarzać.",
+"The target SSH file cannot be replaced":"Docelowego pliku SSH nie można zastąpić.",
+"A file already exists; explicitly enable replacement to continue":"Plik już istnieje. Aby go zastąpić, zaznacz odpowiednią zgodę.",
+"Invalid SSH key scope":"Nieprawidłowe źródło klucza SSH.",
+"Invalid SSH file path":"Nieprawidłowa ścieżka pliku SSH.",
+
 'Installation is disabled for this profile. Enable Install applications in Profiles / Permissions. Only an administrator can change this setting.':'Instalowanie jest wyłączone w tym profilu. Administrator musi włączyć Instalowanie aplikacji w Profile / Uprawnienia.',
 'Configure and enable the AI connection first':'Najpierw skonfiguruj i włącz połączenie AI.',
 'Another operation is already running for this profile':'W tym profilu trwa już inna operacja. Poczekaj na jej zakończenie.',

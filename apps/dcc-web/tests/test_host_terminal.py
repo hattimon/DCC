@@ -27,6 +27,17 @@ class TerminalTests(unittest.TestCase):
     def open(self,owner='user',login='login',profile='local',limit=16):
         return self.manager.open({'id':profile,'kind':'local'},owner,login,120,32,limit=limit)
 
+    def test_close_deleted_profiles_preserves_other_hosts_and_owners(self):
+        selected = self.open(profile='deleted')
+        other_owner = self.open(owner='another', profile='deleted')
+        retained = self.open(profile='retained')
+        self.manager.close_profiles({'deleted'})
+        self.assertTrue(selected.closed)
+        self.assertTrue(other_owner.closed)
+        self.assertNotIn(selected.id, self.manager.sessions)
+        self.assertIn(retained.id, self.manager.sessions)
+        self.assertFalse(retained.closed)
+
     def test_sixteen_sessions_and_configurable_limit(self):
         sessions=[self.open() for _ in range(16)]
         with self.assertRaisesRegex(ValueError,r'limit \(16\)'):self.open()

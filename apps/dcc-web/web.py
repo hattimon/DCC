@@ -27,6 +27,7 @@ from engine import DockerBackend, EngineError, Jobs
 from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES
 from state import State
 from ports import enrich_containers,inventory
+from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
 VERSION = "0.1.1"
@@ -219,10 +220,14 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def confirmation():
         data = body()
         action, target = str(data.get("action","")), str(data.get("target",""))
-        p = profile(data.get("profile","local"))
+        if action in WORKSPACE_ACTIONS:
+            admin()
+            profile_id = "workspace"
+        else:
+            profile_id = profile(data.get("profile","local"))["id"]
         if len(action)>100 or len(target)>200:
             abort(400)
-        return jsonify(confirmation=state.confirm(session["sid"],action,p["id"],target),expires_in=120)
+        return jsonify(confirmation=state.confirm(session["sid"],action,profile_id,target),expires_in=120)
 
     @app.route("/api/profiles", methods=["GET","POST"])
     def profiles():
@@ -232,22 +237,26 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         data = body()
         value = validate_profile(data)
         profile_id = secrets.token_hex(10)
-        state.save_profile(profile_id,value,data.get("credentials",{}))
+        with state.ssh.lock:
+            state.save_profile(profile_id,value,data.get("credentials",{}))
         return jsonify(id=profile_id),201
 
     @app.route("/api/profiles/<profile_id>", methods=["PUT","DELETE"])
     def edit_profile(profile_id):
         admin()
-        old = profile(profile_id)
-        data = body()
-        if request.method=="DELETE":
-            confirmed(data,"profile.remove",profile_id,profile_id)
-            state.execute("DELETE FROM profiles WHERE id=?",(profile_id,))
-        else:
-            # A partial edit must never silently remove a profile access restriction.
-            merged = {key:value for key,value in old.items() if key not in {"id","credentials"}}
-            merged.update(data)
-            state.save_profile(profile_id,validate_profile(merged),data.get("credentials"))
+        with state.ssh.lock:
+            old = state.profile(profile_id)
+            authorize(old)
+            data = body()
+            if request.method=="DELETE":
+                confirmed(data,"profile.remove",profile_id,profile_id)
+                state.execute("DELETE FROM profiles WHERE id=?",(profile_id,))
+                terminals.close_profiles({profile_id})
+            else:
+                # Edit stored public paths, never resolved runtime paths or credentials.
+                merged = {key:value for key,value in old.items() if key != "id"}
+                merged.update(data)
+                state.save_profile(profile_id,validate_profile(merged),data.get("credentials"))
         return jsonify(ok=True)
 
     @app.post("/api/profiles/import")
@@ -266,7 +275,8 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
                 entry = {"name":entry["name"],"kind":"ssh" if entry.get("mode")=="ssh" else "tunnel","username":entry.get("ssh_username") or username,"host":host,"port":entry.get("ssh_port") or 22,"endpoint":entry.get("base_url",""),"key_path":entry.get("ssh_key_path",""),"permissions":["read"]}
             value = validate_profile(entry)
             ident = secrets.token_hex(10)
-            state.save_profile(ident,value,{})
+            with state.ssh.lock:
+                state.save_profile(ident,value,{})
             added.append(ident)
         return jsonify(added=added, note="Credentials are never imported in plaintext; configure them separately")
 
@@ -274,6 +284,65 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def export_profiles():
         admin()
         return jsonify(schema_version=1, profiles=state.profiles())
+
+    @app.get("/api/profile-ssh")
+    def profile_ssh_settings():
+        admin()
+        return jsonify(state.ssh.settings())
+
+    @app.post("/api/profile-ssh/directory/preview")
+    def ssh_directory_preview():
+        admin()
+        with state.ssh.lock:
+            return jsonify(state.ssh.directory_plan(body().get("directory")))
+
+    @app.put("/api/profile-ssh/directory")
+    def ssh_directory_save():
+        admin()
+        data = body()
+        with state.ssh.lock:
+            plan = state.ssh.directory_plan(data.get("directory"))
+            confirmed(data, "profiles.ssh.directory", "workspace", plan["target"])
+            state.ssh.set_directory(plan["directory"])
+        return jsonify(ok=True)
+
+    @app.post("/api/profiles/bulk/preview")
+    def profiles_bulk_preview():
+        admin()
+        data = body()
+        with state.ssh.lock:
+            return jsonify(state.ssh.bulk_plan(data.get("action"), data.get("ids")))
+
+    @app.post("/api/profiles/bulk")
+    def profiles_bulk():
+        admin()
+        data = body()
+        action = data.get("action")
+        with state.ssh.lock:
+            plan = state.ssh.bulk_plan(action, data.get("ids"))
+            confirmed(data, action, "workspace", plan["target"])
+            state.ssh.apply_bulk(action, plan)
+            if action == "profiles.remove.selected":
+                terminals.close_profiles({p["id"] for p in plan["changes"]})
+        return jsonify(changed=len(plan["changes"]), skipped=len(plan["skipped"]))
+
+    @app.post("/api/profile-ssh/files/preview")
+    @app.post("/api/profile-ssh/files")
+    def ssh_upload():
+        admin()
+        uploads = request.files.getlist("files")
+        if not 1 <= len(uploads) <= 20:
+            abort(400, "Select at most 20 SSH files with a total size of 1 MiB")
+        files = [(item.filename, item.stream.read(MAX_FILE + 1)) for item in uploads]
+        replace = request.form.get("replace") == "true"
+        with state.ssh.lock:
+            plan = state.ssh.file_plan(files, replace)
+            if request.path.endswith("/preview"):
+                # Metadata only: never return, audit or persist uploaded private material here.
+                return jsonify(plan)
+            confirmed(request.form, "profiles.ssh.files", "workspace", plan["target"])
+            state.ssh.write_files(files)
+        return jsonify(ok=True, files=[f["name"] for f in plan["files"]])
 
 
     @app.get("/terminal")

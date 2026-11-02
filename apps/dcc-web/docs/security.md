@@ -36,3 +36,12 @@ Automated tests cover auth, session revocation, rate limits, CSRF, Host/Origin r
 MCP clients receive Docker metadata/logs as untrusted data, not privileged instructions. This Preview has no write tools or HTTP listener. A malicious client with OS-level access to the data directory is outside the application isolation boundary.
 
 AI endpoints are configured by administrators only. Secrets stay in the encrypted vault, retained keys are cleared on endpoint/provider changes, HTTP redirects are rejected, local networking requires consent, and common secret fields are masked before model submission. Provider output is validated and never automatically executed. MCP grants may explicitly have no expiry; revocation and scope checks still apply.
+
+
+## SSH file storage
+
+Shared SSH file management is administrator-only and protected by the existing session, CSRF and Origin checks. Preview data and audit entries contain metadata, never uploaded key contents. Files are bounded to 20 per request, 128 KiB each and 1 MiB total; only supported SSH private/public keys and valid `known_hosts` text are accepted. Paths, Windows device names, duplicates and symlink targets are rejected. Uploads go only into the dedicated managed directory (0700) using staged files (0600); configured external mount directories remain read-only through this API.
+
+A one-use confirmation is bound to the session, operation, exact file hashes, current destination contents, directory and replacement choice. Bulk profile confirmations also bind the selected profile configurations. Changes after preview require another confirmation. File permissions protect against other ordinary OS users; keys are not encrypted by the application, and server/volume administrators can read them. Protect the volume and backups, use a dedicated passphrase-protected key and HTTPS, and never upload your entire `.ssh` folder or SSH `config`.
+
+All three SSH paths (Docker CLI, Docker SDK and interactive host terminals) load the same configured trusted host keys and retain Paramiko `RejectPolicy`. Missing shared keys or `known_hosts` stop connection attempts with an actionable error. This feature does not trust new host keys, run `ssh-keyscan`, widen profile permissions, or copy files from a browser-supplied host path automatically.

@@ -8,6 +8,7 @@ import threading
 import time
 
 import paramiko
+from profile_ssh import configure_client
 
 
 class EngineError(RuntimeError):
@@ -47,8 +48,7 @@ class DockerBackend:
         kind = profile.get("kind", "local")
         if kind in {"ssh", "balena"}:
             client = paramiko.SSHClient()
-            client.load_system_host_keys()
-            client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            configure_client(client, profile)
             try:
                 client.connect(profile["host"], port=profile.get("port", 22), username=profile["username"], password=credentials.get("password") or None, passphrase=credentials.get("passphrase") or None, key_filename=profile.get("key_path") or None, timeout=12, auth_timeout=12, banner_timeout=12)
                 cli = profile.get('cli') or ("balena" if kind == "balena" else "docker")
@@ -91,7 +91,7 @@ class DockerBackend:
             raise ValueError("Invalid Docker arguments")
         if self.profile.get("kind") in {"ssh","balena"}:
             profile=self.profile;credentials=profile.get("credentials",{})
-            client=paramiko.SSHClient();client.load_system_host_keys();client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            client=paramiko.SSHClient();configure_client(client,profile)
             try:
                 client.connect(profile["host"],port=profile.get("port",22),username=profile["username"],password=credentials.get("password") or None,passphrase=credentials.get("passphrase") or None,key_filename=profile.get("key_path") or None,timeout=12,auth_timeout=12,banner_timeout=12)
                 channel=client.get_transport().open_session(timeout=12);channel.set_combine_stderr(True)

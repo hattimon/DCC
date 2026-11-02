@@ -77,3 +77,8 @@ The running application serves an information page at `/about` and formatted doc
 See [CURRENT_STATUS.md](CURRENT_STATUS.md) for verified features and remaining work. Do not treat planned features as shipped functionality.
 
 Project repository: [hattimon/DCC](https://github.com/hattimon/DCC).
+
+
+## Shared SSH keys for imported profiles
+
+In **Profiles**, upload selected SSH files to the managed private directory, then use checkboxes to apply it only to chosen SSH/Balena profiles. Individual paths remain available. Trusted `known_hosts`, host verification and profile permissions remain required. See [configuration](docs/configuration.md#shared-ssh-files-and-desktop-profile-imports) and [security](docs/security.md#ssh-file-storage) for storage, external read-only mounts, confirmations and bulk removal behavior.

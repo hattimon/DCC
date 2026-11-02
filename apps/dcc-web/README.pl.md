@@ -41,3 +41,12 @@ Dostęp do `/var/run/docker.sock` daje panelowi administracyjną kontrolę nad h
 [Instalacja](docs/installation.md) · [Bezpieczeństwo](docs/security.md) · [Profile](docs/configuration.md) · [Sklep](docs/catalogs.md) · [Funkcje i ograniczenia](docs/feature-matrix.md)
 
 Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web).
+
+
+## Klucze SSH po imporcie profili
+
+Ścieżka `C:/Users/.../.ssh/id_ed25519` z aplikacji desktopowej nie istnieje wewnątrz kontenera Linux. W zakładce **Profile → Wspólne pliki SSH** administrator może wybrać pliki na swoim komputerze i wgrać je do prywatnego folderu (domyślnie `/data/ssh` w trwałym wolumenie). Po podglądzie i potwierdzeniu zaznacz wybrane profile SSH/Balena checkboxami i wybierz **Użyj wspólnego folderu**. Pozostałe profile zachowają indywidualne ścieżki. Zaufany `known_hosts` jest wymagany; passphrase klucza wpisz osobno w profilu.
+
+Można też wskazać istniejący folder serwera, zamontowany w kontenerze tylko do odczytu. Panel pokazuje ścieżkę i instrukcję kopiowania. Przeglądarka nie otworzy folderu serwera w lokalnym Eksploratorze; wybór plików otwiera lokalne okno systemowe. Klucze przechowuje wolumen, więc administrator hosta może je odczytać — zalecany jest osobny klucz z passphrase i połączenie HTTPS. Weryfikacja hosta SSH pozostaje włączona.
+
+Zaznaczanie wszystkich profili pozwala również usunąć je zbiorczo po świadomym potwierdzeniu. Kontenery, wolumeny i pliki SSH pozostają zachowane, a terminale usuwanych profili są zamykane. Szczegóły: [konfiguracja](docs/configuration.md#shared-ssh-files-and-desktop-profile-imports) i [bezpieczeństwo](docs/security.md#ssh-file-storage).
