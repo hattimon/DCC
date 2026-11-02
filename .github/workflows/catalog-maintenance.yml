@@ -26,6 +26,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python tools/update_catalog_metadata.py
 
+      - name: Reject duplicate application definitions
+        run: python -m unittest discover -s tests -p test_catalog_identity.py -v
+
       - name: Publish metadata changes
         shell: bash
         run: |

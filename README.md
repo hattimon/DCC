@@ -11,13 +11,27 @@
 
 A cross-platform desktop control panel for managing Docker on Windows and Debian-family Linux, locally, through WSL/WSL2, and on remote hosts over SSH or Balena OS.
 
-### Download Latest Version — 1.3.11
+### Download Latest Version â€” 1.3.11
 
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter-Setup-1.3.11.exe)
-[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter_1.3.11_amd64.deb)
-[![DCC Web v0.1.2](https://img.shields.io/badge/DCC%20Web-v0.1.2-20bfc8?logo=docker&logoColor=white)](apps/dcc-web/docs/installation.md)
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter-Setup-1.3.12.exe)
+[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter_1.3.12_amd64.deb)
+[![DCC Web v0.1.4](https://img.shields.io/badge/DCC%20Web-v0.1.4-20bfc8?logo=docker&logoColor=white)](apps/dcc-web/docs/installation.md)
 
 DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker Compose or run directly with Python. Its installer checks Docker-published ports and local port availability, uses 8789 when free, and chooses another available port when necessary. See the [installation guide](apps/dcc-web/docs/installation.md).
+
+## What's New in v1.3.12
+
+### EN
+- One current App Store entry per application across all categories, including after catalog refresh or import.
+- Older cached numeric versions cannot replace newer entries; catalog validation rejects duplicate definitions.
+- DCC Web 0.1.4 ships the same store fix. Legacy catalogs retain Administration for Web and Updates for Updater.
+- Existing Windows installer update handoff and Debian-family package upgrade mechanisms are retained.
+
+### PL
+- Jeden aktualny wpis aplikacji w sklepie we wszystkich jej kategoriach, również po odświeżeniu i imporcie katalogu.
+- Starsze wersje z pamięci katalogu nie zastępują nowszych; walidacja odrzuca powielone definicje.
+- DCC Web 0.1.4 zawiera tę samą poprawkę. Starsze klienty nadal widzą Web w Administracji i Updater w Aktualizacjach.
+- Zachowano dotychczasowy mechanizm aktualizacji instalatorem Windows i pakietem DEB.
 
 ## What's New in v1.3.11
 
@@ -32,18 +46,18 @@ DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker C
 - Reissued the Linux DEB with the missing `libpulse0` runtime dependency and verified desktop-entry startup under X11.
 
 ### PL
-- Dodano pogrubioną kategorię DCC i wiele kategorii aplikacji; Container Updater nadal należy do Aktualizacji.
-- Dodano DCC Web 0.1.1 jako instalowalną aplikację sklepu dla amd64 i arm64 oraz sformatowaną stronę projektu na GitHubie.
-- Naprawiono pierwsze uruchomienie DCC Web ze sklepu; losowe hasło administratora pojawia się w wyniku instalacji.
-- Dodano instalator DCC Web dla wielu systemów; skanuje porty kontenerów i wybiera wolny port, gdy 8789 jest zajęty.
-- Zachowano przekazanie aktualizacji instalatorowi Windows i instalację pakietu Linux; wydanie zawiera wersjonowane pliki EXE i DEB.
-- Uzupełniono sterowanie kontenerami, terminale hostów, postęp instalacji i formatowaną dokumentację DCC Web.
-- Naprawiono terminal infrastruktury Windows i poprawiono kontrast sklepu oraz kończenie odświeżania.
-- Ponownie udostępniono pakiet DEB z brakującą zależnością `libpulse0`; sprawdzono uruchomienie wpisu pulpitu X11.
+- Dodano pogrubionÄ… kategoriÄ™ DCC i wiele kategorii aplikacji; Container Updater nadal naleĹĽy do Aktualizacji.
+- Dodano DCC Web 0.1.1 jako instalowalnÄ… aplikacjÄ™ sklepu dla amd64 i arm64 oraz sformatowanÄ… stronÄ™ projektu na GitHubie.
+- Naprawiono pierwsze uruchomienie DCC Web ze sklepu; losowe hasĹ‚o administratora pojawia siÄ™ w wyniku instalacji.
+- Dodano instalator DCC Web dla wielu systemĂłw; skanuje porty kontenerĂłw i wybiera wolny port, gdy 8789 jest zajÄ™ty.
+- Zachowano przekazanie aktualizacji instalatorowi Windows i instalacjÄ™ pakietu Linux; wydanie zawiera wersjonowane pliki EXE i DEB.
+- UzupeĹ‚niono sterowanie kontenerami, terminale hostĂłw, postÄ™p instalacji i formatowanÄ… dokumentacjÄ™ DCC Web.
+- Naprawiono terminal infrastruktury Windows i poprawiono kontrast sklepu oraz koĹ„czenie odĹ›wieĹĽania.
+- Ponownie udostÄ™pniono pakiet DEB z brakujÄ…cÄ… zaleĹĽnoĹ›ciÄ… `libpulse0`; sprawdzono uruchomienie wpisu pulpitu X11.
 
 ### DCC Web
 
-[DCC Web product page / strona projektu](apps/dcc-web/README.md) · [Installation guide / instrukcja instalacji](apps/dcc-web/docs/installation.md) · [Polski opis](apps/dcc-web/README.pl.md) · [Repository](https://github.com/hattimon/DCC)
+[DCC Web product page / strona projektu](apps/dcc-web/README.md) Â· [Installation guide / instrukcja instalacji](apps/dcc-web/docs/installation.md) Â· [Polski opis](apps/dcc-web/README.pl.md) Â· [Repository](https://github.com/hattimon/DCC)
 ## What's New in v1.3.9
 
 ### EN
@@ -55,10 +69,10 @@ DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker C
 ![Docker Control Center v1.3.5 - English overview](images/release-1.3.5/09-v1.3.5-overview-en.png)
 
 ### PL
-- Dodano proceduralny ambient zależny od motywu i SFX operacji Dockera dla wszystkich pięciu motywów.
-- Nutka steruje całym audio DCC i znajduje się przed kontrolkami przezroczystości.
-- Poprawiono wyszukiwanie logów, motywy Day/Light, rozmiary Store, auto-refresh kontenerów oraz Save/Save As w Repo Builderze.
-- Zachowano bezpieczny handoff updatera Windows i wspólny pipeline ikon Windows/Linux.
+- Dodano proceduralny ambient zaleĹĽny od motywu i SFX operacji Dockera dla wszystkich piÄ™ciu motywĂłw.
+- Nutka steruje caĹ‚ym audio DCC i znajduje siÄ™ przed kontrolkami przezroczystoĹ›ci.
+- Poprawiono wyszukiwanie logĂłw, motywy Day/Light, rozmiary Store, auto-refresh kontenerĂłw oraz Save/Save As w Repo Builderze.
+- Zachowano bezpieczny handoff updatera Windows i wspĂłlny pipeline ikon Windows/Linux.
 
 ![Docker Control Center v1.3.5 - polskie podsumowanie](images/release-1.3.5/08-v1.3.5-overview-pl.png)
 
@@ -207,7 +221,7 @@ Ponizsze zrzuty pokazuja interfejs w jezyku angielskim.
 
 If DCC is useful to you, you can support its continued development on Ko-fi.
 
-Jeżeli DCC jest dla Ciebie przydatny, możesz wesprzeć dalszy rozwój projektu na Ko-fi.
+JeĹĽeli DCC jest dla Ciebie przydatny, moĹĽesz wesprzeÄ‡ dalszy rozwĂłj projektu na Ko-fi.
 
 [https://ko-fi.com/hattimon](https://ko-fi.com/hattimon)
 
@@ -215,11 +229,11 @@ Jeżeli DCC jest dla Ciebie przydatny, możesz wesprzeć dalszy rozwój projektu
 
 DCC is licensed under the MIT License. See [LICENSE](LICENSE).
 
-Projekt DCC jest udostępniany na licencji MIT.
+Projekt DCC jest udostÄ™pniany na licencji MIT.
 
 Third-party assets are covered by their respective licenses or ownership terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom właścicieli.
+MateriaĹ‚y podmiotĂłw trzecich podlegajÄ… ich wĹ‚asnym licencjom lub prawom wĹ‚aĹ›cicieli.
 
 ## DCC Web 0.1.2
 

@@ -19,7 +19,7 @@ import uuid
 import webbrowser
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from dcc_catalog import DCC_CATEGORY, category_group, localized_categories, catalog_category_sort_key, catalog_application_key
+from dcc_catalog import DCC_CATEGORY, category_group, localized_categories, catalog_category_sort_key, catalog_application_key, catalog_image_is_older
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -399,7 +399,7 @@ LLM_OPENAI_COMPATIBLE_BASE_URLS = {
     "xai": "https://api.x.ai/v1",
 }
 
-APP_VERSION = "1.3.11"
+APP_VERSION = "1.3.12"
 APP_VERSION_TAG = f"v{APP_VERSION}"
 GITHUB_REPO = "hattimon/DCC"
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
@@ -2318,7 +2318,9 @@ def merge_catalog_lists(*catalogs: List[ImageTemplate]) -> List[ImageTemplate]:
         for item in catalog:
             key = catalog_application_key(item.name, item.image, item.default_name)
             if key in merged:
-                merged[key] = merge_catalog_template(merged[key], item)
+                current = merged[key]
+                merged[key] = (merge_catalog_template(item, current) if catalog_image_is_older(item.image, current.image)
+                               else merge_catalog_template(current, item))
             else:
                 merged[key] = item
     return list(merged.values())
@@ -2329,6 +2331,15 @@ def save_cached_deployment_catalog(items: List[ImageTemplate]) -> None:
         json.dumps({"apps": [asdict(item) for item in items]}, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+
+def store_catalog(base, external):
+    # A fetched/cached official catalog owns membership, including removals.
+    official = normalize_deployment_repository_source(DEFAULT_DEPLOYMENT_REPOSITORY)
+    if any(normalize_deployment_repository_source(item.repository_source) == official for item in external):
+        keys = {catalog_application_key(item.name, item.image, item.default_name) for item in external}
+        base = [item for item in base if catalog_application_key(item.name, item.image, item.default_name) in keys]
+    return merge_catalog_lists(base, external)
 
 
 def _catalog_source_candidates(source: str) -> List[str]:
@@ -5425,7 +5436,7 @@ class NewContainerDialog(QDialog):
         self.base_catalog = merge_catalog_lists(default_image_catalog(), load_bundled_deployment_catalog())
         self.repository_sources = load_deployment_repository_sources()
         self.external_catalog = load_cached_deployment_catalog()
-        self.catalog = merge_catalog_lists(self.base_catalog, self.external_catalog)
+        self.catalog = store_catalog(self.base_catalog, self.external_catalog)
         self.filtered_catalog = list(self.catalog)
         self._syncing = False
         self.manual_configuration_mode = True
@@ -6979,7 +6990,7 @@ class NewContainerDialog(QDialog):
     def on_external_catalog_refresh_finished(self, refreshed: List[ImageTemplate], errors: List[str]):
         self.external_catalog = list(refreshed)
         save_cached_deployment_catalog(self.external_catalog)
-        self.catalog = merge_catalog_lists(self.base_catalog, self.external_catalog)
+        self.catalog = store_catalog(self.base_catalog, self.external_catalog)
         self.rebuild_catalog_categories()
         self.filter_catalog()
 

@@ -24,6 +24,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check -r apps/dcc-web/requirements.txt
           python -m compileall -q apps/dcc-web
+          python -m unittest discover -s tests -p test_catalog_identity.py -v
           python -m unittest discover -s apps/dcc-web/tests -v
           node apps/dcc-web/tests/frontend_unit.mjs
       - name: Validate the multi-architecture image and socket permissions
@@ -31,6 +32,7 @@ jobs:
           docker build -f apps/dcc-web/Dockerfile -t dcc-web:release-candidate .
           docker run --rm --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true --volume /var/run/docker.sock:/var/run/docker.sock dcc-web:release-candidate python -c 'import os,subprocess; assert os.geteuid()==10001, os.geteuid(); assert os.access("/var/run/docker.sock",os.R_OK|os.W_OK); subprocess.run(["docker","version","--format","{{.Server.Version}}"],check=True,capture_output=True,text=True); subprocess.run(["docker","compose","version"],check=True,capture_output=True,text=True); print("socket group, dropped UID and Compose OK")'
           docker run --rm dcc-web:release-candidate --self-check
+          python apps/dcc-web/tests/docker_security_smoke.py --image dcc-web:release-candidate
 
   publish:
     needs: verify

@@ -94,12 +94,13 @@ class ProfileSSHTests(unittest.TestCase):
         self.assertEqual(self.upload(altered, preview=False, token=token).status_code, 409)
         result = self.upload(files, preview=False, token=token)
         self.assertEqual(result.status_code, 200, result.json)
-        self.assertEqual((Path(self.temp.name)/'ssh'/'id_ed25519').read_bytes(), self.private)
+        self.assertFalse((Path(self.temp.name)/'ssh'/'id_ed25519').exists())
+        self.assertEqual(self.state.vault.decrypt(self.state.ssh.vault_file('id_ed25519')['private']),self.private)
         self.assertNotIn('BEGIN RSA PRIVATE', self.client.get('/api/profiles/export').get_data(as_text=True))
         self.assertNotIn('BEGIN RSA PRIVATE', json.dumps(self.state.rows('SELECT * FROM audit')))
         if os.name != 'nt':
             self.assertEqual((Path(self.temp.name)/'ssh').stat().st_mode & 0o777, 0o700)
-            self.assertEqual((Path(self.temp.name)/'ssh'/'id_ed25519').stat().st_mode & 0o777, 0o600)
+            self.assertEqual((Path(self.temp.name)/'ssh'/'known_hosts').stat().st_mode & 0o777, 0o600)
 
     def test_overwrite_requires_separate_opt_in_and_changed_existing_file_invalidates_token(self):
         files = [('known_hosts', self.known)]
@@ -221,6 +222,51 @@ class ProfileSSHTests(unittest.TestCase):
         self.assertTrue(inspect_file('known_hosts', self.known)['fingerprints'][0].startswith('SHA256:'))
         output = io.StringIO(); self.key.write_private_key(output, password='fixture-only-passphrase')
         self.assertEqual(inspect_file('id_encrypted', output.getvalue().encode())['kind'], 'private key')
+
+    def test_key_content_overrides_extension_and_encryption_is_reported(self):
+        for name in ('sensecap_root', 'host-key.pem', 'host.key', 'wrong.pub'):
+            self.assertEqual(inspect_file(name, self.private)['kind'], 'private key')
+        public = (self.key.get_name()+' '+self.key.get_base64()).encode()
+        self.assertEqual(inspect_file('public_without_extension', public)['kind'], 'public key')
+        output = io.StringIO(); self.key.write_private_key(output, password='fixture-passphrase')
+        self.assertTrue(inspect_file('locked.pem', output.getvalue().encode())['encrypted'])
+
+    def test_import_windows_profile_can_explicitly_match_uploaded_private_key(self):
+        root = Path(self.temp.name)/'ssh'; root.mkdir()
+        (root/'id_ed25519').write_bytes(self.private)
+        result = self.request('profiles/import', {'profiles': [{'name':'Windows import', 'mode':'ssh', 'ssh_target':'fixture@fixture.invalid', 'ssh_key_path':r'C:\Users\fixture\.ssh\id_ed25519', 'ssh_passphrase':'must-not-import'}], 'shared_keys':True})
+        self.assertEqual(result.status_code,200,result.json)
+        p = self.state.profile(result.json['added'][0],private=True)
+        self.assertEqual(p['key_path'],str(root/'id_ed25519'))
+        self.assertEqual(p['key_scope'],'shared')
+        self.assertNotIn('passphrase',p['credentials'])
+        self.assertEqual(p['credentials']['private_key'].encode(),self.private)
+        self.assertEqual(p['permissions'],['read'])
+
+    def test_agent_is_explicit_and_does_not_require_the_imported_windows_key_path(self):
+        from profile_ssh import connection_options
+        p = self.state.profile('a'); p['ssh_auth']='agent'
+        with patch('profile_ssh.agent_status',return_value={'available':True,'keys':1}):
+            options = connection_options(p)
+        self.assertIsNone(options['key_filename'])
+        self.assertIsNone(options['passphrase'])
+        self.assertTrue(options['allow_agent'])
+        self.assertFalse(options['look_for_keys'])
+        with patch('profile_ssh.agent_status',return_value={'available':False,'keys':0}), self.assertRaisesRegex(ValueError,'agent is unavailable'):
+            connection_options(p)
+
+    def test_pkcs8_encrypted_key_requires_passphrase_and_is_parsed_in_memory(self):
+        from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, BestAvailableEncryption
+        from profile_ssh import connection_options
+        content=self.key.key.private_bytes(Encoding.PEM,PrivateFormat.PKCS8,BestAvailableEncryption(b'fixture-pass'))
+        path=Path(self.temp.name)/'key.pem';path.write_bytes(content)
+        self.assertTrue(inspect_file(path.name,content)['encrypted'])
+        p=dict(self.state.profile('a'),key_path=str(path),ssh_auth='key')
+        with self.assertRaisesRegex(ValueError,'valid passphrase'):
+            connection_options(p)
+        options=connection_options(dict(p,credentials={'passphrase':'fixture-pass'}))
+        self.assertIsNotNone(options['pkey'])
+        self.assertIsNone(options['key_filename'])
 
 if __name__ == '__main__':
     unittest.main()

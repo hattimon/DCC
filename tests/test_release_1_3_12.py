@@ -15,30 +15,30 @@ sys.path.insert(0,str(ROOT/'packaging'/'web'))
 from build_source_archive import build_archive, VERSION as WEB_VERSION
 
 
-class Release1311Tests(unittest.TestCase):
+class Release1312Tests(unittest.TestCase):
     def test_version_and_bom_installer_sources_match(self):
-        self.assertEqual(dcc.APP_VERSION,'1.3.11')
+        self.assertEqual(dcc.APP_VERSION,'1.3.12')
         for language in ('PL','EN'):
             self.assertIn(dcc.APP_VERSION,dcc.TEXTS[language]['info_app_changelog_title'])
         first=(ROOT/'DockerControlCenter.nsi').read_bytes()
         self.assertTrue(first.startswith(b'\xef\xbb\xbf'))
         self.assertEqual(first,(ROOT/'upstream_assets/DockerControlCenter.nsi').read_bytes())
 
-    def test_upgrade_1310_to_1311_is_detected(self):
+    def test_upgrade_1311_to_1312_is_detected(self):
         harness=SimpleNamespace(_parse_version_value=dcc.MainWindow._parse_version_value)
         # The parser is an instance method; bind it exactly as the running application does.
         harness._parse_version_value=lambda value:dcc.MainWindow._parse_version_value(harness,value)
-        with patch.object(dcc,'APP_VERSION','1.3.10'):
-            self.assertTrue(dcc.MainWindow._is_newer_version(harness,'v1.3.11'))
-            self.assertFalse(dcc.MainWindow._is_newer_version(harness,'v1.3.10'))
+        with patch.object(dcc,'APP_VERSION','1.3.11'):
+            self.assertTrue(dcc.MainWindow._is_newer_version(harness,'v1.3.12'))
+            self.assertFalse(dcc.MainWindow._is_newer_version(harness,'v1.3.11'))
 
     def test_release_assets_are_selected_for_the_correct_platform(self):
-        assets={'tag_name':'v1.3.11','assets':[
-            {'name':'DockerControlCenter-Setup-1.3.11.exe'},
-            {'name':'DockerControlCenter_1.3.11_amd64.deb'},
+        assets={'tag_name':'v1.3.12','assets':[
+            {'name':'DockerControlCenter-Setup-1.3.12.exe'},
+            {'name':'DockerControlCenter_1.3.12_amd64.deb'},
         ]}
         with patch.object(dcc.sys,'platform','win32'):
-            self.assertEqual(dcc.MainWindow.select_update_installer_asset(None,assets)['name'],'DockerControlCenter-Setup-1.3.11.exe')
+            self.assertEqual(dcc.MainWindow.select_update_installer_asset(None,assets)['name'],'DockerControlCenter-Setup-1.3.12.exe')
         with patch.object(dcc.sys,'platform','linux'),patch.object(dcc.platform,'machine',return_value='x86_64'):
             self.assertTrue(dcc.MainWindow.select_update_installer_asset(None,assets)['name'].endswith('_amd64.deb'))
         with patch.object(dcc.sys,'platform','linux'),patch.object(dcc.platform,'machine',return_value='aarch64'):
@@ -60,11 +60,11 @@ class Release1311Tests(unittest.TestCase):
         self.assertNotIn('PyQt',(ROOT/'dcc_catalog.py').read_text(encoding='utf-8'))
 
     def test_release_notes_and_readme_reference_new_assets(self):
-        notes=(ROOT/'release/RELEASE_NOTES_1.3.11.md').read_text(encoding='utf-8')
-        for name in ('DockerControlCenter-Setup-1.3.11.exe','DockerControlCenter_1.3.11_amd64.deb','SHA256SUMS-1.3.11.txt'):
+        notes=(ROOT/'release/RELEASE_NOTES_1.3.12.md').read_text(encoding='utf-8')
+        for name in ('DockerControlCenter-Setup-1.3.12.exe','DockerControlCenter_1.3.12_amd64.deb','SHA256SUMS-1.3.12.txt'):
             self.assertIn(name,notes)
         readme=(ROOT/'README.md').read_text(encoding='utf-8')
-        self.assertIn('/v1.3.11/',readme)
+        self.assertIn('/v1.3.12/',readme)
         self.assertIn(f'DCC%20Web-v{WEB_VERSION}',readme)
         self.assertIn('apps/dcc-web/docs/installation.md',readme)
 

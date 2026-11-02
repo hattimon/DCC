@@ -1,6 +1,140 @@
 // Only authored UI strings/template fragments are translated. Interpolated Docker data is preserved.
 let language='EN';
 const pairs=`
+Wybierz klucze i zaufany plik known_hosts z własnego komputera. Zawartość kluczy nie będzie wyświetlana. Eksport kluczy jest możliwy wyłącznie w szyfrowanej kopii po dodatkowym potwierdzeniu.|Select intended keys and a trusted known_hosts file from your computer. Key contents are never displayed. Exporting keys is possible only in a password-protected backup after additional confirmation.
+Zezwalam na zapis wybranych plików SSH w prywatnym folderze DCC Web. Klucze prywatne zostaną zaszyfrowane w magazynie. Administrator hosta mający dostęp do klucza głównego może je odszyfrować. Zalecany jest osobny klucz z passphrase. Przesyłaj przez HTTPS lub lokalne połączenie.|I authorize storing the selected SSH files in DCC Web. Private keys will be encrypted in the vault. A host administrator with the master key can decrypt them. Prefer a dedicated passphrase-protected key. Upload over HTTPS or loopback.
+
+Klucze i zaufane hosty|Keys and trusted hosts
+Szyfrowany magazyn|Encrypted vault
+Plik zewnętrzny — bez szyfrowania magazynu|External file — not encrypted by the vault
+Plik publiczny|Public file
+Usuń wybrane pliki|Delete selected files
+Podłącz folder hosta|Connect host folder
+Folder na hoście Docker|Directory on the Docker host
+Folder hosta — tylko odczyt|Host directory — read-only
+Zaawansowane ustawienia plików|Advanced file settings
+Wgraj wybrane pliki z komputera. Klucze prywatne w magazynie DCC Web są szyfrowane. Nie musisz otwierać folderu kontenera.|Upload selected files from your computer. Private keys in the DCC Web vault are encrypted. You do not need to navigate into the container.
+Zewnętrzne foldery pozostają tylko do odczytu. Agent podpisuje połączenie; nie udostępnia hasła ani klucza prywatnego do eksportu.|External directories remain read-only. An agent signs connections; it cannot export the password or private key.
+Usunięte zostaną wybrane pliki z magazynu. Wskazane profile utracą dostęp do tych kluczy, a ich terminale zostaną zamknięte. Klucze na zdalnych hostach nie będą zmienione.|Selected vault files will be deleted. The listed profiles will lose access to these keys and their terminals will close. Remote authorized keys will not be modified.
+Folder zostanie zamontowany tylko do odczytu. DCC Web uruchomi ponownie swój kontener; terminale zostaną zamknięte. Profile i dane pozostaną zachowane. Wybierz klucze, którym ufasz. Dla instalacji Compose użyj instrukcji w dokumentacji.|The directory will be mounted read-only. DCC Web will recreate its container and close terminals. Profiles and data are preserved. Select trusted keys. For Compose installations, follow the documentation.
+Zezwalam panelowi korzystać z plików tego folderu oraz ponownie uruchomić DCC Web.|I authorize the panel to access this directory and restart DCC Web.
+Szyfrowany eksport profili|Encrypted profile export
+Eksport obejmie zaznaczone profile.|Selected profiles will be exported.
+Eksport obejmie wszystkie profile.|All profiles will be exported.
+Dołącz hasła i klucze z szyfrowanego magazynu|Include passwords and keys from the encrypted vault
+Pliki z indywidualnych ścieżek i klucze agenta nie są pobierane automatycznie. Import przywraca profile tylko do odczytu.|Individual file paths and agent keys are not read automatically. Imported profiles are restored as read-only.
+Hasło kopii — minimum 12 znaków|Backup password — at least 12 characters
+Powtórz hasło kopii|Repeat backup password
+Pobierz zaszyfrowaną kopię|Download encrypted backup
+Hasła nie są identyczne|Passwords do not match
+Wybierz eksport DCC Desktop albo szyfrowaną kopię DCC Web. Źródło pozostaje bez zmian.|Choose a DCC Desktop export or an encrypted DCC Web backup. The source remains unchanged.
+Plik profili|Profile file
+Wklej JSON zamiast pliku|Paste JSON instead of a file
+Hasło szyfrowanej kopii — jeśli wymagane|Encrypted backup password — if required
+Zastąp istniejące pliki SSH z tej kopii|Replace existing SSH files from this backup
+Podgląd importu|Import preview
+Wybierz profile do importu|Select profiles to import
+Już istnieje — pominięty|Already exists — skipped
+Uprawnienia po imporcie: tylko odczyt. Klucze i hasła z szyfrowanej kopii zostaną zapisane w szyfrowanym magazynie.|Imported permissions: read-only. Keys and passwords from encrypted backups will be stored in the encrypted vault.
+Potwierdzam import wybranych profili. Istniejące profile nie zostaną nadpisane.|I confirm importing the selected profiles. Existing profiles will not be overwritten.
+Nowe profile są domyślnie tylko do odczytu. Konfiguracja i klucze są szyfrowane. Eksport jest chroniony osobnym hasłem.|New profiles are read-only by default. Configuration and keys are encrypted. Exports require a separate password.
+1 / 3 · Połączenie|1 / 3 · Connection
+2 / 3 · Uwierzytelnianie|2 / 3 · Authentication
+3 / 3 · Test i uprawnienia|3 / 3 · Test and permissions
+Dalej|Next
+Wstecz|Back
+Zaawansowane|Advanced
+Bez klucza — hasło lub agent|No key — password or agent
+Indywidualna ścieżka klucza na serwerze Web|Individual key path on the Web server
+Wgraj klucz i zaufany known_hosts w sekcji Klucze i zaufane hosty. Nazwy kluczy są rozpoznawane niezależnie od rozszerzenia.|Upload a key and trusted known_hosts in Keys and trusted hosts. Keys are detected by content, regardless of extension.
+Agent SSH dostępny|SSH agent available
+Agent SSH niedostępny w kontenerze|SSH agent unavailable inside the container
+Certyfikaty muszą być dostępne na serwerze DCC Web. Połączenie wymaga zweryfikowanego TLS.|Certificates must be accessible to the DCC Web server. Verified TLS is required.
+To połączenie korzysta z lokalnego silnika i kontekstu Docker serwera DCC Web.|This connection uses the Docker engine and context of the DCC Web server.
+Sprawdź połączenie|Test connection
+Sprawdzanie połączenia…|Testing connection…
+Domyślnie tylko odczyt. Włączaj wyłącznie potrzebne operacje.|Read-only by default. Enable only the operations you need.
+Zapisz bez udanego testu połączenia|Save without a successful connection test
+Sprawdź połączenie lub świadomie zapisz bez testu|Test the connection or explicitly choose to save without a test
+Wygląd i dźwięki|Appearance and sounds
+Administracja i bezpieczeństwo|Administration and security
+Uwierzytelnianie 2FA|Two-factor authentication
+2FA jest włączone|2FA is enabled
+2FA jest wyłączone|2FA is disabled
+Włącz 2FA|Enable 2FA
+Wyłącz 2FA|Disable 2FA
+Obsługiwane są aplikacje TOTP, np. Google Authenticator oraz aplikacje uwierzytelniające na iPhone. Kody odzyskiwania są jednorazowe.|Supports TOTP apps including Google Authenticator and iPhone authenticators. Recovery codes are single-use.
+Odzyskiwanie dostępu|Account recovery
+Brak zweryfikowanego adresu email|No verified recovery email
+Reset 2FA przez email wymaga wcześniej zweryfikowanego adresu i hasła konta.|Email-based 2FA reset requires a previously verified address and your account password.
+Najpierw skonfiguruj SMTP z TLS. Bez emaila możesz użyć jednorazowego kodu odzyskiwania.|Configure TLS SMTP first. Without email you can use a single-use recovery code.
+Najpierw skonfiguruj SMTP z TLS.|Configure TLS SMTP first.
+Zweryfikuj adres email|Verify recovery email
+Ustawienia administracyjne|Administration settings
+Poczta odzyskiwania — SMTP|Recovery email — SMTP
+Domena lokalna i publiczna|Local and public domains
+Pozostałe sesje zostaną wylogowane.|Other sessions will be signed out.
+Przygotuj aplikację uwierzytelniającą. Sekretny klucz zobaczysz tylko podczas konfiguracji.|Prepare your authenticator app. The secret key is shown only during enrollment.
+Dodaj konto w aplikacji TOTP|Add an account in your TOTP app
+Wybierz ręczne dodanie konta w aplikacji: DCC Web, klucz poniżej, typ czasowy TOTP, 6 cyfr, 30 sekund.|Add an account manually: DCC Web, the key below, time-based TOTP, 6 digits, 30 seconds.
+Kopiuj klucz|Copy key
+Adres otpauth|otpauth URI
+Kod z aplikacji|Authenticator code
+Zapisz kody odzyskiwania|Save recovery codes
+Zapisz te kody w bezpiecznym miejscu poza DCC Web. Każdy działa jeden raz. Nie zostaną pokazane ponownie.|Store these codes safely outside DCC Web. Each works once. They will not be displayed again.
+Kody odzyskiwania|Recovery codes
+Email odzyskiwania|Recovery email
+Wyślij kod|Send code
+Potwierdź adres email|Confirm recovery email
+Kod z wiadomości email|Email verification code
+Zweryfikuj|Verify
+Adres email został zweryfikowany|Email address verified
+Serwer SMTP|SMTP server
+Port SMTP|SMTP port
+Adres nadawcy|Sender address
+Użytkownik SMTP|SMTP username
+Hasło SMTP — puste zachowuje obecne|SMTP password — blank keeps the current value
+TLS od początku (zwykle port 465)|Implicit TLS (usually port 465)
+Bez zaznaczenia: wymagane STARTTLS. Certyfikat jest weryfikowany. Dane SMTP są szyfrowane. Nie jest używana płatna usługa SMS.|Otherwise STARTTLS is required. Certificates are verified. SMTP credentials are encrypted. No paid SMS service is used.
+Domena lokalna|Local domain
+Nazwa w sieci lokalnej|Local network hostname
+Dodaj w DNS routera lub pliku hosts wpis: adres IP hosta Docker → nazwa lokalna. To ustawienie dopuszcza nazwę w panelu; nie zmienia konfiguracji routera. Port panelu pozostaje bez zmian.|Add Docker host IP → local hostname in your router DNS or hosts file. This allows that name in the panel; it does not configure the router. The panel port is unchanged.
+Domena publiczna|Public domain
+Twoja domena publiczna|Your public domain
+Publiczny DNS musi wskazywać hosta. Rozszerzenie Caddy może automatycznie uzyskać certyfikat HTTPS na portach 80/443. Wymaga publicznej osiągalności hosta. Przy CGNAT użyj własnego tunelu lub VPN i reverse proxy. Włącz silne hasło i 2FA przed publikacją.|Public DNS must point to this host. The Caddy extension can obtain HTTPS certificates automatically on ports 80/443. The host must be publicly reachable. With CGNAT, configure your own tunnel or VPN and reverse proxy. Enable a strong password and 2FA before publishing.
+Zapisz domeny|Save domains
+Publiczny dostęp HTTPS|Public HTTPS access
+Rozszerzenie działa na tym samym hoście Docker co DCC Web. Instalacja pobiera oficjalny obraz Caddy i publikuje porty 80 oraz 443. Certyfikaty są przechowywane w osobnym wolumenie.|The extension runs on the same Docker host as DCC Web. Installation pulls the official Caddy image and publishes ports 80 and 443. Certificates use a separate persistent volume.
+Zainstaluj HTTPS|Install HTTPS
+Włącz dostęp|Enable access
+Wyłącz dostęp|Disable access
+Usuń rozszerzenie|Remove extension
+Sprawdź HTTPS|Check HTTPS
+HTTPS działa poprawnie|HTTPS verified
+Potwierdź operację HTTPS|Confirm HTTPS operation
+Instalacja zajmie porty 80/443. Wyłączenie zatrzyma publiczny dostęp przez rozszerzenie. Usunięcie zachowuje wolumeny certyfikatów.|Installation reserves ports 80/443. Disabling stops public access through the extension. Removal preserves certificate volumes.
+Potwierdzam zmianę publicznego dostępu HTTPS.|I confirm changing public HTTPS access.
+Kod 2FA lub kod odzyskiwania — jeśli włączone|2FA or recovery code — if enabled
+
+Agent musi być dostępny dla serwera DCC Web. Udostępnienie socketu pozwala panelowi używać kluczy załadowanych do agenta. Nie jest przekazywany dalej na zdalny host.|The agent must be accessible to the DCC Web server. Sharing its socket lets the panel authenticate with keys loaded into the agent. The agent is not forwarded to remote hosts.
+Agent SSH — konfiguracja|SSH agent setup
+
+Autostart|Autostart
+Klucz prywatny|Private key
+Klucz publiczny|Public key
+Zaufane hosty|Trusted hosts
+Nieobsługiwany plik|Unsupported file
+Wymaga passphrase|Passphrase required
+Dostępny|Available
+Niedostępny lub brak kluczy|Unavailable or no keys
+Wybierz folder SSH|Select SSH folder
+Nie znaleziono kluczy SSH|No SSH keys found
+Dopasuj klucze już wgrane do wspólnego folderu|Match keys already uploaded to the shared directory
+Uwierzytelnianie SSH|SSH authentication
+Automatycznie|Automatic
+Klucz / hasło profilu|Profile key / password
+Agent SSH|SSH agent
+
 Postęp instalacji|Installation progress
 Instalacja trwa…|Installation in progress…
 Sprawdzanie konfiguracji|Checking configuration
@@ -548,7 +682,7 @@ Po imporcie wybierz profile SSH i użyj wspólnego folderu. Wgraj klucze oraz za
 Klucz SSH — pełna ścieżka lub nazwa pliku we wspólnym folderze|SSH key — full path or filename in the shared directory
 known_hosts — indywidualna ścieżka (opcjonalnie)|known_hosts — individual path (optional)
 `;
-const messages=Object.fromEntries(pairs.trim().split('\n').map(line=>line.split('|')));
+const messages=Object.fromEntries(pairs.trim().split('\n').filter(line=>line.includes('|')).map(line=>line.split('|')));
 const reverse=Object.fromEntries(Object.entries(messages).filter(([a,b])=>a!==b).map(([a,b])=>[b,a]));
 const errorPL={
 "Use a simple SSH filename without directories":"Podaj prostą nazwę pliku SSH bez katalogów.",

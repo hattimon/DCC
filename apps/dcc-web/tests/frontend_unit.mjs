@@ -1,6 +1,12 @@
 import{groupContainers,primaryNetwork}from'../static/container_data.js';
 import assert from 'node:assert/strict';
 import{html,t,setLanguage,getLanguage,literal}from'../static/i18n.js';
+import{sshFileKind}from'../static/ssh_files.js';
+assert.equal(sshFileKind('key.pem','-----BEGIN OPENSSH PRIVATE KEY-----'),'private key');
+assert.equal(sshFileKind('no_extension','-----BEGIN ENCRYPTED PRIVATE KEY-----'),'private key');
+assert.equal(sshFileKind('renamed.pub','-----BEGIN RSA PRIVATE KEY-----'),'private key');
+assert.equal(sshFileKind('public','ssh-ed25519 AAAA test'),'public key');
+assert.equal(sshFileKind('config','Host *\n  ProxyCommand anything'),null);
 setLanguage('EN');
 assert.equal(t('Kontenery'),'Containers');
 assert.equal(literal('<button>Szczegóły</button>'),'<button>Details</button>');

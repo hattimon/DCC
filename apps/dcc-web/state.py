@@ -64,13 +64,31 @@ class State:
                 CREATE TABLE IF NOT EXISTS compose_projects(profile TEXT, name TEXT, file TEXT, directory TEXT, PRIMARY KEY(profile,name));
             """)
         self.path.chmod(0o600)
+        with self.connect() as db:
+            db.execute('PRAGMA secure_delete=ON')
+            for row in db.execute('SELECT id,public FROM profiles').fetchall():
+                if not str(row['public']).startswith('fernet:'):
+                    value = self.decode_profile(row['public'])
+                    db.execute('UPDATE profiles SET public=? WHERE id=?', (self.encode_profile(value), row['id']))
+        with self.connect() as db:
+            db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
         from profile_ssh import ProfileSSH
         self.ssh = ProfileSSH(self)
+
+    def encode_profile(self, value):
+        return 'fernet:' + self.vault.encrypt(json.dumps(value).encode()).decode()
+
+    def decode_profile(self, value):
+        text = str(value)
+        if text.startswith('fernet:'):
+            text = self.vault.decrypt(text[7:].encode()).decode()
+        return json.loads(text)
 
     @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=15)
         db.row_factory = sqlite3.Row
+        db.execute('PRAGMA secure_delete=ON')
         try:
             yield db
             db.commit()
@@ -89,14 +107,14 @@ class State:
             return db.execute(sql, values).rowcount
 
     def profiles(self):
-        return [dict(json.loads(row["public"]), id=row["id"]) for row in self.rows("SELECT id,public FROM profiles ORDER BY id")]
+        return [dict(self.decode_profile(row["public"]), id=row["id"]) for row in self.rows("SELECT id,public FROM profiles ORDER BY id")]
 
     def profile(self, profile_id, private=False):
         rows = self.rows("SELECT * FROM profiles WHERE id=?", (profile_id,))
         if not rows:
             raise ValueError("Profile not found")
         row = rows[0]
-        result = dict(json.loads(row["public"]), id=row["id"])
+        result = dict(self.decode_profile(row["public"]), id=row["id"])
         if private:
             result["credentials"] = json.loads(self.vault.decrypt(row["private"]))
             result = self.ssh.resolve(result)
@@ -108,7 +126,7 @@ class State:
             raise ValueError("Credentials must be a JSON object")
         existing=json.loads(self.vault.decrypt(old[0]["private"])) if old else {}
         encoded = self.vault.encrypt(json.dumps(dict(existing,**(private or {}))).encode())
-        self.execute("INSERT OR REPLACE INTO profiles VALUES(?,?,?)", (profile_id, json.dumps(public), encoded))
+        self.execute("INSERT OR REPLACE INTO profiles VALUES(?,?,?)", (profile_id, self.encode_profile(public), encoded))
 
     def audit(self, user, action, target, result):
         with self.connect() as db:

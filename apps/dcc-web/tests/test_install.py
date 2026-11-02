@@ -73,7 +73,7 @@ class InstallerPortTests(unittest.TestCase):
 
     def test_compose_manifest_binds_loopback_and_supports_scanned_port(self):
         manifest = install.COMPOSE_FILE.read_text(encoding="utf-8")
-        self.assertIn("ghcr.io/hattimon/dcc-web:0.1.2", manifest)
+        self.assertIn("ghcr.io/hattimon/dcc-web:0.1.4", manifest)
         self.assertIn("127.0.0.1:${DCC_WEB_PORT:-8789}:8789", manifest)
 
 

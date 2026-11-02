@@ -1,23 +1,9 @@
-# DCC Web 0.1.2 — SSH profile management
+# DCC Web 0.1.4
 
-DCC Web 0.1.1 is publicly available for Linux amd64/arm64 and installs through the shared DCC App Store on Windows/Docker Desktop and Linux, including MX Linux. Version 0.1.2 adds the profile improvements below; availability is confirmed by its GitHub tag, published image and canonical catalog entry. Desktop remains v1.3.11.
+The store merges app versions by stable identity and uses the fetched/cached official catalog for membership, with bundled data only as offline fallback. New applications need only a catalog edit.
 
-## Changes in 0.1.2
+This release adds encrypted profile configuration and private-key vault migration, portable encrypted backups, selected-key removal, a connection wizard, optional TOTP 2FA with one-use recovery codes, verified-email reset via TLS SMTP, settings tabs, read-only host-folder attachment and local/public domains with an optional Caddy HTTPS extension. It retains SSH-agent authentication, strict host verification, autostart indicators, Deep Ocean defaults and the existing container/install/update controls.
 
-- Administrator-managed private SSH folder, browser-selected uploads, metadata/fingerprint previews and separate consent. External mounted folders remain read-only through the upload API.
-- Select individual/all profiles, apply the shared folder only to selected SSH/Balena connections and retain individual paths elsewhere.
-- Bulk profile removal with preview and confirmation, closing the affected terminals while retaining Docker resources and SSH files.
-- Strict host verification in Docker CLI, SDK and terminal transports. No automatic transfer of private keys or trust of new hosts.
-- Existing container controls, shared catalog, EN/PL interface, installation logs and monitoring are retained.
+See [setup and limitations](docs/profiles-security.md) and [security](docs/security.md). Host/Docker administrators with access to the master key can decrypt the vault. SSH-agent secrets cannot be extracted. Compose-managed mounts require a Compose override. Public DNS, incoming ports, a CGNAT tunnel and SMTP credentials require the administrator's configuration. No live user infrastructure is changed by automated tests.
 
-## Verified during preparation
-
-- Desktop regression suite: 156 tests passed on Windows.
-- Web API/transport tests: 77 run on Windows, OK with one symlink test skipped because the OS did not allow its creation; all 77 passed on Linux.
-- The 13 SSH profile tests passed under UID 10001 in the built candidate image.
-- Node frontend checks passed. Isolated Chromium exercised import, selection, migration, uploads/consent, editing, cancel deletion and EN/PL/mobile rendering without page errors.
-- Image build and self-check passed; private keys from the user and production profiles were not accessed or altered.
-
-## Limits
-
-Remote SSH hosts were not contacted with user credentials. Imported Desktop paths still require explicit migration and copying selected files. Passphrases remain per-profile. Protect the data volume and backups: uploaded key files are not encrypted by DCC Web. Use a dedicated passphrase-protected key and HTTPS for non-loopback uploads. MCP remains a read-only Preview; see the feature matrix for transport restrictions.
+Validation results for the final published commit are listed in its release and PR; earlier test counts do not certify later code.

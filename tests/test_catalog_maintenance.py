@@ -14,6 +14,23 @@ SPEC.loader.exec_module(maintenance)
 
 
 class CatalogMaintenanceTests(unittest.TestCase):
+    def test_web_release_prefix_produces_the_image_version_without_other_product_tags(self):
+        self.assertEqual(maintenance.image_for_release('ghcr.io/hattimon/dcc-web:0.1.2', 'dcc-web-v0.1.3',
+                                                     'strip-prefix:dcc-web-v'), 'ghcr.io/hattimon/dcc-web:0.1.3')
+        self.assertEqual(maintenance.image_for_release('ghcr.io/hattimon/dcc-web:0.1.2', 'v1.3.11',
+                                                     'strip-prefix:dcc-web-v'), '')
+
+    def test_metadata_refresh_rejects_duplicates_before_network_or_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'dcc-catalog.json'
+            app = {'name': 'Example', 'image': 'example/app:1'}
+            content = json.dumps({'apps': [app, dict(app, image='example/app:2')]})
+            path.write_text(content, encoding='utf-8')
+            with patch.object(maintenance, 'latest_release') as fetch, self.assertRaisesRegex(ValueError, 'Duplicate'):
+                maintenance.update_release_metadata(path)
+            fetch.assert_not_called()
+            self.assertEqual(path.read_text(encoding='utf-8'), content)
+
     def test_github_repo_is_derived_from_source_url(self):
         self.assertEqual(
             maintenance.app_repo({"source_url": "https://github.com/ItzCrazyKns/Vane"}),

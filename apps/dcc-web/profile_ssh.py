@@ -12,7 +12,7 @@ import threading
 import paramiko
 
 SETTINGS_ID = "__dcc_profile_ssh__"
-WORKSPACE_ACTIONS = {"profiles.ssh.directory", "profiles.ssh.files", "profiles.ssh.apply", "profiles.remove.selected"}
+WORKSPACE_ACTIONS = {"profiles.transfer", "profiles.ssh.mount", "panel.domains", "panel.proxy", "profiles.ssh.directory", "profiles.ssh.files", "profiles.ssh.remove", "profiles.ssh.apply", "profiles.remove.selected"}
 MAX_FILE = 128 * 1024
 MAX_TOTAL = 1024 * 1024
 
@@ -45,17 +45,82 @@ def configure_client(client, profile):
     """Shared identity and strict host verification for CLI, SDK and host PTYs."""
     client.load_system_host_keys()
     known = profile.get("known_hosts_path")
-    if profile.get("key_scope") == "shared":
+    if profile.get("key_scope") in {"shared", "mounted"}:
         if not known or not Path(known).is_file():
             raise ValueError("Copy a trusted known_hosts file into the shared SSH directory first")
-        if profile.get("key_path") and not Path(profile["key_path"]).is_file():
+        if profile.get('ssh_auth') != 'agent' and not profile.get('credentials', {}).get('private_key') and profile.get("key_path") and not Path(profile["key_path"]).is_file():
             raise ValueError("The SSH key is missing from the shared directory; upload it in Profiles")
         reject_symlinks(Path(known))
         if profile.get("key_path"):
             reject_symlinks(Path(profile["key_path"]))
     if known:
+        if not Path(known).is_file():
+            raise ValueError('The trusted known_hosts file is missing on the Web server; upload it in Profiles.')
         client.load_system_host_keys(str(known))
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
+
+
+def agent_status():
+    try:
+        agent = paramiko.Agent()
+        try:
+            count = len(agent.get_keys())
+            return {'available': count > 0, 'keys': count}
+        finally:
+            agent.close()
+    except Exception:
+        return {'available': False, 'keys': 0}
+
+
+def connection_options(profile):
+    mode = profile.get('ssh_auth', 'auto')
+    secret = profile.get('credentials', {})
+    key = profile.get('key_path') or None
+    private_text = secret.get('private_key')
+    if mode == 'agent':
+        if not agent_status()['available']:
+            raise ValueError('SSH agent is unavailable or empty inside DCC Web. Mount its socket, set SSH_AUTH_SOCK and load the key with ssh-add on the host.')
+        key = None
+        private_text = None
+    elif key and not private_text and not Path(key).is_file():
+        raise ValueError('SSH key path is not available on the Web server. Upload the key in Profiles and select the shared folder, or choose SSH agent.')
+    options = dict(hostname=profile['host'], port=profile.get('port', 22), username=profile['username'],
+                key_filename=key, password=None if mode == 'agent' else secret.get('password') or None,
+                passphrase=None if mode == 'agent' else secret.get('passphrase') or None,
+                allow_agent=mode in {'auto', 'agent'}, look_for_keys=mode == 'auto',
+                timeout=12, auth_timeout=12, banner_timeout=12)
+    if private_text or key and Path(key).stat().st_size <= MAX_FILE:
+        text = (private_text or Path(key).read_text(encoding='utf-8-sig')).lstrip()
+        if text.startswith(('-----BEGIN PRIVATE KEY-----', '-----BEGIN ENCRYPTED PRIVATE KEY-----')):
+            from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PrivateFormat, NoEncryption
+            password = secret.get('passphrase')
+            try:
+                raw = load_pem_private_key(text.encode(), password=password.encode() if password else None)
+                converted = raw.private_bytes(Encoding.PEM, PrivateFormat.OpenSSH, NoEncryption()).decode()
+                for cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+                    try:
+                        options['pkey'] = cls.from_private_key(io.StringIO(converted))
+                        options['key_filename'] = None
+                        break
+                    except paramiko.SSHException:
+                        continue
+                if 'pkey' not in options:
+                    raise ValueError()
+            except (TypeError, ValueError):
+                raise ValueError('The SSH key needs a valid passphrase or a supported key format; configure it in Profiles or use SSH agent.') from None
+        elif private_text:
+            for cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+                try:
+                    options['pkey'] = cls.from_private_key(io.StringIO(text), password=secret.get('passphrase') or None)
+                    options['key_filename'] = None
+                    break
+                except paramiko.PasswordRequiredException:
+                    raise ValueError('The SSH key needs a valid passphrase or a supported key format; configure it in Profiles or use SSH agent.') from None
+                except paramiko.SSHException:
+                    continue
+            if 'pkey' not in options:
+                raise ValueError('The SSH key needs a valid passphrase or a supported key format; configure it in Profiles or use SSH agent.')
+    return options
 
 
 def inspect_file(name, content):
@@ -83,7 +148,7 @@ def inspect_file(name, content):
         if not count:
             raise ValueError("known_hosts must contain at least one verified host key")
         kind = "known_hosts"
-    elif name.endswith(".pub"):
+    elif re.match(r'^(?:ssh-|ecdsa-|sk-)', text.strip()):
         try:
             parts = text.strip().split()
             paramiko.PKey.from_type_string(parts[0], base64.b64decode(parts[1], validate=True))
@@ -91,9 +156,11 @@ def inspect_file(name, content):
             raise ValueError("Invalid SSH public key") from None
         kind = "public key"
     else:
-        if not text.startswith(("-----BEGIN OPENSSH PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN EC PRIVATE KEY-----")):
+        text = text.lstrip()
+        if not text.startswith(("-----BEGIN OPENSSH PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN EC PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----", "-----BEGIN ENCRYPTED PRIVATE KEY-----")):
             raise ValueError("Only SSH private keys, public keys and known_hosts can be uploaded")
         accepted = False
+        encrypted = False
         for cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
             try:
                 cls.from_private_key(io.StringIO(text))
@@ -101,20 +168,58 @@ def inspect_file(name, content):
                 break
             except paramiko.PasswordRequiredException:
                 accepted = True
+                encrypted = True
                 break
             except Exception:
                 continue
+        if not accepted and text.startswith(('-----BEGIN PRIVATE KEY-----', '-----BEGIN ENCRYPTED PRIVATE KEY-----')):
+            from cryptography.hazmat.primitives.serialization import load_pem_private_key
+            try:
+                load_pem_private_key(text.encode(), password=None)
+                accepted = True
+            except TypeError:
+                accepted = encrypted = True
+            except ValueError:
+                pass
         if not accepted:
             raise ValueError("Invalid or unsupported SSH private key")
         kind = "private key"
-    return {"name": name, "size": len(content), "kind": kind, "sha256": hashlib.sha256(content).hexdigest(), "fingerprints": sorted(set(fingerprints))}
+    return {"name": name, "size": len(content), "kind": kind, "encrypted": encrypted if kind == 'private key' else False, "sha256": hashlib.sha256(content).hexdigest(), "fingerprints": sorted(set(fingerprints))}
 
 
 class ProfileSSH:
     def __init__(self, state):
         self.state = state
         self.managed = state.directory / "ssh"
+        self.mounted = Path(os.environ.get('DCC_WEB_SSH_MOUNT', '/mnt/dcc-ssh'))
         self.lock = threading.RLock()
+        state.execute('CREATE TABLE IF NOT EXISTS ssh_files(name TEXT PRIMARY KEY, private BLOB NOT NULL, metadata TEXT NOT NULL)')
+        self.migrate_private_files()
+
+    def vault_file(self, name):
+        rows = self.state.rows('SELECT private,metadata FROM ssh_files WHERE name=?', (safe_name(name),))
+        return rows[0] if rows else None
+
+    def migrate_private_files(self):
+        """Protect only existing managed keys, verifying ciphertext before removal."""
+        if not self.managed.is_dir() or self.managed.is_symlink():
+            return
+        for path in sorted(self.managed.iterdir())[:100]:
+            try:
+                if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_FILE:
+                    continue
+                content = path.read_bytes()
+                metadata = inspect_file(path.name, content)
+                if metadata['kind'] != 'private key':
+                    continue
+                encrypted = self.state.vault.encrypt(content)
+                self.state.execute('INSERT OR REPLACE INTO ssh_files VALUES(?,?,?)', (path.name, encrypted, json.dumps(metadata)))
+                saved = self.vault_file(path.name)
+                if self.state.vault.decrypt(saved['private']) == content and path.read_bytes() == content:
+                    path.unlink()
+            except (OSError, ValueError):
+                # A read-only/external file is never deleted; settings reports it as unprotected.
+                continue
 
     def directory(self):
         rows = self.state.rows("SELECT data FROM settings WHERE user_id=?", (SETTINGS_ID,))
@@ -133,20 +238,67 @@ class ProfileSSH:
         return path
 
     def settings(self):
+        with self.lock:
+            self.migrate_private_files()
         root = self.validate_directory(str(self.directory()))
         files = []
+        if root == self.managed:
+            files = [dict(json.loads(row['metadata']), protected=True) for row in self.state.rows('SELECT metadata FROM ssh_files ORDER BY name')]
         if root.is_dir():
             for path in sorted(root.iterdir()):
                 if len(files) >= 100:
                     break
                 if path.is_file() and not path.is_symlink():
-                    files.append({"name": path.name, "size": path.stat().st_size})
-        return {"directory": str(root), "managed_directory": str(self.managed), "uploads_allowed": root == self.managed, "files": files}
+                    item = {"name": path.name, "size": path.stat().st_size, 'kind': 'unsupported', 'encrypted': False, 'protected': False}
+                    if item['size'] <= MAX_FILE:
+                        try:
+                            item.update(inspect_file(path.name, path.read_bytes()))
+                        except (OSError, ValueError):
+                            pass
+                    files = [f for f in files if f['name'] != item['name']]
+                    files.append(item)
+        mounted_files = []
+        if self.mounted.is_dir():
+            reject_symlinks(self.mounted)
+            for path in sorted(self.mounted.iterdir())[:100]:
+                if not path.is_symlink() and path.is_file() and path.stat().st_size <= MAX_FILE:
+                    try:
+                        mounted_files.append(dict(inspect_file(path.name,path.read_bytes()),protected=False))
+                    except (OSError,ValueError):
+                        continue
+        return {"directory": str(root), "managed_directory": str(self.managed), "uploads_allowed": root == self.managed, "files": files, 'mounted_files':mounted_files, 'mounted_directory':str(self.mounted), 'agent': agent_status()}
+
+    def delete_plan(self, names):
+        if self.validate_directory(str(self.directory())) != self.managed:
+            raise ValueError('External SSH directories are read-only')
+        if not isinstance(names, list) or not 1 <= len(names) <= 100:
+            raise ValueError('Select SSH files to remove')
+        names = sorted({safe_name(name) for name in names})
+        available = {f['name']: f for f in self.settings()['files'] if f['kind'] != 'unsupported'}
+        if any(name not in available for name in names):
+            raise ValueError('An SSH file no longer exists; refresh the list')
+        affected = [p for p in self.state.profiles() if p.get('key_scope') == 'shared' and
+                    ('known_hosts' in names or key_name(p.get('key_path')) in names)]
+        files = [available[name] for name in names]
+        return {'target': digest({'files': files, 'profiles': affected}), 'files': files,
+                'profiles': [{'id': p['id'], 'name': p['name']} for p in affected]}
+
+    def delete_files(self, plan):
+        for item in plan['files']:
+            path = self.managed / safe_name(item['name'])
+            reject_symlinks(path)
+            self.state.execute('DELETE FROM ssh_files WHERE name=?', (item['name'],))
+            path.unlink(missing_ok=True)
 
     def resolve(self, profile):
-        if profile.get("kind") in {"ssh", "balena"} and profile.get("key_scope") == "shared":
-            root = self.validate_directory(str(self.directory()))
+        if profile.get("kind") in {"ssh", "balena"} and profile.get("key_scope") in {"shared","mounted"}:
+            root = self.mounted if profile.get('key_scope') == 'mounted' else self.validate_directory(str(self.directory()))
+            reject_symlinks(root)
             profile = dict(profile, key_path=str(root / safe_name(profile["key_path"])) if profile.get("key_path") else "", known_hosts_path=str(root / "known_hosts"))
+            if root == self.managed and profile.get('key_path'):
+                saved = self.vault_file(key_name(profile['key_path']))
+                if saved:
+                    profile['credentials'] = dict(profile.get('credentials', {}), private_key=self.state.vault.decrypt(saved['private']).decode('utf-8-sig'))
         return profile
 
     def directory_plan(self, value):
@@ -187,10 +339,10 @@ class ProfileSSH:
                     db.execute("DELETE FROM profiles WHERE id=?", (item["id"],))
                 else:
                     row = db.execute("SELECT public FROM profiles WHERE id=?", (item["id"],)).fetchone()
-                    value = dict(json.loads(row["public"]), key_scope="shared", key_path=item["key_path"])
+                    value = dict(self.state.decode_profile(row["public"]), key_scope="shared", key_path=item["key_path"])
                     value.pop("known_hosts_path", None)
                     # Update only public configuration; the encrypted credential blob stays byte-for-byte intact.
-                    db.execute("UPDATE profiles SET public=? WHERE id=?", (json.dumps(value), item["id"]))
+                    db.execute("UPDATE profiles SET public=? WHERE id=?", (self.state.encode_profile(value), item["id"]))
 
     def file_plan(self, files, replace=False):
         root = self.validate_directory(str(self.directory()))
@@ -206,12 +358,14 @@ class ProfileSSH:
             item = inspect_file(name, content)
             destination = root / name
             reject_symlinks(destination)
-            exists = destination.exists()
-            if exists and (not destination.is_file() or destination.stat().st_size > MAX_FILE):
+            saved = self.vault_file(name)
+            exists = destination.exists() or saved is not None
+            if destination.exists() and (not destination.is_file() or destination.stat().st_size > MAX_FILE):
                 raise ValueError("The target SSH file cannot be replaced")
             if exists and not replace:
                 raise ValueError("A file already exists; explicitly enable replacement to continue")
-            item.update(replacing=exists, previous=hashlib.sha256(destination.read_bytes()).hexdigest() if exists else None)
+            previous = json.loads(saved['metadata'])['sha256'] if saved else hashlib.sha256(destination.read_bytes()).hexdigest() if exists else None
+            item.update(replacing=exists, previous=previous)
             manifest.append(item)
         return {"target": digest({"directory": str(root), "files": manifest, "replace": bool(replace)}), "directory": str(root), "files": manifest}
 
@@ -224,6 +378,14 @@ class ProfileSSH:
         staged = []
         try:
             for name, content in files:
+                metadata = inspect_file(name, content)
+                if metadata['kind'] == 'private key':
+                    self.state.execute('INSERT OR REPLACE INTO ssh_files VALUES(?,?,?)', (name, self.state.vault.encrypt(content), json.dumps(metadata)))
+                    destination = root / safe_name(name)
+                    reject_symlinks(destination)
+                    if destination.is_file() and self.state.vault.decrypt(self.vault_file(name)['private']) == content:
+                        destination.unlink()
+                    continue
                 temp = root / ("upload-" + secrets.token_hex(16))
                 with os.fdopen(os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as handle:
                     handle.write(content)
@@ -232,6 +394,7 @@ class ProfileSSH:
             for source, destination in staged:
                 reject_symlinks(destination)
                 os.replace(source, destination)
+                self.state.execute('DELETE FROM ssh_files WHERE name=?',(destination.name,))
         finally:
             for source, _ in staged:
                 source.unlink(missing_ok=True)

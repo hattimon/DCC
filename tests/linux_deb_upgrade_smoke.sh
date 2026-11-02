@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-old_version=1.3.10
-new_version=1.3.11
+old_version=${DCC_OLD_VERSION:-1.3.11}
+new_version=1.3.12
 root="${RUNNER_TEMP:-/tmp}/dcc-deb-upgrade-smoke"
 mkdir -p "$root"
 old_deb="$root/DockerControlCenter_${old_version}_amd64.deb"

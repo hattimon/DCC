@@ -8,6 +8,18 @@ import DockerControlCenter as dcc
 
 
 class CatalogRepositoryTests(unittest.TestCase):
+    def test_official_catalog_controls_membership_and_offline_fallback_is_retained(self):
+        bundled = dcc.image_template_from_dict({'name': 'Removed app', 'image': 'example/removed:1'})
+        live = dcc.image_template_from_dict({'name': 'New app', 'image': 'example/new:1'}, dcc.DEFAULT_DEPLOYMENT_REPOSITORY)
+        self.assertEqual(dcc.store_catalog([bundled], [live]), [live])
+        self.assertEqual(dcc.store_catalog([bundled], []), [bundled])
+
+    def test_stale_cache_cannot_replace_newer_bundled_version(self):
+        new = dcc.image_template_from_dict({'name': 'DCC Web', 'image': 'ghcr.io/hattimon/dcc-web:0.1.3'})
+        old = dcc.image_template_from_dict({'name': 'DCC Web', 'image': 'ghcr.io/hattimon/dcc-web:0.1.1'})
+        for catalogs in (([new], [old]), ([old], [new]), ([old, new, old],)):
+            self.assertEqual([app.image for app in dcc.merge_catalog_lists(*catalogs)], [new.image])
+
     def test_refresh_replaces_bundled_image_version_and_preserves_other_apps(self):
         old = dcc.image_template_from_dict({
             "name": "DCC Web", "image": "ghcr.io/hattimon/dcc-web:0.1.1",

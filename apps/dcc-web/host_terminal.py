@@ -7,7 +7,7 @@ import threading
 import time
 
 from engine import EngineError
-from profile_ssh import configure_client
+from profile_ssh import configure_client, connection_options
 
 
 class PTYConnection:
@@ -20,7 +20,7 @@ class PTYConnection:
             configure_client(client, profile)
             credentials=profile.get("credentials",{})
             try:
-                client.connect(profile["host"],port=profile.get("port",22),username=profile["username"],password=credentials.get("password") or None,passphrase=credentials.get("passphrase") or None,key_filename=profile.get("key_path") or None,timeout=12,auth_timeout=12,banner_timeout=12)
+                client.connect(**connection_options(profile))
                 self.channel=client.invoke_shell(term="xterm-256color",width=cols,height=rows)
                 self.channel.settimeout(None)
                 self.client=client

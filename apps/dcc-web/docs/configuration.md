@@ -44,4 +44,35 @@ Select profiles using the row checkboxes or **Select all**, then choose **Use sh
 
 A different shared directory must already exist and be accessible on the DCC Web server. For containers, mount a narrow folder read-only, e.g. `--mount type=bind,source=/host/dcc-ssh,target=/run/dcc-ssh,readonly`, then set `/run/dcc-ssh`. The panel never uploads into external directories or makes arbitrary server-side copies. Directory changes affect only opted-in profiles and do not move/delete files. A browser cannot open a server directory in your local Explorer; the upload dialog opens the local file picker, and **How to copy files** provides explicit Docker/PowerShell commands for the default container directory.
 
-**Delete selected profiles** can remove all selected connection profiles after a preview and confirmation. It removes their encrypted connection credentials and closes their active host terminals. It retains Docker containers, volumes, and shared SSH files; remove files deliberately on the server if you wish to revoke that stored identity. Removing a profile is not revocation of the key on the remote host.
+**Delete selected profiles** can remove all selected connection profiles after a preview and confirmation. It removes their encrypted connection credentials and closes their active host terminals. It retains Docker containers, volumes, and shared SSH files; use Delete selected files in the panel to remove stored keys. Removing a profile is not revocation of the key on the remote host.
+
+
+## SSH agent
+
+Web 0.1.4 recognizes private/public keys by content, independent of extension (including no extension, `.pem` and `.key`). Profiles lists their type and whether a passphrase is required. Upload accepts selected files or proposes recognized files from a folder selected in the browser. SSH config and unrelated files are excluded; only checked files are uploaded after confirmation. Trusted `known_hosts` is still required. Encrypted PKCS8 keys are decrypted in memory when their separately stored passphrase is supplied.
+
+When importing Windows Desktop profiles, check **Match keys already uploaded to the shared directory** to map an existing private key with exactly the same basename to `/data/ssh`. Unmatched paths stay visible for manual selection; they do not magically become container paths. Passwords/passphrases are not taken from the exported JSON. Default permissions remain read-only. In each SSH/Balena profile, select Automatic, Profile key/password, or SSH agent.
+
+**SSH agent** uses identities already unlocked on the Web server. It ignores the imported local key path and does not store the agent passphrase in the profile. The Profiles page reports whether the server can access loaded identities. The socket must be explicitly made accessible to the non-root Web UID 10001; mounting it does not grant missing Unix filesystem permissions. Agent access permits authentication with identities loaded in that agent, so use a dedicated agent with only the intended keys. No agent is forwarded to remote hosts.
+
+For native Linux Docker Engine, load the key with `ssh-add` on the host, then extend the existing Web service with a reviewed Compose override:
+
+```yaml
+services:
+  dcc-web:
+    environment:
+      SSH_AUTH_SOCK: /run/dcc-agent.sock
+    volumes:
+      - type: bind
+        source: ${SSH_AUTH_SOCK:?Set the host SSH_AUTH_SOCK}
+        target: /run/dcc-agent.sock
+        read_only: true
+```
+
+The entrypoint retains non-root UID 10001 and adds the mounted socket group when Docker socket access is enabled. A socket limited to mode 0600 and owned by a different UID still needs a dedicated agent/socket with access granted to UID 10001 or its group; do not make the socket world-writable. Existing ports, data volume and other service options must be retained when recreating the container.
+
+Docker Desktop documents `/run/host-services/ssh-auth.sock` forwarding for **Mac and Linux**: [Docker SSH agent forwarding](https://docs.docker.com/desktop/features/networking/networking-how-tos/#ssh-agent-forwarding). Windows OpenSSH's named pipe is not directly mountable as a Unix socket in a Linux container. On Windows, use an explicitly configured trusted bridge to a Unix agent socket in WSL/Linux (verify socket access from the container), or upload the encrypted key and enter its passphrase in the profile. The native Python Web server on Windows can use the local OpenSSH/Pageant agent supported by [Paramiko](https://docs.paramiko.org/en/stable/api/client.html). No bridge or host service is installed automatically.
+
+## Connection wizard and account security
+
+Web 0.1.4 adds a three-step connection wizard, encrypted configuration/key storage, selected key deletion, encrypted backups, optional TOTP 2FA and verified email recovery. See the [complete profile and security guide](profiles-security.md), including read-only host folder mounting and separate local/public domain settings.

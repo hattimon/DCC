@@ -275,9 +275,9 @@
         "Administration 🛠",
         "WWW 🌐"
       ],
-      "image": "ghcr.io/hattimon/dcc-web:0.1.2",
-      "category": "DCC",
-      "category_en": "DCC",
+      "image": "ghcr.io/hattimon/dcc-web:0.1.4",
+      "category": "Administracja 🛠",
+      "category_en": "Administration 🛠",
       "description": "Przeglądarkowy panel DCC do zarządzania kontenerami, profilami i hostami Docker.",
       "description_en": "DCC browser workspace for managing Docker containers, profiles and hosts.",
       "store_description": "Samodzielny panel WWW do pracy z lokalnymi i zdalnymi profilami Docker. Zawiera zarządzanie kontenerami, terminal hosta, logi, zasoby, Compose i wspólny sklep aplikacji.",
@@ -311,9 +311,9 @@
         "amd64",
         "arm64"
       ],
-      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web/docs",
-      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web",
+      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.4/apps/dcc-web",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.4/apps/dcc-web/docs",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.4/apps/dcc-web",
       "icon_text": "◇",
       "post_install_hints": [
         "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",
@@ -328,8 +328,10 @@
         "The dcc_web_data volume retains profiles and settings."
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "v1.3.11",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/v1.3.11"
+      "latest_release": "dcc-web-v0.1.4",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.1.4",
+      "release_tag_pattern": "dcc-web-v[0-9]+\\.[0-9]+\\.[0-9]+",
+      "image_tag_from_release": "strip-prefix:dcc-web-v"
     },
     {
       "name": "Beszel Hub",
