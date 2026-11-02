@@ -16,8 +16,12 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    outputs:
+      publish: ${{ steps.publish-check.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -27,8 +31,28 @@ jobs:
         working-directory: apps/container-updater
         run: python -m unittest discover -s tests -v
 
+      - name: Publish only a new application version
+        id: publish-check
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+        run: |
+          current="$(tr -d '\r\n' < apps/container-updater/VERSION)"
+          previous=""
+          if [[ "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]] && [[ "$EVENT_BEFORE" != 0000000000000000000000000000000000000000 ]]; then
+            previous="$(git show "$EVENT_BEFORE:apps/container-updater/VERSION" 2>/dev/null | tr -d '\r\n' || true)"
+          fi
+          if [[ "$EVENT_NAME" == "workflow_dispatch" || -z "$previous" || "$current" != "$previous" ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "VERSION is unchanged; tests ran, but published image tags will not be moved."
+          fi
+
   publish:
     needs: test
+    if: needs.test.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7

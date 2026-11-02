@@ -7,13 +7,19 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   verify:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Validate release inputs before building
+        shell: bash
+        run: |
+          version="$(tr -d '\r\n' < apps/dcc-web/VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$GITHUB_REF_NAME" == "dcc-web-v$version" ]]
+          test -s "apps/dcc-web/RELEASE_NOTES_${version}.md"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -25,6 +31,7 @@ jobs:
           python -m pip install --disable-pip-version-check -r apps/dcc-web/requirements.txt
           python -m compileall -q apps/dcc-web
           python -m unittest discover -s tests -p test_catalog_identity.py -v
+          python -m unittest discover -s tests -p test_catalog_maintenance.py -v
           python -m unittest discover -s apps/dcc-web/tests -v
           node apps/dcc-web/tests/frontend_unit.mjs
       - name: Validate the multi-architecture image and socket permissions
@@ -36,6 +43,10 @@ jobs:
 
   publish:
     needs: verify
+    permissions:
+      actions: write
+      contents: write
+      packages: write
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -85,3 +96,33 @@ jobs:
           docker logout ghcr.io
           docker manifest inspect "ghcr.io/hattimon/dcc-web:${{ steps.version.outputs.version }}" >/dev/null
           echo "The public App Store tag is readable without credentials."
+      - name: Set up Python for source packaging
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Package the source archive
+        run: python packaging/web/build_source_archive.py
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          asset="release/DCC-Web-${{ steps.version.outputs.version }}-source.zip"
+          notes="apps/dcc-web/RELEASE_NOTES_${{ steps.version.outputs.version }}.md"
+          tag="$GITHUB_REF_NAME"
+          test -f "$notes"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" \
+              --title "DCC Web ${{ steps.version.outputs.version }}" \
+              --notes-file "$notes"
+            gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" \
+              --title "DCC Web ${{ steps.version.outputs.version }}" \
+              --latest=false \
+              --notes-file "$notes"
+          fi
+      - name: Refresh the official App Store catalog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run catalog-maintenance.yml --repo "$GITHUB_REPOSITORY" --ref main

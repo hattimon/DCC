@@ -232,6 +232,20 @@ class AccountSecurityTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/profiles').status_code,200)
         self.assertEqual(self.client.get('/api/health',headers={'Host':'untrusted.invalid'}).status_code,400)
 
+    def test_mount_confirmation_ignores_inspect_order_but_detects_actual_changes(self):
+        container=MagicMock()
+        container.id='a'*64
+        container.attrs={'Image':'sha256:fixture','Config':{'Labels':{}},'Mounts':[
+            {'Destination':'/data','Source':'fixture-data','Type':'volume','RW':True},
+            {'Destination':'/var/run/docker.sock','Source':'/var/run/docker.sock','Type':'bind','RW':True},
+        ]}
+        original=mount_plan(container,'/fixture')['target']
+        container.attrs['Mounts'].reverse()
+        self.assertEqual(mount_plan(container,'/fixture')['target'],original)
+        container.attrs['Mounts'][0]['RW']=False
+        self.assertNotEqual(mount_plan(container,'/fixture')['target'],original)
+        self.assertNotEqual(mount_plan(container,'/other-fixture')['target'],original)
+
     def test_https_extension_has_persistent_configuration_and_retains_certificates_on_failure(self):
         client=MagicMock();container=MagicMock();container.id='a'*64;container.name='fixture-web'
         client.containers.list.return_value=[];client.networks.list.return_value=[]
@@ -275,9 +289,14 @@ class AccountSecurityTests(unittest.TestCase):
             self.assertFalse((Path(directory)/'ssh/fixture.pem').exists())
 
     def test_profile_security_docs_render_internal_anchor_links(self):
-        response=self.client.get('/docs/profiles-security')
-        self.assertEqual(response.status_code,200)
-        self.assertIn('href="/docs/configuration#ssh-agent"',response.get_data(as_text=True))
+        for language in ('EN','PL'):
+            with self.subTest(language=language):
+                response=self.client.get('/docs/profiles-security?lang='+language)
+                self.assertEqual(response.status_code,200)
+                self.assertIn('href="/docs/configuration?lang='+language+'#ssh-agent"',response.get_data(as_text=True))
+                target=self.client.get('/docs/configuration?lang='+language)
+                self.assertEqual(target.status_code,200)
+                self.assertIn('id="ssh-agent"',target.get_data(as_text=True))
 
 
 if __name__=='__main__':unittest.main()

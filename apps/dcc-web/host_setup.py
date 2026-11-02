@@ -63,8 +63,11 @@ def mount_plan(container, source):
     labels = container.attrs.get('Config',{}).get('Labels') or {}
     if labels.get('com.docker.compose.project'):
         raise ValueError('This installation is managed by Compose. Add a read-only bind mount in its Compose file, then recreate that service. See SSH folder setup in the documentation.')
+    # Docker inspect may return the same mounts in a different order between
+    # preview and confirmation. Preserve their contents, but canonicalize order.
+    mounts = sorted(container.attrs.get('Mounts') or [], key=lambda mount: mount.get('Destination',''))
     return {'source':source,'target_path':SSH_TARGET,'container':container.id,
-            'target':digest({'id':container.id,'image':container.attrs.get('Image'),'source':source,'mounts':container.attrs.get('Mounts')})}
+            'target':digest({'id':container.id,'image':container.attrs.get('Image'),'source':source,'mounts':mounts})}
 
 
 def test_directory(client, image, source):

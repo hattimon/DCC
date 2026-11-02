@@ -26,3 +26,10 @@ EN['Profile, klucze i 2FA']='Profiles, keys and 2FA'
 
 def translate(value,language):
     return EN.get(value,value) if language=='EN' else value
+
+EN['Język dokumentacji']='Documentation language'
+EN['Dokumentacja DCC Web']='DCC Web documentation'
+EN['Źródła na GitHubie']='Sources on GitHub'
+EN['O projekcie']='About'
+EN['Otwórz panel']='Open panel'
+EN['Repozytorium DCC na GitHubie']='DCC repository on GitHub'

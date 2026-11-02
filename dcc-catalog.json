@@ -311,9 +311,9 @@
         "amd64",
         "arm64"
       ],
-      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.4/apps/dcc-web",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.4/apps/dcc-web/docs",
-      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.4/apps/dcc-web",
+      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.6/apps/dcc-web",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.6/apps/dcc-web/docs",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.6/apps/dcc-web",
       "icon_text": "◇",
       "post_install_hints": [
         "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",

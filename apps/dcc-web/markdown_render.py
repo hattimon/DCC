@@ -10,7 +10,7 @@ def _slug(value):
     return re.sub(r"[\s-]+", "-", value).strip("-") or "section"
 
 
-def _safe_href(value, allowed_docs):
+def _safe_href(value, allowed_docs, language="EN"):
     value = html.unescape(value).strip()
     if value.startswith("#") or value.startswith("/"):
         return value
@@ -18,13 +18,13 @@ def _safe_href(value, allowed_docs):
     if parsed.path.endswith('.md') and not parsed.scheme and not parsed.netloc:
         name = parsed.path.rsplit('/',1)[-1][:-3]
         anchor = '#'+parsed.fragment if parsed.fragment and re.fullmatch(r'[A-Za-z0-9_-]+',parsed.fragment) else ''
-        return f'/docs/{name}{anchor}' if name in allowed_docs else None
+        return f'/docs/{name}?lang={language}{anchor}' if name in allowed_docs else None
     if parsed.scheme in {"https", "http", "mailto"} and (parsed.netloc or parsed.scheme == "mailto"):
         return value
     return None
 
 
-def _inline(value, allowed_docs):
+def _inline(value, allowed_docs, language="EN"):
     codes = []
 
     def save_code(match):
@@ -36,7 +36,7 @@ def _inline(value, allowed_docs):
 
     def link(match):
         label, raw_href = match.groups()
-        href = _safe_href(raw_href, allowed_docs)
+        href = _safe_href(raw_href, allowed_docs, language)
         if href is None:
             return label
         external = urlsplit(href).scheme in {"https", "http"}
@@ -55,8 +55,9 @@ def _table_cells(line):
     return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
 
-def render_markdown(source, allowed_docs=()):
+def render_markdown(source, allowed_docs=(), language="EN"):
     """Render common Markdown blocks while escaping raw HTML and unsafe links."""
+    language = "PL" if language == "PL" else "EN"
     lines = str(source or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
     output = []
     paragraph = []
@@ -66,7 +67,7 @@ def render_markdown(source, allowed_docs=()):
 
     def flush_paragraph():
         if paragraph:
-            output.append("<p>" + _inline(" ".join(line.strip() for line in paragraph), allowed_docs) + "</p>")
+            output.append("<p>" + _inline(" ".join(line.strip() for line in paragraph), allowed_docs, language) + "</p>")
             paragraph.clear()
 
     def close_list():
@@ -105,7 +106,7 @@ def render_markdown(source, allowed_docs=()):
             flush_paragraph()
             close_list()
             level = len(heading.group(1))
-            body = _inline(heading.group(2), allowed_docs)
+            body = _inline(heading.group(2), allowed_docs, language)
             output.append(f'<h{level} id="{_slug(heading.group(2))}">{body}</h{level}>')
             index += 1
             continue
@@ -114,12 +115,12 @@ def render_markdown(source, allowed_docs=()):
             flush_paragraph()
             close_list()
             headers = _table_cells(line)
-            output.append("<div class=\"table-wrap\"><table><thead><tr>" + "".join(f"<th>{_inline(cell, allowed_docs)}</th>" for cell in headers) + "</tr></thead><tbody>")
+            output.append("<div class=\"table-wrap\"><table><thead><tr>" + "".join(f"<th>{_inline(cell, allowed_docs, language)}</th>" for cell in headers) + "</tr></thead><tbody>")
             index += 2
             while index < len(lines) and "|" in lines[index] and lines[index].strip():
                 cells = _table_cells(lines[index])
                 cells += [""] * max(0, len(headers) - len(cells))
-                output.append("<tr>" + "".join(f"<td>{_inline(cell, allowed_docs)}</td>" for cell in cells[:len(headers)]) + "</tr>")
+                output.append("<tr>" + "".join(f"<td>{_inline(cell, allowed_docs, language)}</td>" for cell in cells[:len(headers)]) + "</tr>")
                 index += 1
             output.append("</tbody></table></div>")
             continue
@@ -136,7 +137,7 @@ def render_markdown(source, allowed_docs=()):
             close_list()
             quoted = []
             while index < len(lines) and lines[index].startswith("> "):
-                quoted.append(_inline(lines[index][2:], allowed_docs))
+                quoted.append(_inline(lines[index][2:], allowed_docs, language))
                 index += 1
             output.append("<blockquote><p>" + " ".join(quoted) + "</p></blockquote>")
             continue
@@ -151,7 +152,7 @@ def render_markdown(source, allowed_docs=()):
                 close_list()
                 output.append(f"<{wanted}>")
                 list_type = wanted
-            output.append("<li>" + _inline(match.group(1), allowed_docs) + "</li>")
+            output.append("<li>" + _inline(match.group(1), allowed_docs, language) + "</li>")
             index += 1
             continue
 

@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch,MagicMock
 from types import SimpleNamespace
 import subprocess
@@ -475,6 +476,23 @@ class WebTests(unittest.TestCase):
         self.assertIn('dcc',export_client('Claude Desktop','python',['web.py'])['configuration']['mcpServers'])
         self.assertNotIn(grant['token'],json.dumps(codex)+json.dumps(vscode))
 
+    def test_container_mcp_export_uses_verified_container_nonroot_entrypoint_and_environment(self):
+        grant=self.request('mcp/grants',{'profiles':['local'],'client':'OpenAI Codex'}).json
+        docker_client=MagicMock()
+        with patch.dict('os.environ',{'DCC_WEB_CONTAINER_NAME':'dcc-web'}), \
+                patch('docker.from_env',return_value=docker_client), \
+                patch('host_setup.local_container',return_value=SimpleNamespace(name='fixture-web-custom')):
+            response=self.client.get('/api/mcp/config/'+grant['id'])
+        self.assertEqual(response.status_code,200,response.json)
+        config=tomllib.loads(response.json['configuration'])['mcp_servers']['dcc']
+        self.assertEqual(config['command'],'docker')
+        self.assertEqual(config['env_vars'],['DCC_MCP_TOKEN'])
+        self.assertEqual(config['args'][:7],['exec','-i','--env','DCC_MCP_TOKEN','fixture-web-custom',
+            '/usr/local/bin/dcc-web-entrypoint',sys.executable])
+        self.assertEqual(config['args'][-1],'--mcp-stdio')
+        self.assertNotIn(grant['token'],json.dumps(response.json))
+        docker_client.close.assert_called_once()
+
     def test_local_docs_routes_and_about_are_available(self):
         self.assertEqual(self.client.get('/about').status_code,200)
         for name in ('installation','configuration','security','catalogs','mcp','ai','themes-audio','feature-matrix','testing'):
@@ -499,6 +517,34 @@ class WebTests(unittest.TestCase):
             self.assertEqual(self.client.get('/api/bootstrap').json['settings']['language'],language)
             self.assertIn(label,self.client.get('/').get_data(as_text=True))
         self.assertEqual(self.request('settings',{'language':'XX'},method='PUT').status_code,400)
+
+    def test_documentation_preserves_language_and_resolves_internal_links(self):
+        names=('installation','configuration','profiles-security','security','catalogs','mcp','ai','themes-audio','feature-matrix','testing')
+        for language in ('PL','EN'):
+            self.assertEqual(self.request('settings',{'language':language},method='PUT').status_code,200)
+            pages={}
+            for name in names:
+                response=self.client.get('/docs/'+name)
+                self.assertEqual(response.status_code,200,name)
+                page=response.get_data(as_text=True)
+                self.assertIn('<html lang="'+language.lower()+'"',page,name)
+                self.assertIn('href="/docs/configuration?lang='+language+'"',page,name)
+                pages[name]=page
+            self.assertIn('Konfiguracja i profile' if language=='PL' else 'Configuration and profiles',pages['configuration'])
+            self.assertIn('<pre><code>',pages['installation'])
+            self.assertIn('Otwórz panel' if language=='PL' else 'Open panel',pages['configuration'])
+            for name,page in pages.items():
+                article=re.search(r'<article[^>]*>(.*?)</article>',page,re.S).group(1)
+                for href in re.findall(r'href="([^"]+)"',article):
+                    target=urlsplit(href)
+                    if target.scheme or target.netloc or not target.path.startswith('/docs/'):
+                        continue
+                    destination=target.path.removeprefix('/docs/')
+                    self.assertIn(destination,pages,(name,href))
+                    self.assertEqual(parse_qs(target.query).get('lang'),[language],(name,href))
+                    if target.fragment:
+                        self.assertIn('id="'+target.fragment+'"',pages[destination],(name,href))
+        self.assertIn('<html lang="pl"',self.client.get('/docs/configuration?lang=PL').get_data(as_text=True))
 
     def test_panel_links_use_remote_host_and_ipv6_without_javascript_urls(self):
         entries=[{'Ports':'0.0.0.0:9443->9443/tcp, [::]:8080->80/tcp, 127.0.0.1:5000->5000/tcp, 0.0.0.0:53->53/udp'}]
