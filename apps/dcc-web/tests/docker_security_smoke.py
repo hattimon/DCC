@@ -17,7 +17,7 @@ def main():
     import argparse
     import paramiko
     parser=argparse.ArgumentParser()
-    parser.add_argument('--image',default='dcc-web:qa-0.1.4')
+    parser.add_argument('--image',default='dcc-web:qa-0.1.5')
     parser.add_argument('--old-image',default='ghcr.io/hattimon/dcc-web:0.1.2')
     parser.add_argument('--mount-fixture',help='Explicit readable host directory containing only synthetic marker files')
     args=parser.parse_args()
@@ -66,7 +66,7 @@ def main():
         docker('stop','--time','5',name);docker('rm',name);running=False
         base=start(args.image)
         after=api('bootstrap')
-        assert after['version']=='0.1.4',after['version']
+        assert after['version']=='0.1.5',after['version']
         assert after['user']['id']==user and after['settings']['theme']=='violet' and after['settings']['language']=='PL'
         assert api('profiles')['profiles']==before
         docker('exec','--user','10001:10001',name,'python','-c',

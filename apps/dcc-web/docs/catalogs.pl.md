@@ -10,7 +10,7 @@ To przykład dokumentacyjny, nie fikcyjna aplikacja w katalogu. Oficjalne rozsze
 
 ## Jedna aplikacja i najnowszy wpis
 
-DCC Web 0.1.4 scala wersje po nazwie, repozytorium obrazu bez tagu/digestu i domyślnej nazwie kontenera. Kategorie nie tworzą oddzielnych wpisów. Wersje z liczbowymi tagami są porównywane numerycznie, więc starszy cache nie obniży nowszej wersji w tym samym źródle. Dla tagów ruchomych, takich jak latest, i digestów obowiązuje kolejność źródeł. Warianty z różnymi nazwami kontenerów lub repozytoriami pozostają odrębne.
+DCC Web 0.1.5 scala wersje po nazwie, repozytorium obrazu bez tagu/digestu i domyślnej nazwie kontenera. Kategorie nie tworzą oddzielnych wpisów. Wersje z liczbowymi tagami są porównywane numerycznie, więc starszy cache nie obniży nowszej wersji w tym samym źródle. Dla tagów ruchomych, takich jak latest, i digestów obowiązuje kolejność źródeł. Warianty z różnymi nazwami kontenerów lub repozytoriami pozostają odrębne.
 
 Każda aplikacja/wariant powinna występować raz. CI odrzuca duplikaty. Przy nowym wydaniu aktualizuj istniejący wpis. DCC Web wskazuje tagi dcc-web-vX.Y.Z; przed zmianą sprawdza się obrazy amd64 i arm64.
 

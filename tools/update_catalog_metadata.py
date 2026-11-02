@@ -229,6 +229,12 @@ def update_release_metadata(catalog_path: Path) -> tuple[int, int]:
 
         current_image = str(app.get("image") or "").strip()
         image_strategy = str(app.get("image_tag_from_release") or "").strip()
+        current_release = str(app.get("latest_release") or "").strip()
+        refreshed_urls = {}
+        if current_release and version and current_release != version:
+            for key in ("source_url", "docs_url", "homepage_url"):
+                value = str(app.get(key) or "")
+                refreshed_urls[key] = value.replace(current_release, version) if current_release in value else value
         if image_strategy:
             if not release_pattern or not re.fullmatch(release_pattern, version):
                 print(f"WARN {repo}: release tag does not match the configured image-tag rule; keeping catalog entry unchanged")
@@ -255,6 +261,9 @@ def update_release_metadata(catalog_path: Path) -> tuple[int, int]:
             app.get("latest_release"),
             app.get("latest_release_url"),
             app.get("image"),
+            app.get("source_url"),
+            app.get("docs_url"),
+            app.get("homepage_url"),
         )
         app["upstream_repo"] = repo
         if version:
@@ -263,11 +272,16 @@ def update_release_metadata(catalog_path: Path) -> tuple[int, int]:
             app["latest_release_url"] = release_url
         if image_strategy:
             app["image"] = new_image
+        for key, value in refreshed_urls.items():
+            app[key] = value
         after = (
             app.get("upstream_repo"),
             app.get("latest_release"),
             app.get("latest_release_url"),
             app.get("image"),
+            app.get("source_url"),
+            app.get("docs_url"),
+            app.get("homepage_url"),
         )
         if before != after:
             changed += 1

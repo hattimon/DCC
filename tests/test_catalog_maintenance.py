@@ -136,6 +136,49 @@ class CatalogMaintenanceTests(unittest.TestCase):
             self.assertEqual(app["latest_release"], "v1.3.7")
             image_check.assert_called_once_with("ghcr.io/example/cinema:1.3.7", ["amd64", "arm64"])
 
+    def test_release_refresh_advances_version_pinned_catalog_links(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "dcc-catalog.json"
+            old_tag = "dcc-web-v0.1.4"
+            new_tag = "dcc-web-v0.1.5"
+            base = f"https://github.com/hattimon/DCC/tree/{old_tag}/apps/dcc-web"
+            path.write_text(
+                json.dumps(
+                    {
+                        "apps": [
+                            {
+                                "name": "DCC Web",
+                                "image": "ghcr.io/hattimon/dcc-web:0.1.4",
+                                "upstream_repo": "hattimon/DCC",
+                                "latest_release": old_tag,
+                                "source_url": base,
+                                "docs_url": f"{base}/docs",
+                                "homepage_url": base,
+                                "release_tag_pattern": r"dcc-web-v[0-9]+\.[0-9]+\.[0-9]+",
+                                "image_tag_from_release": "strip-prefix:dcc-web-v",
+                                "archs": ["amd64", "arm64"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(
+                maintenance,
+                "latest_release",
+                return_value=(new_tag, f"https://github.com/hattimon/DCC/releases/tag/{new_tag}"),
+            ), patch.object(maintenance, "registry_image_supports_architectures", return_value=True):
+                checked, changed = maintenance.update_release_metadata(path)
+
+            app = json.loads(path.read_text(encoding="utf-8"))["apps"][0]
+            new_base = base.replace(old_tag, new_tag)
+            self.assertEqual((checked, changed), (1, 1))
+            self.assertEqual(app["image"], "ghcr.io/hattimon/dcc-web:0.1.5")
+            self.assertEqual(app["latest_release"], new_tag)
+            self.assertEqual(app["source_url"], new_base)
+            self.assertEqual(app["docs_url"], f"{new_base}/docs")
+            self.assertEqual(app["homepage_url"], new_base)
+
     def test_release_metadata_stays_on_published_image_when_new_image_is_incomplete(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "dcc-catalog.json"

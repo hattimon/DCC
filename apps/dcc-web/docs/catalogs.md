@@ -14,7 +14,7 @@ Sources can be validated, inspected, refreshed, enabled/disabled and deleted. Of
 
 ### One application, one current entry
 
-DCC Web 0.1.4 merges versions using the application name, image repository (without tag/digest), and default container name. Categories never create separate applications. Stable numeric tags are compared numerically, so an old database cache or imported catalog cannot downgrade a newer bundled entry. Moving tags such as `latest` and explicit digest pins follow source precedence; their chronological order cannot be inferred from the reference. Explicit variants with distinct default container names and unrelated image repositories remain separate.
+DCC Web 0.1.5 merges versions using the application name, image repository (without tag/digest), and default container name. Categories never create separate applications. Stable numeric tags are compared numerically, so an old database cache or imported catalog cannot downgrade a newer bundled entry. Moving tags such as `latest` and explicit digest pins follow source precedence; their chronological order cannot be inferred from the reference. Explicit variants with distinct default container names and unrelated image repositories remain separate.
 
 The published JSON defines each application/variant once. CI and catalog maintenance reject duplicate definitions before publication. To release an application, update its existing entry instead of appending a version. The Web entry tracks only `dcc-web-vX.Y.Z` releases, and maintenance verifies both amd64 and arm64 images before advancing its tag. Refresh therefore never offers an image that has not been published for its declared architectures.
 

@@ -1,10 +1,10 @@
-# Instalacja DCC Web 0.1.4
+# Instalacja DCC Web 0.1.5
 
 DCC Web działa w Windows, macOS i Linux z rodziny Debian. Wymaga Docker Engine/Docker Desktop z Compose v2 albo Python 3.12 w instalacji natywnej.
 
 ## Instalator Docker Compose
 
-Pobierz i rozpakuj [archiwum źródłowe DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.4/DCC-Web-0.1.4-source.zip), otwórz terminal w katalogu DCC-Web-0.1.4 i uruchom:
+Pobierz i rozpakuj [archiwum źródłowe DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.5/DCC-Web-0.1.5-source.zip), otwórz terminal w katalogu DCC-Web-0.1.5 i uruchom:
 
     py -3.12 apps/dcc-web/install.py
 
