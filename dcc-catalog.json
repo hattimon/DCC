@@ -263,7 +263,7 @@
       "name": "DCC Web",
       "categories": ["DCC", "Administracja 🛠", "WWW 🌐"],
       "categories_en": ["DCC", "Administration 🛠", "WWW 🌐"],
-      "image": "ghcr.io/hattimon/dcc-web:0.1.1",
+      "image": "ghcr.io/hattimon/dcc-web:0.1.2",
       "category": "DCC",
       "category_en": "DCC",
       "description": "Przeglądarkowy panel DCC do zarządzania kontenerami, profilami i hostami Docker.",
@@ -273,12 +273,14 @@
       "features": [
         "Zarządzanie kontenerami, obrazami, wolumenami, sieciami i projektami Compose.",
         "Profile lokalne i zdalne, uprawnienia użytkowników oraz terminal hosta.",
+        "Wspólny folder kluczy SSH, bezpieczne przesyłanie plików i zarządzanie zaznaczonymi profilami.",
         "Wspólny katalog aplikacji DCC, wyszukiwanie i podgląd instalacji.",
         "Interfejs polski i angielski; ustawienie języka jest zapamiętywane."
       ],
       "features_en": [
         "Manage containers, images, volumes, networks and Compose projects.",
         "Local and remote profiles, user permissions and host terminals.",
+        "Shared SSH key directory, explicit file uploads and selected profile management.",
         "Shared DCC app catalog, search and installation previews.",
         "Polish and English interface with a saved language preference."
       ],
@@ -292,9 +294,9 @@
       "lightweight": false,
       "engines": ["docker"],
       "archs": ["amd64", "arm64"],
-      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web/docs",
-      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web",
+      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web/docs",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web",
       "icon_text": "◇",
       "post_install_hints": [
         "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",
