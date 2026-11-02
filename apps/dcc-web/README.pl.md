@@ -40,4 +40,4 @@ Dostęp do `/var/run/docker.sock` daje panelowi administracyjną kontrolę nad h
 
 [Instalacja](docs/installation.md) · [Bezpieczeństwo](docs/security.md) · [Profile](docs/configuration.md) · [Sklep](docs/catalogs.md) · [Funkcje i ograniczenia](docs/feature-matrix.md)
 
-Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/v1.3.11/apps/dcc-web).
+Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web).
