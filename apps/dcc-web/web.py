@@ -489,9 +489,20 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     @app.post("/api/host-terminal")
     def open_host_terminal():
         admin()
-        browser_host=urlsplit(request.host_url).hostname
+        browser_host=(urlsplit(request.host_url).hostname or "").lower()
         protected=request.is_secure or (app.config.get('SESSION_COOKIE_SECURE') and str(app.config.get('PUBLIC_ORIGIN','')).startswith('https://'))
-        if not protected and not (request.remote_addr in {'127.0.0.1','::1'} and browser_host in {'localhost','127.0.0.1','::1'}):
+        origin=urlsplit(request.headers.get('Origin',''))
+        local_http=(
+            request.scheme=='http'
+            and browser_host in {'localhost','127.0.0.1','::1'}
+            and (origin.hostname or '').lower() in {'localhost','127.0.0.1','::1'}
+            and origin.scheme=='http'
+            and origin.netloc.lower()==request.host.lower()
+        )
+        # Docker port publishing can make Flask see the bridge gateway as
+        # REMOTE_ADDR even when the browser opened the panel on loopback.
+        # Trust the validated loopback Host/Origin pair instead of that peer IP.
+        if not protected and not local_http:
             abort(403,'Host terminals require HTTPS outside the local computer')
         data=body()
         p=profile(data.get("profile"),"host.exec")

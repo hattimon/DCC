@@ -46,6 +46,8 @@ A one-use confirmation is bound to the session, operation, exact file hashes, cu
 
 All three SSH paths (Docker CLI, Docker SDK and interactive host terminals) load the same configured trusted host keys and retain Paramiko `RejectPolicy`. Missing shared keys or `known_hosts` stop connection attempts with an actionable error. This feature does not trust new host keys, run `ssh-keyscan`, widen profile permissions, or copy files from a browser-supplied host path automatically.
 
+Host terminals can be opened over HTTP only when the browser is on the same computer and uses a loopback URL (`localhost`, `127.0.0.1` or `::1`). This also works when Docker's port publishing makes the container see a bridge address for the browser. The browser-to-panel traffic stays on that computer; SSH traffic from the panel to a remote host remains encrypted and host-key verified. Accessing DCC Web from another device or over the Internet requires HTTPS, configured directly or through a trusted TLS proxy.
+
 ## Profiles, 2FA and domains
 
 See the [step-by-step guide](profiles-security.md) for encrypted backups, key deletion, the connection wizard, host folder mounting, TOTP recovery, TLS SMTP and local/public domains.
