@@ -204,14 +204,14 @@ class StoreCatalogFeatureTests(unittest.TestCase):
         entries = [item for item in payload["apps"] if item["name"] == "DCC Web"]
         self.assertEqual(len(entries), 1)
         entry = entries[0]
-        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:0.1.2")
-        self.assertEqual(entry["category"], "DCC")
+        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:0.1.3")
+        self.assertEqual(entry["category"], "Administracja 🛠")
         self.assertEqual(entry["categories"], ["DCC", "Administracja 🛠", "WWW 🌐"])
         self.assertEqual(entry["categories_en"], ["DCC", "Administration 🛠", "WWW 🌐"])
         self.assertIn("/apps/dcc-web", entry["homepage_url"])
         self.assertIn("/apps/dcc-web/docs", entry["docs_url"])
-        self.assertIn("/tree/dcc-web-v0.1.2/apps/dcc-web", entry["source_url"])
-        self.assertIn("/tree/dcc-web-v0.1.2/apps/dcc-web/docs", entry["docs_url"])
+        self.assertIn("/tree/dcc-web-v0.1.3/apps/dcc-web", entry["source_url"])
+        self.assertIn("/tree/dcc-web-v0.1.3/apps/dcc-web/docs", entry["docs_url"])
         self.assertEqual(entry["homepage_url"], entry["source_url"])
         self.assertEqual(entry["container_port"], "8789")
         self.assertIn("dcc_web_data:/data", entry["extra"])
@@ -221,8 +221,8 @@ class StoreCatalogFeatureTests(unittest.TestCase):
         self.assertIn("losowe hasło administratora", entry["notes"])
         self.assertIn("random administrator password", entry["notes_en"])
         app = dcc.image_template_from_dict(entry, dcc.DEFAULT_DEPLOYMENT_REPOSITORY)
-        self.assertEqual(app.categories_for("PL"), ["DCC", "Administracja 🛠", "WWW 🌐"])
-        self.assertEqual(app.categories_for("EN"), ["DCC", "Administration 🛠", "WWW 🌐"])
+        self.assertEqual(app.categories_for("PL"), ["Administracja 🛠", "DCC", "WWW 🌐"])
+        self.assertEqual(app.categories_for("EN"), ["Administration 🛠", "DCC", "WWW 🌐"])
 
     def test_dcc_updater_is_filterable_in_both_categories_without_duplicates(self):
         for lang, updates in (("PL", "Aktualizacje"), ("EN", "Updates")):
@@ -345,14 +345,14 @@ class StoreCatalogFeatureTests(unittest.TestCase):
                 dialog.category_combo.setCurrentText("DCC")
                 filtered_names = [item.name for item in dialog.filtered_catalog]
                 self.assertEqual(filtered_names.count(updater.name), 1)
-                self.assertEqual(filtered_names.count("DCC Web"), 1)
+                self.assertEqual(filtered_names.count("DCC Web"), 0)  # Not present in this official cache.
                 dialog.catalog_list.setCurrentRow(0)
                 dialog.on_external_catalog_refresh_finished([legacy_updater], [])
                 save_cache.assert_called_once_with([legacy_updater])
                 self.assertEqual(dialog.category_combo.currentText(), "DCC")
                 filtered_names = [item.name for item in dialog.filtered_catalog]
                 self.assertEqual(filtered_names.count(updater.name), 1)
-                self.assertEqual(filtered_names.count("DCC Web"), 1)
+                self.assertEqual(filtered_names.count("DCC Web"), 0)  # Remote membership overrides fallback.
                 for label in (dialog.app_category_label, dialog.store_category_label):
                     self.assertIn("DCC", label.text())
                     self.assertIn(dcc.TEXTS[lang]["wizard_updates_category"], label.text())

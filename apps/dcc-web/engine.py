@@ -8,7 +8,7 @@ import threading
 import time
 
 import paramiko
-from profile_ssh import configure_client
+from profile_ssh import configure_client, connection_options
 
 
 class EngineError(RuntimeError):
@@ -50,7 +50,7 @@ class DockerBackend:
             client = paramiko.SSHClient()
             configure_client(client, profile)
             try:
-                client.connect(profile["host"], port=profile.get("port", 22), username=profile["username"], password=credentials.get("password") or None, passphrase=credentials.get("passphrase") or None, key_filename=profile.get("key_path") or None, timeout=12, auth_timeout=12, banner_timeout=12)
+                client.connect(**connection_options(profile))
                 cli = profile.get('cli') or ("balena" if kind == "balena" else "docker")
                 stdin, stdout, stderr = client.exec_command(shlex.join([cli, *args]), timeout=timeout)
                 if input_data is not None:
@@ -93,7 +93,7 @@ class DockerBackend:
             profile=self.profile;credentials=profile.get("credentials",{})
             client=paramiko.SSHClient();configure_client(client,profile)
             try:
-                client.connect(profile["host"],port=profile.get("port",22),username=profile["username"],password=credentials.get("password") or None,passphrase=credentials.get("passphrase") or None,key_filename=profile.get("key_path") or None,timeout=12,auth_timeout=12,banner_timeout=12)
+                client.connect(**connection_options(profile))
                 channel=client.get_transport().open_session(timeout=12);channel.set_combine_stderr(True)
                 channel.exec_command(shlex.join([profile.get('cli') or ('balena' if profile['kind']=='balena' else 'docker'),*args]));channel.shutdown_write()
                 import codecs
@@ -151,6 +151,20 @@ class DockerBackend:
             if not entry.get('State') or entry.get('State')=='unknown':
                 text=str(entry.get('Status','')).lower()
                 entry['State']='paused' if 'paused' in text else 'running' if text.startswith('up ') else 'exited' if text.startswith('exited') else 'restarting' if text.startswith('restarting') else 'created' if text.startswith('created') else 'dead' if text.startswith('dead') else 'unknown'
+        if values:
+            # One bounded inspect request per batch; never return environment/secrets.
+            policies = {}
+            for start in range(0, len(values), 100):
+                try:
+                    items = self.json(['inspect', '--format', '{"ID":{{json .Id}},"RestartPolicy":{{json .HostConfig.RestartPolicy.Name}}}',
+                                       *[v['ID'] for v in values[start:start+100]]])
+                except (EngineError, ValueError, KeyError):
+                    continue
+                for item in items if isinstance(items, list) else [items]:
+                    if isinstance(item, dict):
+                        policies[item.get('ID')] = item.get('RestartPolicy')
+            for entry in values:
+                entry['RestartPolicy'] = policies.get(entry.get('ID'))
         return values
 
     def inspect(self, target):

@@ -10,7 +10,19 @@ Legacy `category` / `category_en` remain the primary values. Optional `categorie
 
 This example is documentation only; no fictitious extension has been added. Official DCC extensions should receive DCC plus their functional categories. A metadata/category change can be delivered by refreshing catalogs once the installed client supports those fields. Adding client behavior (for example multi-category support to an old client) requires a client update.
 
-Sources can be validated, inspected, refreshed, enabled/disabled and deleted. Official catalog removal/disable is rejected. Refresh retains cached data on network/validation errors. CLI servers refresh hourly and offer manual refresh; uploaded files are refreshed by replacing the upload. Duplicate name/image entries merge once and preserve supplementary metadata when an older cache omits it.
+Sources can be validated, inspected, refreshed, enabled/disabled and deleted. Official catalog removal/disable is rejected. Refresh retains cached data on network/validation errors. CLI servers refresh hourly and offer manual refresh; uploaded files are refreshed by replacing the upload.
+
+### One application, one current entry
+
+DCC Web 0.1.3 merges versions using the application name, image repository (without tag/digest), and default container name. Categories never create separate applications. Stable numeric tags are compared numerically, so an old database cache or imported catalog cannot downgrade a newer bundled entry. Moving tags such as `latest` and explicit digest pins follow source precedence; their chronological order cannot be inferred from the reference. Explicit variants with distinct default container names and unrelated image repositories remain separate.
+
+The published JSON defines each application/variant once. CI and catalog maintenance reject duplicate definitions before publication. To release an application, update its existing entry instead of appending a version. The Web entry tracks only `dcc-web-vX.Y.Z` releases, and maintenance verifies both amd64 and arm64 images before advancing its tag. Refresh therefore never offers an image that has not been published for its declared architectures.
+
+### Older Desktop clients
+
+The schema stays at version 1. The legacy primary category for DCC Web is Administration; additional membership is DCC and WWW. Updater keeps Updates as its primary category. Clients that read only `category` still see installable entries in those functional categories. Container Updater reads the current shared catalog independently of the Desktop store's displayed entries.
+
+Desktop binaries released before the merge fix identify applications by name **and the complete image tag**. A binary containing Web 0.1.0 can consequently retain that bundled entry alongside the current online version. No field in schema 1 instructs that binary to delete a bundled entry. Refreshing the remote JSON cannot change this behavior; an updated client is needed to eliminate it there. DCC Web's independent container update does fix its own store without changing EXE/DEB packages. Published version tags are not overwritten to disguise older builds as current ones.
 
 Installation validates host architecture, RAM minimum, published ports, name collisions and an allowlist of container options. A preview displays the exact Docker argument array and warnings for socket/privileges/persistent data/dependencies. Each warning must be acknowledged before the confirmation is consumed. The host never automatically executes a script from catalog metadata. A source-build entry has a separate reviewed-source action; review the repository and Dockerfile before authorizing it. Docker builds themselves execute Dockerfile code and must be trusted.
 

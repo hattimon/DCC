@@ -222,5 +222,49 @@ class ProfileSSHTests(unittest.TestCase):
         output = io.StringIO(); self.key.write_private_key(output, password='fixture-only-passphrase')
         self.assertEqual(inspect_file('id_encrypted', output.getvalue().encode())['kind'], 'private key')
 
+    def test_key_content_overrides_extension_and_encryption_is_reported(self):
+        for name in ('sensecap_root', 'host-key.pem', 'host.key', 'wrong.pub'):
+            self.assertEqual(inspect_file(name, self.private)['kind'], 'private key')
+        public = (self.key.get_name()+' '+self.key.get_base64()).encode()
+        self.assertEqual(inspect_file('public_without_extension', public)['kind'], 'public key')
+        output = io.StringIO(); self.key.write_private_key(output, password='fixture-passphrase')
+        self.assertTrue(inspect_file('locked.pem', output.getvalue().encode())['encrypted'])
+
+    def test_import_windows_profile_can_explicitly_match_uploaded_private_key(self):
+        root = Path(self.temp.name)/'ssh'; root.mkdir()
+        (root/'id_ed25519').write_bytes(self.private)
+        result = self.request('profiles/import', {'profiles': [{'name':'Windows import', 'mode':'ssh', 'ssh_target':'fixture@fixture.invalid', 'ssh_key_path':r'C:\Users\fixture\.ssh\id_ed25519', 'ssh_passphrase':'must-not-import'}], 'shared_keys':True})
+        self.assertEqual(result.status_code,200,result.json)
+        p = self.state.profile(result.json['added'][0],private=True)
+        self.assertEqual(p['key_path'],str(root/'id_ed25519'))
+        self.assertEqual(p['key_scope'],'shared')
+        self.assertEqual(p['credentials'],{})
+        self.assertEqual(p['permissions'],['read'])
+
+    def test_agent_is_explicit_and_does_not_require_the_imported_windows_key_path(self):
+        from profile_ssh import connection_options
+        p = self.state.profile('a'); p['ssh_auth']='agent'
+        with patch('profile_ssh.agent_status',return_value={'available':True,'keys':1}):
+            options = connection_options(p)
+        self.assertIsNone(options['key_filename'])
+        self.assertIsNone(options['passphrase'])
+        self.assertTrue(options['allow_agent'])
+        self.assertFalse(options['look_for_keys'])
+        with patch('profile_ssh.agent_status',return_value={'available':False,'keys':0}), self.assertRaisesRegex(ValueError,'agent is unavailable'):
+            connection_options(p)
+
+    def test_pkcs8_encrypted_key_requires_passphrase_and_is_parsed_in_memory(self):
+        from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, BestAvailableEncryption
+        from profile_ssh import connection_options
+        content=self.key.key.private_bytes(Encoding.PEM,PrivateFormat.PKCS8,BestAvailableEncryption(b'fixture-pass'))
+        path=Path(self.temp.name)/'key.pem';path.write_bytes(content)
+        self.assertTrue(inspect_file(path.name,content)['encrypted'])
+        p=dict(self.state.profile('a'),key_path=str(path),ssh_auth='key')
+        with self.assertRaisesRegex(ValueError,'valid passphrase'):
+            connection_options(p)
+        options=connection_options(dict(p,credentials={'passphrase':'fixture-pass'}))
+        self.assertIsNotNone(options['pkey'])
+        self.assertIsNone(options['key_filename'])
+
 if __name__ == '__main__':
     unittest.main()

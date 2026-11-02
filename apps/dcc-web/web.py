@@ -30,9 +30,9 @@ from ports import enrich_containers,inventory
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
-DEFAULT_SETTINGS = {"theme":"obsidian", "accent":"#73d2c4", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
+DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#73d2c4", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 
 
 def provision_random_admin(state):
@@ -125,12 +125,15 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
 
     @app.errorhandler(Exception)
     def error_response(error):
+        import paramiko
         if isinstance(error, HTTPException):
             code, message = error.code, error.description
         elif isinstance(error, (ValueError, KeyError, TypeError)):
             code, message = 400, str(error)[:250]
         elif isinstance(error, EngineError):
             code, message = 503, str(error)
+        elif isinstance(error, paramiko.SSHException):
+            code, message = 503, 'SSH connection failed. Check the key, passphrase or SSH agent and trusted known_hosts in Profiles.'
         else:
             code, message = 500, "The request could not be completed"
         if request.path.startswith("/api/"):
@@ -262,18 +265,27 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     @app.post("/api/profiles/import")
     def import_profiles():
         admin()
-        data = body().get("profiles")
+        payload = body()
+        data = payload.get("profiles")
         if not isinstance(data,list) or len(data)>100:
             abort(400,"A profiles array is required")
-        added = []
+        added, prepared = [], []
+        from profile_ssh import key_name
+        files = {f['name'] for f in state.ssh.settings()['files'] if f['kind'] == 'private key'}
         for entry in data:
             if not isinstance(entry,dict):
                 abort(400)
             if "mode" in entry:
                 target = entry.get("ssh_target", "")
                 username, _, host = target.rpartition("@")
-                entry = {"name":entry["name"],"kind":"ssh" if entry.get("mode")=="ssh" else "tunnel","username":entry.get("ssh_username") or username,"host":host,"port":entry.get("ssh_port") or 22,"endpoint":entry.get("base_url",""),"key_path":entry.get("ssh_key_path",""),"permissions":["read"]}
+                entry = {"name":entry["name"],"kind":"ssh" if entry.get("mode")=="ssh" else "tunnel","username":entry.get("ssh_username") or username,"host":host.strip('[]'),"port":entry.get("ssh_port") or 22,"endpoint":entry.get("base_url",""),"key_path":entry.get("ssh_key_path",""),"permissions":["read"]}
+            if payload.get('shared_keys') is True and entry.get('kind') in {'ssh', 'balena'}:
+                filename = key_name(entry.get('key_path'))
+                if filename in files:
+                    entry = dict(entry, key_scope='shared', key_path=filename)
             value = validate_profile(entry)
+            prepared.append(value)
+        for value in prepared:
             ident = secrets.token_hex(10)
             with state.ssh.lock:
                 state.save_profile(ident,value,{})
@@ -937,11 +949,11 @@ def main():
     import threading
     def refresh_sources():
         while True:
-            time.sleep(3600)
             try:
                 app.extensions["dcc_catalogs"].refresh()
             except Exception:
                 pass
+            time.sleep(3600)
     threading.Thread(target=refresh_sources,name="dcc-catalog-refresh",daemon=True).start()
     from waitress import serve
     print(f"DCC Web {VERSION}: http://{args.host}:{args.port} (initial setup at /login)",flush=True)

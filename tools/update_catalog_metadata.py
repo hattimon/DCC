@@ -13,12 +13,15 @@ import argparse
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from dcc_catalog import validate_catalog_uniqueness, catalog_image_is_older
 
 GITHUB_API = "https://api.github.com"
 GHCR_API = "https://ghcr.io"
@@ -125,6 +128,11 @@ def image_for_release(image: str, version: str, strategy: str) -> str:
         tag = version[1:] if version.startswith("v") else version
     elif strategy == "exact":
         tag = version
+    elif strategy.startswith("strip-prefix:"):
+        prefix = strategy.split(":", 1)[1]
+        if not prefix or not version.startswith(prefix):
+            return ""
+        tag = version[len(prefix):]
     else:
         return ""
     if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag):
@@ -202,6 +210,7 @@ def registry_image_supports_architectures(image: str, architectures: list[str]) 
 def update_release_metadata(catalog_path: Path) -> tuple[int, int]:
     payload = json.loads(catalog_path.read_text(encoding="utf-8"))
     apps = payload.get("apps", [])
+    validate_catalog_uniqueness(apps)
     changed = 0
     checked = 0
     for app in apps:
@@ -227,6 +236,9 @@ def update_release_metadata(catalog_path: Path) -> tuple[int, int]:
             new_image = image_for_release(current_image, version, image_strategy)
             if not new_image:
                 print(f"WARN {repo}: cannot derive an image tag from {version}; keeping catalog entry unchanged")
+                continue
+            if catalog_image_is_older(new_image, current_image):
+                print(f"WARN {repo}: release image is older than the catalog; keeping catalog entry unchanged")
                 continue
             if new_image != current_image:
                 try:

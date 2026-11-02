@@ -80,7 +80,7 @@ class MCPService:
             version=params.get("protocolVersion")
             if version not in {"2024-11-05","2025-03-26","2025-06-18","2025-11-25"}:
                 version="2025-11-25"
-            result={"protocolVersion":version,"capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"dcc-web-readonly-preview","version":"0.1.2"},"instructions":"Read-only Preview. Writes and HTTP transport are not available."}
+            result={"protocolVersion":version,"capabilities":{"tools":{"listChanged":False}},"serverInfo":{"name":"dcc-web-readonly-preview","version":"0.1.3"},"instructions":"Read-only Preview. Writes and HTTP transport are not available."}
             self.negotiated = True
         elif method=="ping":
             result={}

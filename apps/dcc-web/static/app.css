@@ -36,9 +36,11 @@ input[type=range]{accent-color:var(--accent)}
 .container-table th,.container-table td{padding:var(--row) 8px}
 .container-table th:first-child{width:34px}
 .container-table th:nth-child(3){width:128px}
-.container-table th:nth-child(6){width:60px}
-.container-table th:nth-child(7){width:78px}
-.container-table th:nth-child(8){width:90px}
+.container-table th:nth-child(6){width:70px}
+.container-table th:nth-child(7){width:60px}
+.container-table th:nth-child(8){width:78px}
+.container-table th:nth-child(9){width:90px}
+.autostart-cell{text-align:center;color:var(--accent);font-size:18px}
 .container-table .name .text-button,.image-copy{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .container-table .secondary{white-space:normal;overflow-wrap:anywhere}
 .container-table .image-cell,.container-table .ports-cell{min-width:0;max-width:none}

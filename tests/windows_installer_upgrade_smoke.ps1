@@ -1,8 +1,8 @@
 param([Parameter(Mandatory=$true)][string]$CandidateInstaller)
 $ErrorActionPreference = 'Stop'
 
-$version = '1.3.11'
-$oldVersion = '1.3.10'
+$version = '1.3.12'
+$oldVersion = '1.3.11'
 $root = Join-Path $env:RUNNER_TEMP 'dcc-installer-upgrade-smoke'
 $appData = Join-Path $root 'Roaming'
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs\DockerControlCenter'

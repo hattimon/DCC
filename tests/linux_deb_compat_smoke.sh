@@ -14,7 +14,7 @@ apt-get update -qq
 apt-get install -y "$deb_path" desktop-file-utils xvfb xauth fonts-dejavu-core
 
 installed="$(dpkg-query -W -f='${Version} ${Architecture}' docker-control-center)"
-test "$installed" = "1.3.11 amd64"
+test "$installed" = "1.3.12 amd64"
 desktop_file=/usr/share/applications/docker-control-center.desktop
 desktop_exec="$(sed -n 's/^Exec=//p' "$desktop_file")"
 test "$desktop_exec" = /usr/bin/docker-control-center

@@ -24,6 +24,7 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check -r apps/dcc-web/requirements.txt
           python -m compileall -q apps/dcc-web
+          python -m unittest discover -s tests -p test_catalog_identity.py -v
           python -m unittest discover -s apps/dcc-web/tests -v
           node apps/dcc-web/tests/frontend_unit.mjs
       - name: Validate the multi-architecture image and socket permissions

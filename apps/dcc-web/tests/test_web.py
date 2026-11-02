@@ -153,6 +153,19 @@ class WebTests(unittest.TestCase):
         self.assertEqual(len(first['stats']),3)
         self.assertEqual(len(second['history']),2)
 
+    def test_container_listing_reads_restart_policies_in_one_safe_batch(self):
+        backend = DockerBackend({'kind':'local'})
+        entries = [{'ID':'one','Status':'Up 1 hour'}, {'ID':'two','Status':'Exited'}, {'ID':'three','Status':'Up'}]
+        with patch.object(backend, 'json', side_effect=[entries,[{'ID':'one','RestartPolicy':'unless-stopped'},
+                                                               {'ID':'two','RestartPolicy':'no'},
+                                                               {'ID':'three','RestartPolicy':'on-failure'}]]) as request:
+            values = backend.containers()
+        self.assertEqual([v['RestartPolicy'] for v in values], ['unless-stopped','no','on-failure'])
+        self.assertEqual(request.call_count,2)
+        self.assertIn('HostConfig.RestartPolicy.Name',request.call_args.args[0][2])
+        with patch.object(backend,'json',side_effect=[entries,EngineError('removed during inspect')]):
+            self.assertTrue(all(v['RestartPolicy'] is None for v in backend.containers()))
+
     def test_container_mutations_require_single_use_bound_confirmation(self):
         self.assertEqual(self.request('containers/redis/stop',{}).status_code,409)
         nonce=self.confirmation('container.stop','redis')
@@ -209,8 +222,33 @@ class WebTests(unittest.TestCase):
         self.assertEqual(len(apps), 1)
         self.assertEqual(apps[0]['image'], current['image'])
         self.assertEqual(apps[0]['id'], current['id'])
-        self.assertEqual(apps[0]['category_labels'], ['DCC', 'Administracja', 'WWW'])
+        self.assertEqual(apps[0]['category_labels'], ['Administracja', 'DCC', 'WWW'])
         self.assertEqual(self.client.get('/api/catalog?q=dcc-web:0.1.0').json['apps'], [])
+
+    def test_stale_sources_and_duplicate_versions_leave_one_latest_web_in_every_category(self):
+        catalogs = self.app.extensions['dcc_catalogs']
+        current = next(app for app in catalogs.all() if app['name'] == 'DCC Web')
+        stale = dict(current, image='ghcr.io/hattimon/dcc-web:0.1.1')
+        # Existing database from an older image, plus an imported old catalog.
+        self.state.execute("UPDATE sources SET cache=? WHERE id='official'", (json.dumps([stale]),))
+        self.request('catalog/sources', {'source': 'legacy.json', 'contents': {'apps': [stale, current, stale]}})
+        for category in ('all', 'DCC', 'Administracja', 'WWW'):
+            response = self.client.get('/api/catalog', query_string={'q': 'DCC Web', 'category': category})
+            self.assertEqual([app['image'] for app in response.json['apps']], [current['image']], category)
+        self.assertEqual(self.client.get('/api/catalog?q=dcc-web:0.1.1').json['apps'], [])
+        with patch('catalogs.fetch_public', side_effect=OSError('offline')):
+            catalogs.refresh()
+        self.assertEqual([a['image'] for a in catalogs.all() if a['name'] == 'DCC Web'], [current['image']])
+
+    def test_refreshed_official_catalog_controls_membership_not_bundled_apps(self):
+        catalogs = self.app.extensions['dcc_catalogs']
+        new = {'name': 'New remote app', 'image': 'example/new:1', 'category': 'WWW'}
+        with patch.object(catalogs, 'download', return_value=[new]):
+            catalogs.refresh('official')
+        self.assertEqual([a['name'] for a in catalogs.all()], ['New remote app'])
+        with patch.object(catalogs, 'download', side_effect=ValueError('offline')):
+            catalogs.refresh('official')
+        self.assertEqual([a['name'] for a in catalogs.all()], ['New remote app'])
 
     def test_legacy_override_keeps_dcc_membership(self):
         current=next(v for v in self.app.extensions['dcc_catalogs'].all() if v['name']=='DCC Container Updater')
@@ -311,6 +349,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn('not-for-browser',response.get_data(as_text=True))
 
     def test_settings_five_themes_audio_clamps_and_persistence(self):
+        self.assertEqual(self.client.get('/api/settings').json['theme'], 'ocean')
         self.assertTrue(DEFAULT_SETTINGS['audio']['enabled'])
         self.assertTrue(self.client.get('/api/settings').json['audio']['enabled'])
         for theme in ('obsidian','violet','ocean','arctic','emerald'):

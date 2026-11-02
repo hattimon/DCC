@@ -1,6 +1,25 @@
 // Only authored UI strings/template fragments are translated. Interpolated Docker data is preserved.
 let language='EN';
 const pairs=`
+Agent musi być dostępny dla serwera DCC Web. Udostępnienie socketu pozwala panelowi używać kluczy załadowanych do agenta. Nie jest przekazywany dalej na zdalny host.|The agent must be accessible to the DCC Web server. Sharing its socket lets the panel authenticate with keys loaded into the agent. The agent is not forwarded to remote hosts.
+Agent SSH — konfiguracja|SSH agent setup
+
+Autostart|Autostart
+Klucz prywatny|Private key
+Klucz publiczny|Public key
+Zaufane hosty|Trusted hosts
+Nieobsługiwany plik|Unsupported file
+Wymaga passphrase|Passphrase required
+Dostępny|Available
+Niedostępny lub brak kluczy|Unavailable or no keys
+Wybierz folder SSH|Select SSH folder
+Nie znaleziono kluczy SSH|No SSH keys found
+Dopasuj klucze już wgrane do wspólnego folderu|Match keys already uploaded to the shared directory
+Uwierzytelnianie SSH|SSH authentication
+Automatycznie|Automatic
+Klucz / hasło profilu|Profile key / password
+Agent SSH|SSH agent
+
 Postęp instalacji|Installation progress
 Instalacja trwa…|Installation in progress…
 Sprawdzanie konfiguracji|Checking configuration
@@ -548,7 +567,7 @@ Po imporcie wybierz profile SSH i użyj wspólnego folderu. Wgraj klucze oraz za
 Klucz SSH — pełna ścieżka lub nazwa pliku we wspólnym folderze|SSH key — full path or filename in the shared directory
 known_hosts — indywidualna ścieżka (opcjonalnie)|known_hosts — individual path (optional)
 `;
-const messages=Object.fromEntries(pairs.trim().split('\n').map(line=>line.split('|')));
+const messages=Object.fromEntries(pairs.trim().split('\n').filter(line=>line.includes('|')).map(line=>line.split('|')));
 const reverse=Object.fromEntries(Object.entries(messages).filter(([a,b])=>a!==b).map(([a,b])=>[b,a]));
 const errorPL={
 "Use a simple SSH filename without directories":"Podaj prostą nazwę pliku SSH bez katalogów.",

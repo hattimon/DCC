@@ -15,6 +15,16 @@ from updater import UpdateService, compare_versions, friendly_registry_error, im
 
 
 class ImageReferenceTests(unittest.TestCase):
+    def test_official_web_catalog_updates_older_installs_without_desktop_store_state(self):
+        apps = json.loads((Path(__file__).resolve().parents[3] / 'dcc-catalog.json').read_text(encoding='utf-8'))['apps']
+        target = next(app['image'] for app in apps if app['name'] == 'DCC Web')
+        service = UpdateService.__new__(UpdateService)
+        for version in ('0.1.0', '0.1.1', '0.1.2'):
+            candidate = service._catalog_candidate('ghcr.io/hattimon/dcc-web:' + version, apps)
+            self.assertTrue(candidate.available)
+            self.assertEqual(candidate.target_image, target)
+        self.assertIsNone(service._catalog_candidate(target, apps))
+
     def test_parses_registry_ports_tags_and_digests(self):
         self.assertEqual(image_reference("registry.example:5000/team/app:1.2.3"), ("registry.example:5000/team/app", "1.2.3"))
         self.assertEqual(image_reference("ghcr.io/team/app@sha256:abcdef"), ("ghcr.io/team/app", "latest"))

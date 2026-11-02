@@ -1,4 +1,4 @@
-# Install DCC Web 0.1.2
+# Install DCC Web 0.1.3
 
 DCC Web runs on Windows, macOS and Debian-family Linux. Choose the Docker Compose installer or run the service directly with Python. The App Store installer in DCC Desktop remains available as well.
 
@@ -6,8 +6,8 @@ DCC Web runs on Windows, macOS and Debian-family Linux. Choose the Docker Compos
 
 Requirements: Docker Engine or Docker Desktop with Docker Compose v2, and Python 3.12 for the small port-scanning installer.
 
-1. Download and extract [DCC-Web-0.1.2-source.zip](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.2/DCC-Web-0.1.2-source.zip).
-2. Open a terminal in the extracted `DCC-Web-0.1.2` directory.
+1. Download and extract [DCC-Web-0.1.3-source.zip](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.3/DCC-Web-0.1.3-source.zip).
+2. Open a terminal in the extracted `DCC-Web-0.1.3` directory.
 3. Run the installer:
 
    ```powershell
@@ -50,7 +50,7 @@ The Compose installer is local-only by default. Do not expose the Docker adminis
 
 ---
 
-# Instalacja DCC Web 0.1.2
+# Instalacja DCC Web 0.1.3
 
 DCC Web działa w systemach Windows, macOS i Linux z rodziny Debian. Wybierz instalator Docker Compose albo uruchom panel bezpośrednio przez Python. Aplikację można też instalować ze Sklepu DCC Desktop.
 
@@ -58,8 +58,8 @@ DCC Web działa w systemach Windows, macOS i Linux z rodziny Debian. Wybierz ins
 
 Wymagania: Docker Engine lub Docker Desktop z Docker Compose v2 oraz Python 3.12 do skanowania portów.
 
-1. Pobierz i rozpakuj [DCC-Web-0.1.2-source.zip](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.2/DCC-Web-0.1.2-source.zip).
-2. Otwórz terminal w rozpakowanym katalogu `DCC-Web-0.1.2`.
+1. Pobierz i rozpakuj [DCC-Web-0.1.3-source.zip](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.3/DCC-Web-0.1.3-source.zip).
+2. Otwórz terminal w rozpakowanym katalogu `DCC-Web-0.1.3`.
 3. Uruchom instalator:
 
    ```powershell

@@ -48,14 +48,65 @@ def configure_client(client, profile):
     if profile.get("key_scope") == "shared":
         if not known or not Path(known).is_file():
             raise ValueError("Copy a trusted known_hosts file into the shared SSH directory first")
-        if profile.get("key_path") and not Path(profile["key_path"]).is_file():
+        if profile.get('ssh_auth') != 'agent' and profile.get("key_path") and not Path(profile["key_path"]).is_file():
             raise ValueError("The SSH key is missing from the shared directory; upload it in Profiles")
         reject_symlinks(Path(known))
         if profile.get("key_path"):
             reject_symlinks(Path(profile["key_path"]))
     if known:
+        if not Path(known).is_file():
+            raise ValueError('The trusted known_hosts file is missing on the Web server; upload it in Profiles.')
         client.load_system_host_keys(str(known))
     client.set_missing_host_key_policy(paramiko.RejectPolicy())
+
+
+def agent_status():
+    try:
+        agent = paramiko.Agent()
+        try:
+            count = len(agent.get_keys())
+            return {'available': count > 0, 'keys': count}
+        finally:
+            agent.close()
+    except Exception:
+        return {'available': False, 'keys': 0}
+
+
+def connection_options(profile):
+    mode = profile.get('ssh_auth', 'auto')
+    secret = profile.get('credentials', {})
+    key = profile.get('key_path') or None
+    if mode == 'agent':
+        if not agent_status()['available']:
+            raise ValueError('SSH agent is unavailable or empty inside DCC Web. Mount its socket, set SSH_AUTH_SOCK and load the key with ssh-add on the host.')
+        key = None
+    elif key and not Path(key).is_file():
+        raise ValueError('SSH key path is not available on the Web server. Upload the key in Profiles and select the shared folder, or choose SSH agent.')
+    options = dict(hostname=profile['host'], port=profile.get('port', 22), username=profile['username'],
+                key_filename=key, password=None if mode == 'agent' else secret.get('password') or None,
+                passphrase=None if mode == 'agent' else secret.get('passphrase') or None,
+                allow_agent=mode in {'auto', 'agent'}, look_for_keys=mode == 'auto',
+                timeout=12, auth_timeout=12, banner_timeout=12)
+    if key and Path(key).stat().st_size <= MAX_FILE:
+        text = Path(key).read_text(encoding='utf-8-sig').lstrip()
+        if text.startswith(('-----BEGIN PRIVATE KEY-----', '-----BEGIN ENCRYPTED PRIVATE KEY-----')):
+            from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PrivateFormat, NoEncryption
+            password = secret.get('passphrase')
+            try:
+                raw = load_pem_private_key(text.encode(), password=password.encode() if password else None)
+                converted = raw.private_bytes(Encoding.PEM, PrivateFormat.OpenSSH, NoEncryption()).decode()
+                for cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+                    try:
+                        options['pkey'] = cls.from_private_key(io.StringIO(converted))
+                        options['key_filename'] = None
+                        break
+                    except paramiko.SSHException:
+                        continue
+                if 'pkey' not in options:
+                    raise ValueError()
+            except (TypeError, ValueError):
+                raise ValueError('The SSH key needs a valid passphrase or a supported key format; configure it in Profiles or use SSH agent.') from None
+    return options
 
 
 def inspect_file(name, content):
@@ -83,7 +134,7 @@ def inspect_file(name, content):
         if not count:
             raise ValueError("known_hosts must contain at least one verified host key")
         kind = "known_hosts"
-    elif name.endswith(".pub"):
+    elif re.match(r'^(?:ssh-|ecdsa-|sk-)', text.strip()):
         try:
             parts = text.strip().split()
             paramiko.PKey.from_type_string(parts[0], base64.b64decode(parts[1], validate=True))
@@ -91,9 +142,11 @@ def inspect_file(name, content):
             raise ValueError("Invalid SSH public key") from None
         kind = "public key"
     else:
-        if not text.startswith(("-----BEGIN OPENSSH PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN EC PRIVATE KEY-----")):
+        text = text.lstrip()
+        if not text.startswith(("-----BEGIN OPENSSH PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN EC PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----", "-----BEGIN ENCRYPTED PRIVATE KEY-----")):
             raise ValueError("Only SSH private keys, public keys and known_hosts can be uploaded")
         accepted = False
+        encrypted = False
         for cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
             try:
                 cls.from_private_key(io.StringIO(text))
@@ -101,13 +154,23 @@ def inspect_file(name, content):
                 break
             except paramiko.PasswordRequiredException:
                 accepted = True
+                encrypted = True
                 break
             except Exception:
                 continue
+        if not accepted and text.startswith(('-----BEGIN PRIVATE KEY-----', '-----BEGIN ENCRYPTED PRIVATE KEY-----')):
+            from cryptography.hazmat.primitives.serialization import load_pem_private_key
+            try:
+                load_pem_private_key(text.encode(), password=None)
+                accepted = True
+            except TypeError:
+                accepted = encrypted = True
+            except ValueError:
+                pass
         if not accepted:
             raise ValueError("Invalid or unsupported SSH private key")
         kind = "private key"
-    return {"name": name, "size": len(content), "kind": kind, "sha256": hashlib.sha256(content).hexdigest(), "fingerprints": sorted(set(fingerprints))}
+    return {"name": name, "size": len(content), "kind": kind, "encrypted": encrypted if kind == 'private key' else False, "sha256": hashlib.sha256(content).hexdigest(), "fingerprints": sorted(set(fingerprints))}
 
 
 class ProfileSSH:
@@ -140,8 +203,14 @@ class ProfileSSH:
                 if len(files) >= 100:
                     break
                 if path.is_file() and not path.is_symlink():
-                    files.append({"name": path.name, "size": path.stat().st_size})
-        return {"directory": str(root), "managed_directory": str(self.managed), "uploads_allowed": root == self.managed, "files": files}
+                    item = {"name": path.name, "size": path.stat().st_size, 'kind': 'unsupported', 'encrypted': False}
+                    if item['size'] <= MAX_FILE:
+                        try:
+                            item.update(inspect_file(path.name, path.read_bytes()))
+                        except (OSError, ValueError):
+                            pass
+                    files.append(item)
+        return {"directory": str(root), "managed_directory": str(self.managed), "uploads_allowed": root == self.managed, "files": files, 'agent': agent_status()}
 
     def resolve(self, profile):
         if profile.get("kind") in {"ssh", "balena"} and profile.get("key_scope") == "shared":

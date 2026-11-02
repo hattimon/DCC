@@ -17,6 +17,33 @@ def catalog_application_key(name, image, default_name=""):
     return name, image_repository(image).strip().casefold(), target
 
 
+def catalog_image_is_older(candidate, current):
+    """Compare stable numeric tags only; moving tags/digests follow source priority."""
+    if image_repository(candidate).casefold() != image_repository(current).casefold():
+        return False
+    versions = []
+    for image in (candidate, current):
+        value = str(image or '').strip()
+        tag = value[len(image_repository(value)):]
+        match = re.fullmatch(r":v?(\d+(?:\.\d+)*)", tag)
+        if not match:
+            return False
+        versions.append(tuple(int(part) for part in match[1].split('.')))
+    width = max(map(len, versions))
+    candidate_version, current_version = [v + (0,) * (width - len(v)) for v in versions]
+    return candidate_version < current_version
+
+
+def validate_catalog_uniqueness(apps):
+    """A published catalog defines each application/explicit variant once."""
+    seen = {}
+    for app in apps:
+        key = catalog_application_key(app.get('name'), app.get('image'), app.get('default_name') or app.get('container_name'))
+        if key in seen:
+            raise ValueError(f"Duplicate catalog application: {app.get('name')} ({seen[key]} / {app.get('image')}); update the existing entry instead of adding a version")
+        seen[key] = app.get('image')
+
+
 def localized_categories(category, category_en="", categories=None, categories_en=None, lang="PL"):
     primary = category_en if lang == "EN" and category_en else category
     extras = categories_en if lang == "EN" and categories_en else categories

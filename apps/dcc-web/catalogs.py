@@ -11,7 +11,7 @@ import ssl
 import time
 from urllib.parse import urlsplit, urljoin
 
-from dcc_catalog import category_group, localized_categories, catalog_category_sort_key, image_repository, catalog_application_key
+from dcc_catalog import category_group, localized_categories, catalog_category_sort_key, image_repository, catalog_application_key, catalog_image_is_older
 from ports import published_ports
 
 OFFICIAL = "https://github.com/hattimon/DCC"
@@ -100,12 +100,20 @@ class Catalogs:
 
     def all(self):
         merged = {}
+        sources = self.state.rows("SELECT cache, canonical, checked FROM sources WHERE enabled=1 ORDER BY canonical DESC, rowid")
+        authoritative = any(row['canonical'] and row['checked'] > 0 for row in sources)
+        live_keys = {catalog_application_key(app['name'], app['image'], app.get('default_name') or app.get('container_name'))
+                     for row in sources for app in json.loads(row['cache'] or '[]')}
         for app in self.fallback:
-            merged[catalog_application_key(app["name"], app["image"], app.get("default_name") or app.get("container_name"))] = dict(app)
-        for row in self.state.rows("SELECT cache FROM sources WHERE enabled=1 ORDER BY canonical DESC, rowid"):
+            key = catalog_application_key(app["name"], app["image"], app.get("default_name") or app.get("container_name"))
+            if not authoritative or key in live_keys:
+                merged[key] = dict(app)
+        for row in sources:
             for app in json.loads(row["cache"] or "[]"):
                 key = catalog_application_key(app["name"], app["image"], app.get("default_name") or app.get("container_name"))
                 old = merged.get(key, {})
+                if old and catalog_image_is_older(app['image'], old['image']):
+                    old, app = app, old
                 new = dict(old, **app)
                 for field in ("categories","categories_en","store_description","store_description_en","features","features_en","icon_url","hero_image_url","gallery","build_context","build_dockerfile"):
                     if not new.get(field) and old.get(field):

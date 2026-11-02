@@ -1,8 +1,8 @@
-# DCC Web 0.1.2 — SSH profile management
+# DCC Web 0.1.3 â€” unique current catalog entries
 
-DCC Web 0.1.1 is publicly available for Linux amd64/arm64 and installs through the shared DCC App Store on Windows/Docker Desktop and Linux, including MX Linux. Version 0.1.2 adds the profile improvements below; availability is confirmed by its GitHub tag, published image and canonical catalog entry. Desktop remains v1.3.11.
+Version 0.1.3 ships the catalog merge fix that was absent from the published 0.1.2 image. Duplicate cached/bundled versions of the same application merge into one entry; older numeric versions cannot replace newer ones. DCC Web keeps Administration as its legacy primary category and adds DCC and WWW for clients supporting multiple categories. Desktop v1.3.12 includes the same catalog merge fix in EXE and DEB installers.
 
-## Changes in 0.1.2
+## Changes retained from 0.1.2
 
 - Administrator-managed private SSH folder, browser-selected uploads, metadata/fingerprint previews and separate consent. External mounted folders remain read-only through the upload API.
 - Select individual/all profiles, apply the shared folder only to selected SSH/Balena connections and retain individual paths elsewhere.

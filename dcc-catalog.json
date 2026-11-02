@@ -261,11 +261,19 @@
     },
     {
       "name": "DCC Web",
-      "categories": ["DCC", "Administracja 🛠", "WWW 🌐"],
-      "categories_en": ["DCC", "Administration 🛠", "WWW 🌐"],
-      "image": "ghcr.io/hattimon/dcc-web:0.1.2",
-      "category": "DCC",
-      "category_en": "DCC",
+      "categories": [
+        "DCC",
+        "Administracja 🛠",
+        "WWW 🌐"
+      ],
+      "categories_en": [
+        "DCC",
+        "Administration 🛠",
+        "WWW 🌐"
+      ],
+      "image": "ghcr.io/hattimon/dcc-web:0.1.3",
+      "category": "Administracja 🛠",
+      "category_en": "Administration 🛠",
       "description": "Przeglądarkowy panel DCC do zarządzania kontenerami, profilami i hostami Docker.",
       "description_en": "DCC browser workspace for managing Docker containers, profiles and hosts.",
       "store_description": "Samodzielny panel WWW do pracy z lokalnymi i zdalnymi profilami Docker. Zawiera zarządzanie kontenerami, terminal hosta, logi, zasoby, Compose i wspólny sklep aplikacji.",
@@ -292,11 +300,16 @@
       "notes": "Socket Docker zapewnia panelowi administracyjny dostęp do hosta. Proces serwera działa jako UID 10001 i otrzymuje tylko grupę socketu; SETUID/SETGID służą wyłącznie do obniżenia uprawnień. Dane profili i ustawień są przechowywane w wolumenie dcc_web_data. Przy pierwszym uruchomieniu generowane jest silne, losowe hasło administratora; nazwa użytkownika to admin, a hasło pojawi się w wyniku instalacji i logach kontenera. Zmień je po pierwszym logowaniu. Dostęp HTTP ogranicz do zaufanej sieci; przed udostępnieniem spoza LAN skonfiguruj HTTPS, VPN lub zaufany reverse proxy.",
       "notes_en": "The Docker socket gives the panel administrative access to the host. The server runs as UID 10001 and receives only the socket group; SETUID/SETGID are used only to drop privileges. Profile and settings data persist in the dcc_web_data volume. On first start, DCC Web generates a strong random administrator password; the username is admin and the password appears in the installation result and container logs. Change it after signing in. Restrict HTTP to a trusted network; configure HTTPS, a VPN or a trusted reverse proxy before exposing it beyond your LAN.",
       "lightweight": false,
-      "engines": ["docker"],
-      "archs": ["amd64", "arm64"],
-      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web/docs",
-      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.2/apps/dcc-web",
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "amd64",
+        "arm64"
+      ],
+      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.3/apps/dcc-web",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.3/apps/dcc-web/docs",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.3/apps/dcc-web",
       "icon_text": "◇",
       "post_install_hints": [
         "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",
@@ -309,7 +322,12 @@
         "Sign in as admin; find the strong random password in the installation result or container logs. Change it after your first sign-in.",
         "The panel has administrative Docker access. Keep it on a trusted network and configure HTTPS before public access.",
         "The dcc_web_data volume retains profiles and settings."
-      ]
+      ],
+      "upstream_repo": "hattimon/DCC",
+      "latest_release": "dcc-web-v0.1.3",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.1.3",
+      "release_tag_pattern": "dcc-web-v[0-9]+\\.[0-9]+\\.[0-9]+",
+      "image_tag_from_release": "strip-prefix:dcc-web-v"
     },
     {
       "name": "Beszel Hub",
