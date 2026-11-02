@@ -52,7 +52,7 @@ Invoke-DccInstaller $CandidateInstaller @('/DCCUPDATE=1','/S')
 $mainExe = Join-Path $installDir 'DockerControlCenter.exe'
 if (-not (Test-Path $mainExe)) { throw 'The upgraded DCC executable is missing.' }
 $installedVersion = (Get-Item $mainExe).VersionInfo.ProductVersion
-if ($installedVersion -notmatch '^1\.3\.11(\.|$)') { throw "Unexpected installed version: $installedVersion" }
+if ($installedVersion -notmatch ('^' + [Regex]::Escape($version) + '(\.|$)')) { throw "Unexpected installed version: $installedVersion" }
 if ((Get-FileHash -Algorithm SHA256 $profileFile).Hash -ne $profilesHash) { throw 'The connection profiles changed during upgrade.' }
 if ((Get-FileHash -Algorithm SHA256 $secretFile).Hash -ne $secretsHash) { throw 'The saved secrets changed during upgrade.' }
 if ((Get-ItemProperty -Path $settingsKey -Name 'UpgradeSmokeSentinel').UpgradeSmokeSentinel -ne 'preserve') { throw 'The QSettings registry data changed during upgrade.' }
