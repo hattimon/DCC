@@ -1,7 +1,7 @@
 {
   "name": "Docker Control Center official application catalog",
   "schema_version": 1,
-  "updated": "2026-10-23",
+  "updated": "2026-11-01",
   "repository": "https://github.com/hattimon/DCC",
   "apps": [
     {
@@ -180,6 +180,8 @@
     },
     {
       "name": "DCC Container Updater",
+      "categories": ["DCC"],
+      "categories_en": ["DCC"],
       "image": "ghcr.io/hattimon/dcc-container-updater:latest",
       "category": "Aktualizacje 🔄",
       "description": "Panel aktualizacji Docker z opcjonalnym Safe Compose Manager: analiza konfiguracji, trwałe plany i blokady ryzyka danych.",
@@ -256,6 +258,56 @@
       "upstream_repo": "hattimon/DCC",
       "latest_release": "v1.3.10",
       "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/v1.3.10"
+    },
+    {
+      "name": "DCC Web",
+      "categories": ["DCC", "Administracja 🛠", "WWW 🌐"],
+      "categories_en": ["DCC", "Administration 🛠", "WWW 🌐"],
+      "image": "ghcr.io/hattimon/dcc-web:0.1.1",
+      "category": "DCC",
+      "category_en": "DCC",
+      "description": "Przeglądarkowy panel DCC do zarządzania kontenerami, profilami i hostami Docker.",
+      "description_en": "DCC browser workspace for managing Docker containers, profiles and hosts.",
+      "store_description": "Samodzielny panel WWW do pracy z lokalnymi i zdalnymi profilami Docker. Zawiera zarządzanie kontenerami, terminal hosta, logi, zasoby, Compose i wspólny sklep aplikacji.",
+      "store_description_en": "An independent browser panel for local and remote Docker profiles. Includes container management, host terminals, logs, resources, Compose and the shared app store.",
+      "features": [
+        "Zarządzanie kontenerami, obrazami, wolumenami, sieciami i projektami Compose.",
+        "Profile lokalne i zdalne, uprawnienia użytkowników oraz terminal hosta.",
+        "Wspólny katalog aplikacji DCC, wyszukiwanie i podgląd instalacji.",
+        "Interfejs polski i angielski; ustawienie języka jest zapamiętywane."
+      ],
+      "features_en": [
+        "Manage containers, images, volumes, networks and Compose projects.",
+        "Local and remote profiles, user permissions and host terminals.",
+        "Shared DCC app catalog, search and installation previews.",
+        "Polish and English interface with a saved language preference."
+      ],
+      "default_name": "dcc-web",
+      "container_port": "8789",
+      "host_port": "8789",
+      "extra": "-v /var/run/docker.sock:/var/run/docker.sock -v dcc_web_data:/data --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true --read-only --tmpfs /tmp:size=64m,mode=1777 --pids-limit=128 --memory=512m --restart unless-stopped",
+      "command": "",
+      "notes": "Socket Docker zapewnia panelowi administracyjny dostęp do hosta. Proces serwera działa jako UID 10001 i otrzymuje tylko grupę socketu; SETUID/SETGID służą wyłącznie do obniżenia uprawnień. Dane profili i ustawień są przechowywane w wolumenie dcc_web_data. Przy pierwszym uruchomieniu generowane jest silne, losowe hasło administratora; nazwa użytkownika to admin, a hasło pojawi się w wyniku instalacji i logach kontenera. Zmień je po pierwszym logowaniu. Dostęp HTTP ogranicz do zaufanej sieci; przed udostępnieniem spoza LAN skonfiguruj HTTPS, VPN lub zaufany reverse proxy.",
+      "notes_en": "The Docker socket gives the panel administrative access to the host. The server runs as UID 10001 and receives only the socket group; SETUID/SETGID are used only to drop privileges. Profile and settings data persist in the dcc_web_data volume. On first start, DCC Web generates a strong random administrator password; the username is admin and the password appears in the installation result and container logs. Change it after signing in. Restrict HTTP to a trusted network; configure HTTPS, a VPN or a trusted reverse proxy before exposing it beyond your LAN.",
+      "lightweight": false,
+      "engines": ["docker"],
+      "archs": ["amd64", "arm64"],
+      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web/docs",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web",
+      "icon_text": "◇",
+      "post_install_hints": [
+        "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",
+        "Zaloguj się jako admin; silne losowe hasło znajdziesz w wyniku instalacji lub logach kontenera. Zmień je po pierwszym logowaniu.",
+        "Panel ma administracyjny dostęp do Dockera. Ogranicz go do zaufanej sieci i skonfiguruj HTTPS przed publicznym dostępem.",
+        "Profile i ustawienia zachowuje wolumen dcc_web_data."
+      ],
+      "post_install_hints_en": [
+        "Open http://<active-host-address>:<port>/login; if port 8789 is busy, use the port selected by DCC.",
+        "Sign in as admin; find the strong random password in the installation result or container logs. Change it after your first sign-in.",
+        "The panel has administrative Docker access. Keep it on a trusted network and configure HTTPS before public access.",
+        "The dcc_web_data volume retains profiles and settings."
+      ]
     },
     {
       "name": "Beszel Hub",
@@ -1140,20 +1192,30 @@
       "default_name": "home-assistant",
       "container_port": "8123",
       "host_port": "8123",
-      "extra": "--network=host",
+      "extra": "-v homeassistant_config:/config --restart unless-stopped",
       "command": "",
-      "notes": "Wymaga trybu host. Zalecany mocniejszy sprzet lub Raspberry Pi 4+.",
+      "notes": "Domyślnie używa mapowania portu i trwałego wolumenu /config. Przy pierwszym wejściu utwórz konto właściciela. Dla wykrywania urządzeń przez multicast na Linux można świadomie wybrać sieć hosta; wtedy portów nie mapuje się. Zalecany mocniejszy sprzęt lub Raspberry Pi 4+.",
       "lightweight": false,
       "category_en": "Smart Home 🏠 › IoT",
       "description_en": "Smart home automation hub.",
-      "notes_en": "Requires host network mode. Recommended on stronger hardware or Raspberry Pi 4+.",
+      "notes_en": "Uses a published port and persistent /config volume by default. Create the owner account on first access. On Linux, host networking can be explicitly selected for multicast device discovery; published port remapping does not apply in that mode. Recommended on stronger hardware or Raspberry Pi 4+.",
       "engines": null,
       "archs": null,
       "source_url": "",
-      "docs_url": "",
-      "homepage_url": "",
+      "docs_url": "https://www.home-assistant.io/installation/linux/",
+      "homepage_url": "https://www.home-assistant.io/",
       "icon_text": "🏠",
-      "icon_url": "catalog/media/icons/home-assistant.png"
+      "icon_url": "catalog/media/icons/home-assistant.png",
+      "post_install_hints": [
+        "Otwórz panel na porcie hosta wybranym podczas instalacji.",
+        "Przy pierwszym wejściu utwórz własne konto; Home Assistant nie ma domyślnego loginu i hasła.",
+        "Konfiguracja jest przechowywana w wolumenie homeassistant_config."
+      ],
+      "post_install_hints_en": [
+        "Open the panel at the host port selected during installation.",
+        "Create your own account on first access; Home Assistant has no default username or password.",
+        "Configuration is retained in the homeassistant_config volume."
+      ]
     },
     {
       "name": "Grafana",

@@ -112,10 +112,10 @@ class Release139Tests(unittest.TestCase):
         self.assertEqual(dll_path_changes, [None, str(bundle)])
 
     def test_release_version_metadata(self):
-        self.assertEqual(dcc.APP_VERSION, "1.3.10")
+        self.assertEqual(dcc.APP_VERSION, "1.3.11")
         for path in (ROOT / "DockerControlCenter.nsi", ROOT / "upstream_assets" / "DockerControlCenter.nsi"):
             text = path.read_text(encoding="utf-8-sig")
-            self.assertIn('!define APP_VERSION "1.3.10"', text)
+            self.assertIn('!define APP_VERSION "1.3.11"', text)
 
     def test_update_path_138_to_139_is_available(self):
         class VersionHarness:
@@ -210,8 +210,8 @@ class Release139Tests(unittest.TestCase):
         repo_version = (ROOT / "packaging" / "windows" / "RepoBuilder.version.txt").read_text(encoding="utf-8")
         self.assertIn("DCC - Docker Control Center", main_version)
         self.assertIn("DCC Repo Builder", repo_version)
-        self.assertIn("1.3.10", main_version)
-        self.assertIn("1.3.10", repo_version)
+        self.assertIn("1.3.11", main_version)
+        self.assertIn("1.3.11", repo_version)
 
     def test_stage_c_start_menu_icons_registration_and_running_process_flow(self):
         for path in (ROOT / "DockerControlCenter.nsi", ROOT / "upstream_assets" / "DockerControlCenter.nsi"):

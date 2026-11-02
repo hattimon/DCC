@@ -50,6 +50,44 @@ class CatalogRepositoryTests(unittest.TestCase):
         parsed = [dcc.image_template_from_dict(item, dcc.DEFAULT_DEPLOYMENT_REPOSITORY) for item in payload["apps"]]
         self.assertTrue(all(item is not None for item in parsed))
 
+    def test_multiple_categories_accept_plural_only_and_optional_translations(self):
+        template = dcc.image_template_from_dict(
+            {
+                "name": "Demo extension",
+                "image": "example/demo:latest",
+                "categories": [" DCC ", "AI / UI", "DCC", "", None],
+                "categories_en": ["DCC", "AI / UI"],
+            }
+        )
+        self.assertEqual(template.categories_for("PL"), ["DCC", "AI / UI"])
+        self.assertEqual(template.categories_for("EN"), ["DCC", "AI / UI"])
+        fallback = dcc.image_template_from_dict(
+            {"name": "Demo", "image": "example/demo:latest", "category": "AI", "categories": ["DCC"]}
+        )
+        self.assertEqual(fallback.categories_for("EN"), ["AI", "DCC"])
+        malformed = dcc.image_template_from_dict(
+            {"name": "Legacy", "image": "example/legacy:latest", "category": "AI", "categories": "DCC"}
+        )
+        self.assertEqual(malformed.categories_for("PL"), ["AI"])
+
+    def test_catalog_cache_roundtrip_preserves_multiple_and_legacy_categories(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_file = Path(temp_dir) / "catalog.json"
+            legacy_data = {"name": "Legacy", "image": "example/legacy:latest", "category": "AI"}
+            cache_file.write_text(json.dumps({"apps": [legacy_data]}), encoding="utf-8")
+            with patch.object(dcc, "DEPLOYMENT_CATALOG_CACHE_FILE", cache_file):
+                legacy = dcc.load_cached_deployment_catalog()[0]
+                self.assertEqual(legacy.categories_for("EN"), ["AI"])
+                updater = next(
+                    item for item in dcc.load_bundled_deployment_catalog() if item.name == "DCC Container Updater"
+                )
+                dcc.save_cached_deployment_catalog([legacy, updater])
+                loaded_legacy, loaded_updater = dcc.load_cached_deployment_catalog()
+                self.assertEqual(loaded_legacy.categories_for("PL"), ["AI"])
+                self.assertEqual(loaded_updater.categories_for("PL"), ["Aktualizacje 🔄", "DCC"])
+                self.assertEqual(loaded_updater.categories_for("EN"), ["Updates 🔄", "DCC"])
+                self.assertEqual(loaded_updater.repository_source, dcc.DEFAULT_DEPLOYMENT_REPOSITORY)
+
     def test_extended_catalog_metadata_is_parsed(self):
         parsed = dcc.image_template_from_dict(
             {

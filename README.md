@@ -11,23 +11,39 @@
 
 A cross-platform desktop control panel for managing Docker on Windows and Debian-family Linux, locally, through WSL/WSL2, and on remote hosts over SSH or Balena OS.
 
-### Download Latest Version
-[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.10/DockerControlCenter-Setup-1.3.10.exe)
-[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.10/DockerControlCenter_1.3.10_amd64.deb)
+### Download Latest Version — 1.3.11
 
-## What's New in v1.3.10
+[![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter-Setup-1.3.11.exe)
+[![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter_1.3.11_amd64.deb)
+[![DCC Web v0.1.1](https://img.shields.io/badge/DCC%20Web-v0.1.1-20bfc8?logo=docker&logoColor=white)](apps/dcc-web/docs/installation.md)
+
+DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker Compose or run directly with Python. Its installer checks Docker-published ports and local port availability, uses 8789 when free, and chooses another available port when necessary. See the [installation guide](apps/dcc-web/docs/installation.md).
+
+## What's New in v1.3.11
 
 ### EN
-- Fixed the Windows infrastructure terminal so it opens visibly.
-- Improved Store heading and catalog-status contrast in Day and Light themes on Windows and Linux.
-- Tightened refresh-thread cleanup and paused automatic container refresh while modal dialogs such as the Store are open.
-- Preserved the working 1.3.9 updater flow, restart behavior and Windows shortcut icon refresh.
+- Added the bold DCC Store category and multiple categories per app; Container Updater remains in Updates.
+- Added DCC Web 0.1.1 as an installable multi-architecture App Store app with a rendered GitHub product page.
+- Fixed fresh DCC Web App Store startup with a one-time random administrator password surfaced in the installation result.
+- Added a cross-platform DCC Web installer and documented automatic port selection to avoid conflicts with existing containers.
+- Preserved the Windows installer handoff and Linux package updater while publishing versioned EXE and DEB assets.
+- Improved DCC Web container controls, host terminals, installation progress and formatted in-panel documentation.
+- Fixed the Windows infrastructure terminal and improved Store contrast and refresh cleanup.
+- Reissued the Linux DEB with the missing `libpulse0` runtime dependency and verified desktop-entry startup under X11.
 
 ### PL
-- Naprawiono terminal infrastruktury Windows, aby otwierał się jako widoczne okno.
-- Poprawiono kontrast nagłówków sklepu i statusu katalogu w motywach Dzień i Jasny na Windows i Linux.
-- Poprawiono kończenie wątków odświeżania i wstrzymano auto-odświeżanie kontenerów podczas otwartych okien modalnych, takich jak Sklep.
-- Zachowano działający updater 1.3.9, restart aplikacji i odświeżanie ikon skrótów Windows.
+- Dodano pogrubioną kategorię DCC i wiele kategorii aplikacji; Container Updater nadal należy do Aktualizacji.
+- Dodano DCC Web 0.1.1 jako instalowalną aplikację sklepu dla amd64 i arm64 oraz sformatowaną stronę projektu na GitHubie.
+- Naprawiono pierwsze uruchomienie DCC Web ze sklepu; losowe hasło administratora pojawia się w wyniku instalacji.
+- Dodano instalator DCC Web dla wielu systemów; skanuje porty kontenerów i wybiera wolny port, gdy 8789 jest zajęty.
+- Zachowano przekazanie aktualizacji instalatorowi Windows i instalację pakietu Linux; wydanie zawiera wersjonowane pliki EXE i DEB.
+- Uzupełniono sterowanie kontenerami, terminale hostów, postęp instalacji i formatowaną dokumentację DCC Web.
+- Naprawiono terminal infrastruktury Windows i poprawiono kontrast sklepu oraz kończenie odświeżania.
+- Ponownie udostępniono pakiet DEB z brakującą zależnością `libpulse0`; sprawdzono uruchomienie wpisu pulpitu X11.
+
+### DCC Web
+
+[DCC Web product page / strona projektu](apps/dcc-web/README.md) · [Installation guide / instrukcja instalacji](apps/dcc-web/docs/installation.md) · [Polski opis](apps/dcc-web/README.pl.md) · [Repository](https://github.com/hattimon/DCC)
 ## What's New in v1.3.9
 
 ### EN
@@ -204,3 +220,9 @@ Projekt DCC jest udostępniany na licencji MIT.
 Third-party assets are covered by their respective licenses or ownership terms. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom właścicieli.
+
+## DCC Web 0.1.1
+
+DCC Web runs independently from Desktop. See [DCC Web](apps/dcc-web/README.md) and its [GitHub repository](https://github.com/hattimon/DCC).
+
+DCC Web includes container operations, profiles, logs, monitoring, Compose, the shared App Store, five themes, local audio, EN/PL, clickable panel endpoints, an AI configuration assistant and scoped read-only MCP Preview. Run `apps/dcc-web/start.ps1` on Windows or follow the [installation instructions](apps/dcc-web/docs/installation.md). The [feature matrix](apps/dcc-web/docs/feature-matrix.md) lists adapter restrictions and functions still specific to Desktop. The DCC Web image is published in GHCR and linked from the App Store catalog.

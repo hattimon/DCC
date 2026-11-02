@@ -19,6 +19,7 @@ import uuid
 import webbrowser
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from dcc_catalog import DCC_CATEGORY, category_group, localized_categories, catalog_category_sort_key
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -398,7 +399,7 @@ LLM_OPENAI_COMPATIBLE_BASE_URLS = {
     "xai": "https://api.x.ai/v1",
 }
 
-APP_VERSION = "1.3.10"
+APP_VERSION = "1.3.11"
 APP_VERSION_TAG = f"v{APP_VERSION}"
 GITHUB_REPO = "hattimon/DCC"
 GITHUB_REPO_URL = f"https://github.com/{GITHUB_REPO}"
@@ -725,8 +726,8 @@ TEXTS = {
         "info_app_open_repo": "Open repository",
         "info_app_open_release": "Open latest release",
         "info_app_check_updates": "Check updates",
-        "info_app_changelog_title": "Changelog (v1.3.10)",
-        "info_app_changelog": "- Fixed the Windows Infrastructure terminal so it opens visibly.\n- Improved Store heading and catalog-status contrast in Day and Light themes on Windows and Linux.\n- Improved refresh-thread cleanup and pause periodic container refresh while modal dialogs such as the Store are open.\n- Preserved the working 1.3.9 updater handoff, Windows restart behavior and shortcut icon refresh.",
+        "info_app_changelog_title": f"Changelog (v{APP_VERSION})",
+        "info_app_changelog": "- Added the bold DCC Store category and multiple category memberships.\n- Kept Container Updater in DCC and Updates; made its header compact.\n- Added the independent local DCC Web module.\n- Fixed the Windows Infrastructure terminal so it opens visibly.\n- Improved Store heading and catalog-status contrast in Day and Light themes on Windows and Linux.\n- Improved refresh-thread cleanup and pause periodic container refresh while modal dialogs such as the Store are open.\n- Preserved the working 1.3.9 updater handoff, Windows restart behavior and shortcut icon refresh.",
         "info_update_available_title": "Update available",
         "info_update_available_body": "A newer release is available: {release}.",
         "info_update_question": "Update to {release} is available. Install it now?",
@@ -1082,6 +1083,7 @@ TEXTS = {
         "wizard_store_uninstall_done": "Application container(s) removed.",
         "wizard_balena_category": "Balena OS",
         "wizard_installed_category": "Installed",
+        "wizard_updates_category": "Updates",
         "wizard_credentials_title": "Access details detected",
         "wizard_credentials_intro": "DCC found the following access details in the container startup logs. They are shown here only and are not saved by DCC:",
         "wizard_credentials_none": "Deployment completed. No login credentials were detected in the startup logs.",
@@ -1292,8 +1294,8 @@ TEXTS = {
         "info_app_open_repo": "Otwórz repozytorium",
         "info_app_open_release": "Otwórz najnowsze wydanie",
         "info_app_check_updates": "Sprawdź aktualizacje",
-        "info_app_changelog_title": "Changelog (v1.3.10)",
-        "info_app_changelog": "- Naprawiono terminal Infrastruktury na Windows — otwiera się teraz jako widoczne okno.\n- Poprawiono czytelność nagłówków Sklepu i statusu katalogu w motywach Dzień i Jasny na Windows i Linux.\n- Poprawiono kończenie wątków odświeżania i wstrzymano okresowe odświeżanie kontenerów podczas otwartych okien modalnych, w tym Sklepu.\n- Zachowano działający handoff updatera z 1.3.9, restart Windows i odświeżanie ikon skrótów.",
+        "info_app_changelog_title": f"Changelog (v{APP_VERSION})",
+        "info_app_changelog": "- Dodano pogrubioną kategorię DCC i wiele kategorii jednej aplikacji.\n- Zachowano Updatera w DCC i Aktualizacje; zmniejszono nagłówek.\n- Dodano niezależny, lokalny moduł DCC Web.\n- Naprawiono terminal Infrastruktury na Windows — otwiera się teraz jako widoczne okno.\n- Poprawiono czytelność nagłówków Sklepu i statusu katalogu w motywach Dzień i Jasny na Windows i Linux.\n- Poprawiono kończenie wątków odświeżania i wstrzymano okresowe odświeżanie kontenerów podczas otwartych okien modalnych, w tym Sklepu.\n- Zachowano działający handoff updatera z 1.3.9, restart Windows i odświeżanie ikon skrótów.",
         "info_update_available_title": "Dostępna aktualizacja",
         "info_update_available_body": "Dostępna jest nowsza wersja: {release}.",
         "info_update_question": "Dostępna jest aktualizacja do wersji {release}. Czy wykonać ja teraz?",
@@ -1650,6 +1652,7 @@ TEXTS = {
         "wizard_store_uninstall_done": "Kontenery aplikacji zostały usunięte.",
         "wizard_balena_category": "Balena OS",
         "wizard_installed_category": "Zainstalowane",
+        "wizard_updates_category": "Aktualizacje",
         "wizard_credentials_title": "Wykryto dane dostępu",
         "wizard_credentials_intro": "DCC znalazło poniższe dane dostępu w logach startowych kontenera. Są wyświetlane tylko tutaj i DCC ich nie zapisuje:",
         "wizard_credentials_none": "Wdrożenie zakończone. W logach startowych nie wykryto danych logowania.",
@@ -1964,6 +1967,11 @@ class SecretStore:
         if key in self._data:
             self._data.pop(key, None)
             self._save()
+
+
+DCC_STORE_CATEGORY = DCC_CATEGORY
+
+
 @dataclass
 class ImageTemplate:
     name: str
@@ -2012,6 +2020,8 @@ class ImageTemplate:
     credential_patterns: Optional[List[Dict[str, str]]] = None
     post_install_hints: Optional[List[str]] = None
     post_install_hints_en: Optional[List[str]] = None
+    categories: Optional[List[str]] = None
+    categories_en: Optional[List[str]] = None
 
     def supports_engine(self, engine: str) -> bool:
         engine = str(engine or "").lower().strip()
@@ -2031,6 +2041,11 @@ class ImageTemplate:
 
     def category_for(self, lang: str) -> str:
         return self.category_en if lang == "EN" and self.category_en else self.category
+
+    def categories_for(self, lang: str) -> List[str]:
+        return localized_categories(
+            self.category, self.category_en, self.categories, self.categories_en, lang
+        )
 
     def description_for(self, lang: str) -> str:
         return self.description_en if lang == "EN" and self.description_en else self.description
@@ -2086,10 +2101,18 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
                     "label_en": str(entry.get("label_en") or "").strip(),
                     "regex": regex,
                 })
+    raw_categories = raw.get("categories")
+    raw_categories_en = raw.get("categories_en")
+    categories = [
+        value.strip() for value in raw_categories if isinstance(value, str) and value.strip()
+    ] if isinstance(raw_categories, list) else []
+    categories_en = [
+        value.strip() for value in raw_categories_en if isinstance(value, str) and value.strip()
+    ] if isinstance(raw_categories_en, list) else []
     return ImageTemplate(
         name=name,
         image=image,
-        category=str(raw.get("category") or "Inne").strip() or "Inne",
+        category=str(raw.get("category") or (categories[0] if categories else "Inne")).strip() or "Inne",
         description=str(raw.get("description") or "").strip(),
         default_name=str(raw.get("default_name") or raw.get("container_name") or re.sub(r"[^a-z0-9_.-]+", "-", name.lower()).strip("-") or "app"),
         container_port=str(raw.get("container_port") or "").strip(),
@@ -2098,7 +2121,7 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
         command=str(raw.get("command") or "").strip(),
         notes=str(raw.get("notes") or "").strip(),
         lightweight=bool(raw.get("lightweight", False)),
-        category_en=str(raw.get("category_en") or "").strip(),
+        category_en=str(raw.get("category_en") or (categories_en[0] if categories_en else "")).strip(),
         description_en=str(raw.get("description_en") or "").strip(),
         notes_en=str(raw.get("notes_en") or "").strip(),
         engines=[str(item) for item in (raw.get("engines") or ["docker"]) if str(item).strip()],
@@ -2133,6 +2156,8 @@ def image_template_from_dict(raw: Dict, repository_source: str = "") -> Optional
         credential_patterns=credential_patterns,
         post_install_hints=[str(item).strip() for item in (raw.get("post_install_hints") or []) if str(item).strip()],
         post_install_hints_en=[str(item).strip() for item in (raw.get("post_install_hints_en") or []) if str(item).strip()],
+        categories=categories,
+        categories_en=categories_en,
     )
 
 
@@ -2186,44 +2211,8 @@ def container_name_from_run_args(args: List[str]) -> str:
 
 
 def parse_credentials_from_logs(log_text: str, template: Optional[ImageTemplate] = None, lang: str = "EN") -> List[tuple[str, str]]:
-    text = str(log_text or "")
-    if not text.strip():
-        return []
-    found: List[tuple[str, str]] = []
-    seen = set()
-
-    def add(label: str, value: str):
-        clean_value = str(value or "").strip().strip("'\"`.,;[]()")
-        clean_label = str(label or "Credential").strip()
-        if not clean_value or len(clean_value) > 256:
-            return
-        key = (clean_label.casefold(), clean_value)
-        if key not in seen:
-            seen.add(key)
-            found.append((clean_label, clean_value))
-
-    for rule in (template.credential_patterns if template else []) or []:
-        try:
-            pattern = str(rule.get("regex") or "")
-            label = str(rule.get("label_en") if lang == "EN" and rule.get("label_en") else rule.get("label") or "Credential")
-            for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
-                value = match.groupdict().get("value") if match.groupdict() else None
-                if value is None and match.lastindex:
-                    value = match.group(1)
-                if value:
-                    add(label, value)
-        except re.error:
-            continue
-
-    generic_patterns = [
-        ("Password" if lang == "EN" else "Hasło", r"(?:web\s+)?(?:admin\s+)?password\s*(?:is|:|=|->)\s*(?P<value>[^\s]+)"),
-        ("Username" if lang == "EN" else "Login", r"(?:user(?:name)?|login)\s*(?:is|:|=|->)\s*(?P<value>[^\s]+)"),
-        ("Token", r"(?:access\s+)?token\s*(?:is|:|=|->)\s*(?P<value>[A-Za-z0-9._~+/-]{8,})"),
-    ]
-    for label, pattern in generic_patterns:
-        for match in re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE):
-            add(label, match.group("value"))
-    return found[:8]
+    from dcc_catalog import parse_access_details
+    return parse_access_details(log_text, (template.credential_patterns if template else []) or [], lang)
 
 
 def normalize_deployment_repository_source(source: str) -> str:
@@ -2297,6 +2286,8 @@ def load_bundled_deployment_catalog() -> List[ImageTemplate]:
 
 
 STORE_METADATA_FIELDS = (
+    "categories",
+    "categories_en",
     "store_description",
     "store_description_en",
     "features",
@@ -2467,39 +2458,6 @@ def deployment_catalog_icon(template: ImageTemplate) -> QIcon:
     return QIcon(pixmap)
 
 
-def catalog_category_sort_key(category: str) -> tuple[int, str]:
-    text = str(category or "").strip()
-    normalized = text.casefold()
-    priorities = [
-        ("ai", 0),
-        ("autom", 1),
-        ("low-code", 2),
-        ("administr", 3),
-        ("monitor", 4),
-        ("narz", 5),
-        ("tools", 5),
-        ("aplikacje www", 6),
-        ("web apps", 6),
-        ("www", 7),
-        ("web /", 7),
-        ("devops", 8),
-        ("smart home", 9),
-        ("media", 10),
-        ("network", 11),
-        ("sie", 11),
-        ("bazy", 12),
-        ("databases", 12),
-        ("messaging", 13),
-        ("cache", 14),
-        ("runtime", 15),
-        ("baza /", 16),
-        ("base /", 16),
-        ("balena", 17),
-    ]
-    for prefix, priority in priorities:
-        if normalized.startswith(prefix):
-            return priority, normalized
-    return 50, normalized
 
 
 def default_image_catalog() -> List[ImageTemplate]:
@@ -5593,6 +5551,7 @@ class NewContainerDialog(QDialog):
         self.category_combo = QComboBox()
         self.category_combo.addItem(self.texts["wizard_all_categories"])
         self.category_combo.addItem(self.texts["wizard_installed_category"])
+        self.category_combo.addItem(DCC_STORE_CATEGORY)
         for category in self.catalog_category_names():
             self.category_combo.addItem(category)
         self.category_combo.setVisible(False)
@@ -6297,19 +6256,13 @@ class NewContainerDialog(QDialog):
 
     def _catalog_category_group(self, category: str) -> str:
         raw = str(category or "")
-        if raw == self.texts["wizard_all_categories"]:
+        if raw in {
+            self.texts["wizard_all_categories"],
+            self.texts["wizard_installed_category"],
+            self.texts["wizard_balena_category"],
+        }:
             return raw
-        if raw == self.texts["wizard_installed_category"]:
-            return raw
-        if raw == self.texts["wizard_balena_category"]:
-            return raw
-        head = re.split(r"\s*[›/]\s*", raw, maxsplit=1)[0].strip()
-        # Repository categories may contain emoji.  Keep them in catalog data,
-        # but do not render them in the navigation because some Qt/font stacks
-        # display them as tofu squares instead of glyphs.
-        while head and not head[-1].isalnum():
-            head = head[:-1].rstrip()
-        return head or raw
+        return category_group(raw)
 
     def _category_icon_kind(self, category: str) -> str:
         value = str(category or "").casefold()
@@ -6317,6 +6270,10 @@ class NewContainerDialog(QDialog):
             return "all"
         if category == self.texts["wizard_installed_category"]:
             return "installed"
+        if category == DCC_STORE_CATEGORY:
+            return "container"
+        if category == self.texts["wizard_updates_category"]:
+            return "updates"
         if category == self.texts["wizard_balena_category"]:
             return "container"
         if value.startswith("ai"):
@@ -6371,7 +6328,12 @@ class NewContainerDialog(QDialog):
             item.setToolTip(category)
             item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
             item.setIcon(make_category_icon(self._category_icon_kind(category), accent, 16))
-            if category in {self.texts["wizard_all_categories"], self.texts["wizard_installed_category"]}:
+            if category in {
+                self.texts["wizard_all_categories"],
+                self.texts["wizard_installed_category"],
+                DCC_STORE_CATEGORY,
+                self.texts["wizard_updates_category"],
+            }:
                 font = item.font()
                 font.setBold(True)
                 item.setFont(font)
@@ -6483,6 +6445,9 @@ class NewContainerDialog(QDialog):
         current = self.editor_tabs.currentWidget()
         if current is None:
             return
+        if current is self.store_tab:
+            # Long descriptions must not add empty space to the app header.
+            self.store_hero_card.setFixedHeight(self.store_hero_card.sizeHint().height())
         current_layout = current.layout()
         if current_layout is not None:
             current_layout.activate()
@@ -6563,12 +6528,23 @@ class NewContainerDialog(QDialog):
         row.addLayout(text_column, 1)
         return card
 
+    def _catalog_category_labels(self, template: ImageTemplate) -> List[str]:
+        return list(dict.fromkeys(
+            self._catalog_category_group(category)
+            for category in template.categories_for(self.lang)
+        ))
+
+    def _catalog_categories_text(self, template: ImageTemplate) -> str:
+        return " · ".join(self._catalog_category_labels(template))
+
     def catalog_category_names(self) -> List[str]:
         categories = {
-            self._catalog_category_group(item.category_for(self.lang))
+            self._catalog_category_group(category)
             for item in self.catalog
-            if item.category_for(self.lang)
+            for category in item.categories_for(self.lang)
         }
+        categories.discard(DCC_STORE_CATEGORY)
+        categories.add(self.texts["wizard_updates_category"])
         if any(item.supports_engine("balena") for item in self.catalog):
             categories.add(self.texts["wizard_balena_category"])
         return sorted(categories, key=catalog_category_sort_key)
@@ -6605,7 +6581,7 @@ class NewContainerDialog(QDialog):
                 and not installed_view
                 and category
                 and category != self.texts["wizard_all_categories"]
-                and self._catalog_category_group(item.category_for(self.lang)) != category
+                and category not in self._catalog_category_labels(item)
             ):
                 continue
             haystack = f"{item.name} {item.image} {item.description_for(self.lang)} {item.notes_for(self.lang)}"
@@ -6613,7 +6589,7 @@ class NewContainerDialog(QDialog):
                 continue
             self.filtered_catalog.append(item)
             description = re.sub(r"\s+", " ", item.description_for(self.lang)).strip()
-            badges = self._catalog_category_group(item.category_for(self.lang))
+            badges = self._catalog_categories_text(item)
             if item.lightweight:
                 badges += " \u00b7 light"
             if "balena" in [str(engine).lower() for engine in (item.engines or [])]:
@@ -6679,7 +6655,7 @@ class NewContainerDialog(QDialog):
             self.update_store_description(None)
             return
         self.app_title_label.setText(template.name)
-        self.app_category_label.setText(self._catalog_category_group(template.category_for(self.lang)))
+        self.app_category_label.setText(self._catalog_categories_text(template))
         self.app_category_label.setVisible(True)
         description = template.description_for(self.lang) or template.image
         if template.latest_release:
@@ -6820,7 +6796,7 @@ class NewContainerDialog(QDialog):
             return
 
         self.store_title_label.setText(template.name)
-        self.store_category_label.setText(self._catalog_category_group(template.category_for(self.lang)))
+        self.store_category_label.setText(self._catalog_categories_text(template))
         self.store_description_label.setText(template.store_description_for(self.lang) or template.description_for(self.lang) or template.image)
         features = template.features_for(self.lang)
         features_text = "\n".join(f"- {item}" for item in features) if features else (template.notes_for(self.lang) or "")
@@ -6957,6 +6933,7 @@ class NewContainerDialog(QDialog):
         self.category_combo.clear()
         self.category_combo.addItem(self.texts["wizard_all_categories"])
         self.category_combo.addItem(self.texts["wizard_installed_category"])
+        self.category_combo.addItem(DCC_STORE_CATEGORY)
         for category in self.catalog_category_names():
             self.category_combo.addItem(category)
         if current:
@@ -10859,7 +10836,8 @@ class MainWindow(QMainWindow):
                 name = str(asset.get("name") or "").lower()
                 if any(alias and alias in name for alias in arch_aliases):
                     return asset
-            return deb_assets[0] if deb_assets else None
+            # Never offer an amd64 DEB to an ARM host when no matching asset exists.
+            return None
         for asset in assets:
             name = str(asset.get("name") or "")
             if re.fullmatch(r"DockerControlCenter-Setup-[0-9][0-9A-Za-z._-]*\.exe", name, re.IGNORECASE):

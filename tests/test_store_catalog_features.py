@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import unittest
@@ -135,7 +136,8 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             )
             self.assertTrue(dialog.category_combo.isHidden())
             self.assertEqual(dialog.catalog_list.currentRow(), 0)
-            self.assertLess(dialog.category_nav.count(), 25)
+            labels = [dialog.category_nav.item(i).text() for i in range(dialog.category_nav.count())]
+            self.assertEqual(len(labels), len(set(labels)))
             self.assertEqual(dialog._catalog_category_group("AI 💬 › UI"), "AI")
             self.assertTrue(all("›" not in dialog.category_nav.item(i).text() for i in range(dialog.category_nav.count())))
             balena_label = dcc.TEXTS["EN"]["wizard_balena_category"]
@@ -149,6 +151,236 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             self.assertGreater(dialog.catalog_list.count(), 0)
             self.assertTrue(all(item.supports_engine("balena") for item in dialog.filtered_catalog))
             _dispose_widget(dialog)
+
+    def test_dcc_category_is_between_installed_and_ai_in_both_languages(self):
+        for lang in ("PL", "EN"):
+            with self.subTest(lang=lang), patch.object(
+                dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]
+            ), patch.object(dcc, "load_cached_deployment_catalog", return_value=[]):
+                dialog = dcc.NewContainerDialog(_FakeClient(), dcc.TEXTS[lang], lang=lang)
+                expected = [
+                    dcc.TEXTS[lang]["wizard_all_categories"],
+                    dcc.TEXTS[lang]["wizard_installed_category"],
+                    "DCC",
+                    "AI",
+                ]
+                actual = [dialog.category_combo.itemText(i) for i in range(4)]
+                self.assertEqual(actual, expected)
+                self.assertEqual(
+                    [dialog.category_nav.item(i).text() for i in range(4)], expected
+                )
+                self.assertEqual(dialog.category_combo.findText("DCC"), 2)
+                self.assertTrue(dialog.category_nav.item(2).font().bold())
+                self.assertFalse(dialog.category_nav.item(2).icon().isNull())
+                dialog.rebuild_catalog_categories()
+                self.assertEqual(
+                    sum(dialog.category_combo.itemText(i) == "DCC" for i in range(dialog.category_combo.count())),
+                    1,
+                )
+                _dispose_widget(dialog)
+
+    def test_bundled_dcc_updater_keeps_updates_and_adds_dcc(self):
+        payload = json.loads(dcc.BUNDLED_DEPLOYMENT_CATALOG_FILE.read_text(encoding="utf-8"))
+        entries = [item for item in payload["apps"] if item["name"] == "DCC Container Updater"]
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(entry["category"], "Aktualizacje 🔄")
+        self.assertEqual(entry["category_en"], "Updates 🔄")
+        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-container-updater:latest")
+        self.assertEqual(entry["categories"], ["DCC"])
+        self.assertEqual(entry["categories_en"], ["DCC"])
+        updater = next(item for item in dcc.load_bundled_deployment_catalog() if item.name == entry["name"])
+        self.assertEqual(updater.categories_for("PL"), ["Aktualizacje 🔄", "DCC"])
+        self.assertEqual(updater.categories_for("EN"), ["Updates 🔄", "DCC"])
+
+    def test_bundled_dcc_web_has_store_page_and_functional_categories(self):
+        payload = json.loads(dcc.BUNDLED_DEPLOYMENT_CATALOG_FILE.read_text(encoding="utf-8"))
+        entries = [item for item in payload["apps"] if item["name"] == "DCC Web"]
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:0.1.1")
+        self.assertEqual(entry["category"], "DCC")
+        self.assertEqual(entry["categories"], ["DCC", "Administracja 🛠", "WWW 🌐"])
+        self.assertEqual(entry["categories_en"], ["DCC", "Administration 🛠", "WWW 🌐"])
+        self.assertIn("/apps/dcc-web", entry["homepage_url"])
+        self.assertIn("/apps/dcc-web/docs", entry["docs_url"])
+        self.assertIn("/tree/dcc-web-v0.1.1/apps/dcc-web", entry["source_url"])
+        self.assertIn("/tree/dcc-web-v0.1.1/apps/dcc-web/docs", entry["docs_url"])
+        self.assertEqual(entry["homepage_url"], entry["source_url"])
+        self.assertEqual(entry["container_port"], "8789")
+        self.assertIn("dcc_web_data:/data", entry["extra"])
+        self.assertIn("/var/run/docker.sock:/var/run/docker.sock", entry["extra"])
+        self.assertIn("--cap-drop=ALL", entry["extra"])
+        self.assertIn("--cap-add=SETUID", entry["extra"])
+        self.assertIn("losowe hasło administratora", entry["notes"])
+        self.assertIn("random administrator password", entry["notes_en"])
+        app = dcc.image_template_from_dict(entry, dcc.DEFAULT_DEPLOYMENT_REPOSITORY)
+        self.assertEqual(app.categories_for("PL"), ["DCC", "Administracja 🛠", "WWW 🌐"])
+        self.assertEqual(app.categories_for("EN"), ["DCC", "Administration 🛠", "WWW 🌐"])
+
+    def test_dcc_updater_is_filterable_in_both_categories_without_duplicates(self):
+        for lang, updates in (("PL", "Aktualizacje"), ("EN", "Updates")):
+            with self.subTest(lang=lang), patch.object(
+                dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]
+            ), patch.object(dcc, "load_cached_deployment_catalog", return_value=[]):
+                dialog = dcc.NewContainerDialog(_FakeClient(), dcc.TEXTS[lang], lang=lang)
+                updater_name = "DCC Container Updater"
+                for category in ("DCC", updates, dcc.TEXTS[lang]["wizard_all_categories"]):
+                    dialog.category_combo.setCurrentText(category)
+                    dialog.filter_catalog()
+                    matches = [item for item in dialog.filtered_catalog if item.name == updater_name]
+                    self.assertEqual(len(matches), 1, category)
+                    keys = [(item.name.lower(), item.image.lower()) for item in dialog.filtered_catalog]
+                    self.assertEqual(len(keys), len(set(keys)))
+
+                dialog.category_combo.setCurrentText("DCC")
+                description_query = "optional Safe Compose Manager" if lang == "EN" else "opcjonalnym Safe Compose Manager"
+                for query in ("cOnTaInEr UpDaTeR", "dcc-container-updater:latest", description_query, "Swarm"):
+                    dialog.search_edit.setText(query)
+                    dialog.filter_catalog()
+                    self.assertEqual([item.name for item in dialog.filtered_catalog], [updater_name], query)
+                dialog.search_edit.setText("something-that-cannot-match")
+                dialog.filter_catalog()
+                self.assertEqual(dialog.catalog_list.count(), 0)
+                _dispose_widget(dialog)
+
+    def test_multiple_categories_legacy_catalogs_and_repository_merge(self):
+        legacy = dcc.image_template_from_dict(
+            {"name": "Legacy", "image": "example/legacy:latest", "category": "AI / UI", "category_en": "AI / UI"}
+        )
+        self.assertEqual(legacy.categories_for("PL"), ["AI / UI"])
+        self.assertEqual(legacy.categories_for("EN"), ["AI / UI"])
+
+        multi = dcc.image_template_from_dict(
+            {
+                "name": "Demo extension",
+                "image": "example/dcc-demo:latest",
+                "category": "Aktualizacje 🔄",
+                "category_en": "Updates 🔄",
+                "categories": ["DCC", "AI / UI", "DCC"],
+                "categories_en": ["DCC", "AI / UI", "DCC"],
+            },
+            "https://example.org/one.json",
+        )
+        self.assertEqual(multi.categories_for("PL"), ["Aktualizacje 🔄", "DCC", "AI / UI"])
+        self.assertEqual(multi.categories_for("EN"), ["Updates 🔄", "DCC", "AI / UI"])
+        override = dcc.image_template_from_dict(
+            {
+                "name": multi.name,
+                "image": multi.image,
+                "category": "Aktualizacje 🔄",
+                "category_en": "Updates 🔄",
+            },
+            "https://example.org/two.json",
+        )
+        merged = dcc.merge_catalog_lists([legacy, multi], [override])
+        self.assertEqual(len(merged), 2)
+        demo = next(item for item in merged if item.name == "Demo extension")
+        self.assertIn("DCC", demo.categories_for("PL"))
+        self.assertIn("AI / UI", demo.categories_for("PL"))
+
+        for lang in ("PL", "EN"):
+            with self.subTest(lang=lang), patch.object(
+                dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]
+            ), patch.object(dcc, "load_cached_deployment_catalog", return_value=[]):
+                dialog = dcc.NewContainerDialog(_FakeClient(), dcc.TEXTS[lang], lang=lang)
+                original_groups = {
+                    dialog._catalog_category_group(item.category_for(lang))
+                    for item in dialog.catalog
+                }
+                dialog.catalog = dcc.merge_catalog_lists(dialog.catalog, merged)
+                dialog.rebuild_catalog_categories()
+                current_groups = set(dialog.catalog_category_names()) | {"DCC"}
+                self.assertTrue(original_groups <= current_groups)
+                for category in ("DCC", "AI", "Updates" if lang == "EN" else "Aktualizacje"):
+                    dialog.category_combo.setCurrentText(category)
+                    dialog.filter_catalog()
+                    demo_rows = [item for item in dialog.filtered_catalog if item.name == "Demo extension"]
+                    self.assertEqual(len(demo_rows), 1, category)
+                _dispose_widget(dialog)
+
+    def test_updates_category_keeps_existing_bold_style(self):
+        updater = next(item for item in dcc.load_bundled_deployment_catalog() if item.name == "DCC Container Updater")
+        for lang in ("PL", "EN"):
+            with self.subTest(lang=lang), patch.object(
+                dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]
+            ), patch.object(dcc, "load_cached_deployment_catalog", return_value=[]):
+                dialog = dcc.NewContainerDialog(_FakeClient(), dcc.TEXTS[lang], lang=lang)
+                dialog.catalog = [updater]
+                dialog.rebuild_catalog_categories()
+                updates = dcc.TEXTS[lang]["wizard_updates_category"]
+                index = dialog.category_combo.findText(updates)
+                self.assertGreater(index, dialog.category_combo.findText("DCC"))
+                self.assertEqual(
+                    sum(dialog.category_combo.itemText(i) == updates for i in range(dialog.category_combo.count())),
+                    1,
+                )
+                all_item = dialog.category_nav.item(0)
+                updates_item = dialog.category_nav.item(index)
+                self.assertTrue(updates_item.font().bold())
+                self.assertEqual(updates_item.foreground().color(), all_item.foreground().color())
+                self.assertEqual(updates_item.background().color(), all_item.background().color())
+                _dispose_widget(dialog)
+
+    def test_legacy_catalog_cache_and_refresh_keep_dcc_updater_membership(self):
+        updater = next(item for item in dcc.load_bundled_deployment_catalog() if item.name == "DCC Container Updater")
+        legacy_data = dcc.asdict(updater)
+        legacy_data.pop("categories")
+        legacy_data.pop("categories_en")
+        legacy_updater = dcc.image_template_from_dict(legacy_data, dcc.DEFAULT_DEPLOYMENT_REPOSITORY)
+        for lang in ("PL", "EN"):
+            with self.subTest(lang=lang), patch.object(
+                dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]
+            ), patch.object(dcc, "load_cached_deployment_catalog", return_value=[legacy_updater]), patch.object(
+                dcc, "save_cached_deployment_catalog"
+            ) as save_cache:
+                container = _FakeContainer(updater.default_name, updater.image)
+                dialog = dcc.NewContainerDialog(_FakeClient([container]), dcc.TEXTS[lang], lang=lang)
+                dialog.category_combo.setCurrentText("DCC")
+                filtered_names = [item.name for item in dialog.filtered_catalog]
+                self.assertEqual(filtered_names.count(updater.name), 1)
+                self.assertEqual(filtered_names.count("DCC Web"), 1)
+                dialog.catalog_list.setCurrentRow(0)
+                dialog.on_external_catalog_refresh_finished([legacy_updater], [])
+                save_cache.assert_called_once_with([legacy_updater])
+                self.assertEqual(dialog.category_combo.currentText(), "DCC")
+                filtered_names = [item.name for item in dialog.filtered_catalog]
+                self.assertEqual(filtered_names.count(updater.name), 1)
+                self.assertEqual(filtered_names.count("DCC Web"), 1)
+                for label in (dialog.app_category_label, dialog.store_category_label):
+                    self.assertIn("DCC", label.text())
+                    self.assertIn(dcc.TEXTS[lang]["wizard_updates_category"], label.text())
+                for category in (
+                    dcc.TEXTS[lang]["wizard_updates_category"],
+                    dcc.TEXTS[lang]["wizard_installed_category"],
+                ):
+                    dialog.category_combo.setCurrentText(category)
+                    self.assertEqual([item.name for item in dialog.filtered_catalog], [updater.name])
+                _dispose_widget(dialog)
+
+    def test_existing_category_memberships_are_preserved(self):
+        for lang in ("PL", "EN"):
+            with self.subTest(lang=lang), patch.object(
+                dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]
+            ), patch.object(dcc, "load_cached_deployment_catalog", return_value=[]):
+                dialog = dcc.NewContainerDialog(_FakeClient(), dcc.TEXTS[lang], lang=lang)
+                legacy_memberships = {}
+                all_keys = set()
+                for item in dialog.catalog:
+                    if not item.supports_engine("docker"):
+                        continue
+                    key = (item.name, item.image)
+                    group = dialog._catalog_category_group(item.category_for(lang))
+                    legacy_memberships.setdefault(group, set()).add(key)
+                    all_keys.add(key)
+                self.assertEqual({(item.name, item.image) for item in dialog.filtered_catalog}, all_keys)
+                for category, expected in legacy_memberships.items():
+                    self.assertGreaterEqual(dialog.category_combo.findText(category), 0, category)
+                    dialog.category_combo.setCurrentText(category)
+                    actual = {(item.name, item.image) for item in dialog.filtered_catalog}
+                    self.assertTrue(expected <= actual, category)
+                    self.assertEqual(len(actual), dialog.catalog_list.count(), category)
+                _dispose_widget(dialog)
 
     def test_store_palette_follows_theme_with_neutral_surfaces(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(
@@ -290,6 +522,36 @@ class StoreCatalogFeatureTests(unittest.TestCase):
             self.assertEqual(dialog.dialog_scroll_area.horizontalScrollBar().maximum(), 0)
             self.assertEqual(dialog.catalog_row.direction(), dcc.QBoxLayout.Direction.TopToBottom)
             _dispose_widget(dialog)
+
+    def test_updater_summary_stays_compact_with_long_details(self):
+        for lang in ("PL", "EN"):
+            for installed in (False, True):
+                with self.subTest(lang=lang, installed=installed), patch.object(
+                    dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]
+                ), patch.object(dcc, "load_cached_deployment_catalog", return_value=[]):
+                    containers = [_FakeContainer("dcc-container-updater", "ghcr.io/hattimon/dcc-container-updater:latest")] if installed else []
+                    dialog = dcc.NewContainerDialog(_FakeClient(containers), dcc.TEXTS[lang], lang=lang)
+                    dialog.resize(1145, 914)
+                    dialog.show()
+                    heights = {}
+                    for name in ("Home Assistant", "DCC Container Updater"):
+                        row = next(i for i, item in enumerate(dialog.filtered_catalog) if item.name == name)
+                        dialog.catalog_list.setCurrentRow(row)
+                        self.app.processEvents()
+                        dialog._fit_editor_tabs_height()
+                        self.app.processEvents()
+                        header = dialog.store_hero_card
+                        content_bottom = max(
+                            widget.geometry().bottom()
+                            for widget in (dialog.store_icon_label, dialog.store_install_state_label, dialog.btn_store_primary)
+                        )
+                        bottom_gap = header.height() - content_bottom - 1
+                        self.assertLessEqual(bottom_gap, header.layout().contentsMargins().bottom() + 2)
+                        self.assertTrue(header.rect().contains(dialog.btn_store_primary.geometry()))
+                        self.assertGreater(dialog.store_description_label.y(), header.geometry().bottom())
+                        heights[name] = header.height()
+                    self.assertEqual(heights["DCC Container Updater"], heights["Home Assistant"])
+                    _dispose_widget(dialog)
 
     def test_bundled_icons_are_used_and_missing_media_reserves_no_space(self):
         with patch.object(dcc, "load_deployment_repository_sources", return_value=[dcc.DEFAULT_DEPLOYMENT_REPOSITORY]), patch.object(

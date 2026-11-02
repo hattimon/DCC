@@ -1,0 +1,85 @@
+name: Build and publish DCC Web image
+
+on:
+  push:
+    tags:
+      - "dcc-web-v*"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Web dependencies and run tests
+        run: |
+          python -m pip install --disable-pip-version-check -r apps/dcc-web/requirements.txt
+          python -m compileall -q apps/dcc-web
+          python -m unittest discover -s apps/dcc-web/tests -v
+          node apps/dcc-web/tests/frontend_unit.mjs
+      - name: Validate the multi-architecture image and socket permissions
+        run: |
+          docker build -f apps/dcc-web/Dockerfile -t dcc-web:release-candidate .
+          docker run --rm --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true --volume /var/run/docker.sock:/var/run/docker.sock dcc-web:release-candidate python -c 'import os,subprocess; assert os.geteuid()==10001, os.geteuid(); assert os.access("/var/run/docker.sock",os.R_OK|os.W_OK); subprocess.run(["docker","version","--format","{{.Server.Version}}"],check=True,capture_output=True,text=True); subprocess.run(["docker","compose","version"],check=True,capture_output=True,text=True); print("socket group, dropped UID and Compose OK")'
+          docker run --rm dcc-web:release-candidate --self-check
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read and check the Web version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(tr -d '\r\n' < apps/dcc-web/VERSION)"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "${GITHUB_REF_NAME#dcc-web-v}" == "$VERSION" ]]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prepare image tags
+        id: metadata
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/hattimon/dcc-web
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
+            type=sha
+          labels: |
+            org.opencontainers.image.title=DCC Web
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/hattimon/DCC/tree/dcc-web-v0.1.1/apps/dcc-web
+      - name: Build and publish Linux amd64 and arm64
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/dcc-web/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha,scope=dcc-web
+          cache-to: type=gha,mode=max,scope=dcc-web
+      - name: Verify anonymous image access
+        run: |
+          # The source label links this package to the public repository, so GHCR inherits its visibility.
+          docker logout ghcr.io
+          docker manifest inspect "ghcr.io/hattimon/dcc-web:${{ steps.version.outputs.version }}" >/dev/null
+          echo "The public App Store tag is readable without credentials."

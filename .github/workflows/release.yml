@@ -36,9 +36,13 @@ jobs:
           if-no-files-found: error
 
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Install Linux build/runtime dependencies
         run: |
@@ -48,9 +52,11 @@ jobs:
             libx11-6 libx11-xcb1 libxcb1 libxcb-cursor0 libxcb-icccm4 \
             libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
             libxcb-shape0 libxcb-xfixes0 libxcb-xkb1 libxkbcommon-x11-0 \
-            libpulse0 openssh-client xdg-utils policykit-1
+            libpulse0 pkexec openssh-client xdg-utils
 
       - name: Build Debian package
+        env:
+          PYTHON_BIN: python
         run: bash packaging/linux/build_deb.sh
 
       - name: Verify Debian package contents

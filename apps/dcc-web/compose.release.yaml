@@ -1,0 +1,20 @@
+services:
+  dcc-web:
+    image: ghcr.io/hattimon/dcc-web:0.1.1
+    container_name: dcc-web-standalone
+    ports:
+      - "127.0.0.1:${DCC_WEB_PORT:-8789}:8789"
+    volumes:
+      - dcc_web_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    cap_add: [SETGID, SETUID]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    restart: unless-stopped
+volumes:
+  dcc_web_data:
