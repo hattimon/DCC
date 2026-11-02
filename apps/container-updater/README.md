@@ -6,7 +6,7 @@ A separate DCC catalog app that scans a Docker host and updates only the contain
 
 Install **DCC Container Updater** from the DCC application store. Open `http://<host-ip>:8788` (DCC may choose another host port if 8788 is occupied). The first-run administrator password is printed once in the container logs and can also be surfaced by DCC from those logs. Change it in the panel after signing in.
 
-The catalog preset mounts `/var/run/docker.sock` and persists panel credentials in the `dcc_updater_data` volume. For Compose, `/home`, `/opt`, `/srv`, `/mnt`, `/media` and `/root` are mounted read-only so the updater can read project files without changing them. This app uses Linux containers and supports `linux/amd64` and `linux/arm64`, including Docker Desktop in Linux-container mode and 64-bit Raspberry Pi OS.
+The catalog preset mounts `/var/run/docker.sock` and persists panel credentials in the `dcc_updater_data` volume. Host project folders are optional: add only the required project directory as a read-only bind mount at the same path for Compose operations that need its files. On Docker Desktop, first share that directory under **Settings → Resources → File sharing**. The preset does not bind entire host trees such as `/opt`, so ordinary installations and standalone container updates do not require those folders to be shared. This app uses Linux containers and supports `linux/amd64` and `linux/arm64`, including Docker Desktop in Linux-container mode and 64-bit Raspberry Pi OS.
 
 The interface defaults to **English** and offers **Polski** on the login page and in the panel. The last language selected after signing in is saved in `/data` and survives logout and restarts. The footer links back to DCC, of which this panel is an integral part.
 
