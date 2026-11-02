@@ -2,6 +2,7 @@
 import shlex
 import paramiko
 import docker
+from profile_ssh import configure_client
 from docker.transport.sshconn import SSHHTTPAdapter,SSHConnection,SSHConnectionPool
 
 
@@ -34,8 +35,7 @@ class VerifiedProfileAdapter(SSHHTTPAdapter):
     def _create_paramiko_client(self,base_url):
         p=self.profile;secret=p.get('credentials',{})
         self.ssh_client=paramiko.SSHClient()
-        self.ssh_client.load_system_host_keys()
-        self.ssh_client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        configure_client(self.ssh_client,p)
         self.ssh_params={'hostname':p['host'],'port':p.get('port',22),'username':p['username'],'password':secret.get('password') or None,'passphrase':secret.get('passphrase') or None,'key_filename':p.get('key_path') or None,'timeout':12,'auth_timeout':12,'banner_timeout':12}
 
     def get_connection(self,url,proxies=None):

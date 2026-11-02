@@ -1,30 +1,23 @@
-# DCC Web 0.1.1 — release candidate for DCC Desktop 1.3.11
+# DCC Web 0.1.2 — SSH profile management
 
-The release candidate is prepared on `codex/desktop-web-1-3-11`. It is not yet a public image or Desktop release. The App Store entry and formatted product page are included in this branch's `dcc-catalog.json` and will ship with Desktop 1.3.11.
+DCC Web 0.1.1 is publicly available for Linux amd64/arm64 and installs through the shared DCC App Store on Windows/Docker Desktop and Linux, including MX Linux. Version 0.1.2 adds the profile improvements below; availability is confirmed by its GitHub tag, published image and canonical catalog entry. Desktop remains v1.3.11.
 
-## Implemented
+## Changes in 0.1.2
 
-- Shared multi-category store logic: All → Installed → bold DCC → AI; DCC Container Updater remains in Updates and DCC. DCC Web is in DCC, Administration and WWW.
-- DCC Web product page in English and Polish, a formatted in-panel Markdown documentation view, and the Store Website link.
-- Container links and image-reference copying, project/network grouping and selection, bulk actions, profile permissions, installation progress and logs.
-- Centered active-host infrastructure, host terminals, grouped container controls, localized interface, and narrow-screen toolbar layout. At 375 px, search is 96 px wide while filters and actions stay aligned on one row.
-- Local audio defaults to enabled; playback starts after browser interaction and can be disabled in settings.
-- Docker image startup detects the mounted socket's group and drops to UID 10001. The catalog configuration supports its tmpfs and PID-limit options.
+- Administrator-managed private SSH folder, browser-selected uploads, metadata/fingerprint previews and separate consent. External mounted folders remain read-only through the upload API.
+- Select individual/all profiles, apply the shared folder only to selected SSH/Balena connections and retain individual paths elsewhere.
+- Bulk profile removal with preview and confirmation, closing the affected terminals while retaining Docker resources and SSH files.
+- Strict host verification in Docker CLI, SDK and terminal transports. No automatic transfer of private keys or trust of new hosts.
+- Existing container controls, shared catalog, EN/PL interface, installation logs and monitoring are retained.
 
-## Verified locally
+## Verified during preparation
 
-- Desktop regression: 153 tests passed.
-- Store catalog feature tests: 28 passed.
-- DCC Web tests: 54 passed; frontend localization/grouping checks passed.
-- Docker image built, self-check passed, and a restricted container verified Docker socket access and Compose as UID 10001.
-- Chromium at 375 px confirmed 96 px search width and one-row filter/action alignment.
-- A previous isolated Debian 1.3.10 → 1.3.11 package upgrade preserved profile and settings data.
-- `git diff --check` and Python compilation passed.
+- Desktop regression suite: 156 tests passed on Windows.
+- Web API/transport tests: 77 run on Windows, OK with one symlink test skipped because the OS did not allow its creation; all 77 passed on Linux.
+- The 13 SSH profile tests passed under UID 10001 in the built candidate image.
+- Node frontend checks passed. Isolated Chromium exercised import, selection, migration, uploads/consent, editing, cancel deletion and EN/PL/mobile rendering without page errors.
+- Image build and self-check passed; private keys from the user and production profiles were not accessed or altered.
 
-## Publication gates
+## Limits
 
-- The Windows 1.3.10 → 1.3.11 installer upgrade check runs on the hosted Windows CI runner.
-- Candidate CI must pass before publishing the GHCR image and Desktop v1.3.11 release.
-- PR #3 remains unmerged; the canonical `main` catalog stays untouched until the user chooses to merge it.
-
-Private profiles, credentials, runtime logs and local QA data are excluded from the branch.
+Remote SSH hosts were not contacted with user credentials. Imported Desktop paths still require explicit migration and copying selected files. Passphrases remain per-profile. Protect the data volume and backups: uploaded key files are not encrypted by DCC Web. Use a dedicated passphrase-protected key and HTTPS for non-loopback uploads. MCP remains a read-only Preview; see the feature matrix for transport restrictions.

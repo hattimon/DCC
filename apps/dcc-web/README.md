@@ -1,4 +1,4 @@
-# DCC Web 0.1.1
+# DCC Web 0.1.2
 
 [English](README.md) · [Polski](README.pl.md) · [GitHub repository](https://github.com/hattimon/DCC)
 
@@ -22,7 +22,7 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 
 ## Install on Windows, macOS or Linux
 
-Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/v1.3.11/DCC-Web-0.1.1-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.1.1` directory:
+Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.2/DCC-Web-0.1.2-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.1.2` directory:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
@@ -77,3 +77,8 @@ The running application serves an information page at `/about` and formatted doc
 See [CURRENT_STATUS.md](CURRENT_STATUS.md) for verified features and remaining work. Do not treat planned features as shipped functionality.
 
 Project repository: [hattimon/DCC](https://github.com/hattimon/DCC).
+
+
+## Shared SSH keys for imported profiles
+
+In **Profiles**, upload selected SSH files to the managed private directory, then use checkboxes to apply it only to chosen SSH/Balena profiles. Individual paths remain available. Trusted `known_hosts`, host verification and profile permissions remain required. See [configuration](docs/configuration.md#shared-ssh-files-and-desktop-profile-imports) and [security](docs/security.md#ssh-file-storage) for storage, external read-only mounts, confirmations and bulk removal behavior.

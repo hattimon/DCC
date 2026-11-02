@@ -12,7 +12,7 @@ from dcc_catalog import category_group,localized_categories
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'packaging'/'web'))
-from build_source_archive import build_archive
+from build_source_archive import build_archive, VERSION as WEB_VERSION
 
 
 class Release1311Tests(unittest.TestCase):
@@ -65,19 +65,20 @@ class Release1311Tests(unittest.TestCase):
             self.assertIn(name,notes)
         readme=(ROOT/'README.md').read_text(encoding='utf-8')
         self.assertIn('/v1.3.11/',readme)
-        self.assertIn('DCC%20Web-v0.1.1',readme)
+        self.assertIn(f'DCC%20Web-v{WEB_VERSION}',readme)
         self.assertIn('apps/dcc-web/docs/installation.md',readme)
 
     def test_dcc_web_source_archive_contains_cross_platform_port_installer(self):
-        self.assertEqual((ROOT/'apps'/'dcc-web'/'VERSION').read_text(encoding='utf-8').strip(),'0.1.1')
+        self.assertRegex(WEB_VERSION,r'^\d+\.\d+\.\d+$')
+        self.assertEqual(json.loads((ROOT/'apps'/'dcc-web'/'package.json').read_text(encoding='utf-8'))['version'], WEB_VERSION)
         with tempfile.TemporaryDirectory() as directory:
-            archive_path=build_archive(Path(directory)/'DCC-Web-0.1.1-source.zip')
+            archive_path=build_archive(Path(directory)/f'DCC-Web-{WEB_VERSION}-source.zip')
             with ZipFile(archive_path) as archive:
                 names=set(archive.namelist())
-                self.assertIn('DCC-Web-0.1.1/apps/dcc-web/install.py',names)
-                self.assertIn('DCC-Web-0.1.1/apps/dcc-web/docs/installation.md',names)
-                self.assertIn('DCC-Web-0.1.1/dcc-catalog.json',names)
-                self.assertNotIn('DCC-Web-0.1.1/apps/dcc-web/tests/test_install.py',names)
+                self.assertIn(f'DCC-Web-{WEB_VERSION}/apps/dcc-web/install.py',names)
+                self.assertIn(f'DCC-Web-{WEB_VERSION}/apps/dcc-web/docs/installation.md',names)
+                self.assertIn(f'DCC-Web-{WEB_VERSION}/dcc-catalog.json',names)
+                self.assertNotIn(f'DCC-Web-{WEB_VERSION}/apps/dcc-web/tests/test_install.py',names)
 
     def test_linux_deb_declares_audio_runtime_and_desktop_launch_is_smoke_tested(self):
         builder=(ROOT/'packaging/linux/build_deb.sh').read_text(encoding='utf-8')

@@ -15,7 +15,7 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 
 [![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter-Setup-1.3.11.exe)
 [![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.11/DockerControlCenter_1.3.11_amd64.deb)
-[![DCC Web v0.1.1](https://img.shields.io/badge/DCC%20Web-v0.1.1-20bfc8?logo=docker&logoColor=white)](apps/dcc-web/docs/installation.md)
+[![DCC Web v0.1.2](https://img.shields.io/badge/DCC%20Web-v0.1.2-20bfc8?logo=docker&logoColor=white)](apps/dcc-web/docs/installation.md)
 
 DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker Compose or run directly with Python. Its installer checks Docker-published ports and local port availability, uses 8789 when free, and chooses another available port when necessary. See the [installation guide](apps/dcc-web/docs/installation.md).
 
@@ -221,7 +221,7 @@ Third-party assets are covered by their respective licenses or ownership terms. 
 
 Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom właścicieli.
 
-## DCC Web 0.1.1
+## DCC Web 0.1.2
 
 DCC Web runs independently from Desktop. See [DCC Web](apps/dcc-web/README.md) and its [GitHub repository](https://github.com/hattimon/DCC).
 

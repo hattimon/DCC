@@ -79,7 +79,17 @@ def authorize(profile, capability="read"):
 
 
 def validate_profile(data):
-    result = {key: data.get(key) for key in ("name", "kind", "endpoint", "host", "port", "username", "key_path", "distro", "cli", "context", "users", "panel_host") if data.get(key) is not None}
+    result = {key: data.get(key) for key in ("name", "kind", "endpoint", "host", "port", "username", "key_path", "key_scope", "known_hosts_path", "distro", "cli", "context", "users", "panel_host") if data.get(key) is not None}
+    if result.get("key_scope", "individual") not in {"individual", "shared"}:
+        raise ValueError("Invalid SSH key scope")
+    for key in ("key_path", "known_hosts_path"):
+        if key in result and (not isinstance(result[key], str) or len(result[key]) > 500 or "\0" in result[key]):
+            raise ValueError("Invalid SSH file path")
+    if result.get("key_scope") == "shared":
+        from profile_ssh import safe_name
+        if result.get("key_path"):
+            safe_name(result["key_path"])
+        result.pop("known_hosts_path", None)
     if result.get('panel_host') and not re.fullmatch(r'[A-Za-z0-9.\-:_]{1,200}',str(result['panel_host'])):
         raise ValueError('Invalid panel hostname or IP')
     if not isinstance(result.get("name"), str) or not 1 <= len(result["name"]) <= 80:
