@@ -207,7 +207,7 @@ class WebTests(unittest.TestCase):
         response = self.client.get('/api/catalog?q=DCC%20Web&category=DCC')
         apps = response.json['apps']
         self.assertEqual(len(apps), 1)
-        self.assertEqual(apps[0]['image'], 'ghcr.io/hattimon/dcc-web:0.1.1')
+        self.assertEqual(apps[0]['image'], current['image'])
         self.assertEqual(apps[0]['id'], current['id'])
         self.assertEqual(apps[0]['category_labels'], ['DCC', 'Administracja', 'WWW'])
         self.assertEqual(self.client.get('/api/catalog?q=dcc-web:0.1.0').json['apps'], [])

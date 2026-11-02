@@ -10,12 +10,12 @@ import DockerControlCenter as dcc
 class CatalogRepositoryTests(unittest.TestCase):
     def test_refresh_replaces_bundled_image_version_and_preserves_other_apps(self):
         old = dcc.image_template_from_dict({
-            "name": "DCC Web", "image": "ghcr.io/hattimon/dcc-web:0.1.0",
+            "name": "DCC Web", "image": "ghcr.io/hattimon/dcc-web:0.1.1",
             "category": "DCC", "categories": ["Administracja", "WWW"],
             "features": ["Stored metadata"],
         })
         refreshed = dcc.image_template_from_dict({
-            "name": "DCC Web", "image": "ghcr.io/hattimon/dcc-web:0.1.1", "category": "DCC",
+            "name": "DCC Web", "image": "ghcr.io/hattimon/dcc-web:0.1.2", "category": "DCC",
         })
         preview = dcc.image_template_from_dict({
             "name": "DCC Web Preview", "image": "ghcr.io/hattimon/dcc-web:preview", "category": "DCC",
