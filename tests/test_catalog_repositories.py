@@ -8,6 +8,49 @@ import DockerControlCenter as dcc
 
 
 class CatalogRepositoryTests(unittest.TestCase):
+    def test_refresh_replaces_bundled_image_version_and_preserves_other_apps(self):
+        old = dcc.image_template_from_dict({
+            "name": "DCC Web", "image": "ghcr.io/hattimon/dcc-web:0.1.1",
+            "category": "DCC", "categories": ["Administracja", "WWW"],
+            "features": ["Stored metadata"],
+        })
+        refreshed = dcc.image_template_from_dict({
+            "name": "DCC Web", "image": "ghcr.io/hattimon/dcc-web:0.1.2", "category": "DCC",
+        })
+        preview = dcc.image_template_from_dict({
+            "name": "DCC Web Preview", "image": "ghcr.io/hattimon/dcc-web:preview", "category": "DCC",
+        })
+        other_repository = dcc.image_template_from_dict({
+            "name": "DCC Web", "image": "example.org/dcc-web:1", "category": "DCC",
+        })
+        merged = dcc.merge_catalog_lists([old, preview, other_repository], [refreshed])
+        self.assertEqual(len(merged), 3)
+        current = next(item for item in merged if item.image == refreshed.image)
+        self.assertNotIn(old.image, [item.image for item in merged])
+        self.assertEqual(current.categories_for("PL"), ["DCC", "Administracja", "WWW"])
+        self.assertEqual(current.features, old.features)
+        self.assertIn(preview, merged)
+        self.assertIn(other_repository, merged)
+
+    def test_catalog_update_identity_handles_registry_ports_and_digests(self):
+        from dcc_catalog import catalog_application_key
+        old = catalog_application_key("Example", "registry.example:5000/team/app:1")
+        self.assertEqual(old, catalog_application_key("Example", "registry.example:5000/team/app:2"))
+        self.assertEqual(old, catalog_application_key("Example", "registry.example:5000/team/app@sha256:abcdef"))
+        self.assertNotEqual(old, catalog_application_key("Example", "registry.example:5001/team/app:2"))
+
+    def test_refresh_preserves_intentional_versioned_container_variants(self):
+        current = dcc.image_template_from_dict({
+            "name": "Uptime Kuma", "image": "louislam/uptime-kuma:2", "default_name": "uptime-kuma",
+        })
+        legacy = dcc.image_template_from_dict({
+            "name": "Uptime Kuma", "image": "louislam/uptime-kuma:1", "default_name": "uptime-kuma-v1-disabled",
+        })
+        refreshed = dcc.image_template_from_dict({
+            "name": "Uptime Kuma", "image": "louislam/uptime-kuma:2.1", "default_name": "uptime-kuma",
+        })
+        self.assertEqual(dcc.merge_catalog_lists([current, legacy], [refreshed]), [refreshed, legacy])
+
     def test_primary_repository_is_always_present_and_not_persisted_as_custom(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_file = Path(temp_dir) / "repositories.json"

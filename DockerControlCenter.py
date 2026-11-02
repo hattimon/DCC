@@ -19,7 +19,7 @@ import uuid
 import webbrowser
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from dcc_catalog import DCC_CATEGORY, category_group, localized_categories, catalog_category_sort_key
+from dcc_catalog import DCC_CATEGORY, category_group, localized_categories, catalog_category_sort_key, catalog_application_key
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -2313,10 +2313,10 @@ def merge_catalog_template(base: ImageTemplate, override: ImageTemplate) -> Imag
 
 
 def merge_catalog_lists(*catalogs: List[ImageTemplate]) -> List[ImageTemplate]:
-    merged: Dict[tuple[str, str], ImageTemplate] = {}
+    merged: Dict[tuple[str, str, str], ImageTemplate] = {}
     for catalog in catalogs:
         for item in catalog:
-            key = (item.name.lower(), item.image.lower())
+            key = catalog_application_key(item.name, item.image, item.default_name)
             if key in merged:
                 merged[key] = merge_catalog_template(merged[key], item)
             else:

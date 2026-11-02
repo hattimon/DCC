@@ -10,6 +10,13 @@ def image_repository(image):
     return value[:colon] if colon>slash else value
 
 
+def catalog_application_key(name, image, default_name=""):
+    """Tags select versions; distinct default container names preserve variants."""
+    name = str(name or '').strip().casefold()
+    target = str(default_name or re.sub(r"[^a-z0-9_.-]+", "-", name).strip("-") or "app").strip().casefold()
+    return name, image_repository(image).strip().casefold(), target
+
+
 def localized_categories(category, category_en="", categories=None, categories_en=None, lang="PL"):
     primary = category_en if lang == "EN" and category_en else category
     extras = categories_en if lang == "EN" and categories_en else categories

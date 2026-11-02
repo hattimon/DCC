@@ -57,6 +57,12 @@ jobs:
       - name: Upgrade v1.3.10 to the candidate in an isolated runner profile
         shell: powershell
         run: .\tests\windows_installer_upgrade_smoke.ps1 -CandidateInstaller .\release\DockerControlCenter-Setup-1.3.11.exe
+      - name: Upload tested Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: dcc-v1.3.11-windows
+          path: release/DockerControlCenter-Setup-1.3.11.exe
+          if-no-files-found: error
 
   debian-upgrade:
     # Build on the oldest supported Ubuntu LTS so the bundled ELF runtime
