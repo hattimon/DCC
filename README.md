@@ -19,6 +19,24 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 
 DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker Compose or run directly with Python. Its installer checks Docker-published ports and local port availability, uses 8789 when free, and chooses another available port when necessary. See the [installation guide](apps/dcc-web/docs/installation.md).
 
+[DCC Web 0.1.6 — installer source ZIP / archiwum z instalatorem](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.6/DCC-Web-0.1.6-source.zip) · [Release notes / opis wydania](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.1.6) · [Instrukcja po polsku](apps/dcc-web/docs/installation.pl.md)
+
+## What's New in DCC Web 0.1.6
+
+### EN
+
+- Fixed host terminals opened from a localhost panel through Docker port forwarding; remote SSH stays encrypted and verified.
+- Added Polish formatted documentation with saved language selection, a collapsed SSH vault and SSH-agent setup guidance.
+- Fixed MCP client exports for container installations and verified tool restrictions and access revocation.
+- Stabilized read-only host-folder confirmations and automated publication of the current Web image, installer archive and single App Store entry.
+
+### PL
+
+- Naprawiono otwieranie terminala hosta z panelu na localhost przez przekierowanie portów Docker. Zdalne SSH pozostaje szyfrowane i weryfikowane.
+- Dodano sformatowaną dokumentację po polsku z wyborem języka, domyślnie zwijaną sekcję kluczy SSH i instrukcję konfiguracji agenta.
+- Poprawiono eksport MCP dla instalacji kontenerowych oraz sprawdzono ograniczenia narzędzi i odbieranie dostępu.
+- Ustabilizowano potwierdzanie folderów tylko do odczytu i zautomatyzowano publikowanie obrazu Web, archiwum instalatora oraz jednego aktualnego wpisu w sklepie.
+
 ## What's New in v1.3.12
 
 ### EN
