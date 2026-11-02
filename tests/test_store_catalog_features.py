@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import shlex
 import unittest
 from unittest.mock import patch
 
@@ -189,6 +190,11 @@ class StoreCatalogFeatureTests(unittest.TestCase):
         self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-container-updater:latest")
         self.assertEqual(entry["categories"], ["DCC"])
         self.assertEqual(entry["categories_en"], ["DCC"])
+        options = shlex.split(entry["extra"])
+        mounts = [options[index + 1] for index, value in enumerate(options) if value in ("-v", "--volume")]
+        self.assertEqual(mounts, ["/var/run/docker.sock:/var/run/docker.sock", "dcc_updater_data:/data"])
+        self.assertIn("File sharing", entry["notes"])
+        self.assertIn("optional mount", entry["notes_en"])
         updater = next(item for item in dcc.load_bundled_deployment_catalog() if item.name == entry["name"])
         self.assertEqual(updater.categories_for("PL"), ["Aktualizacje 🔄", "DCC"])
         self.assertEqual(updater.categories_for("EN"), ["Updates 🔄", "DCC"])
@@ -198,14 +204,14 @@ class StoreCatalogFeatureTests(unittest.TestCase):
         entries = [item for item in payload["apps"] if item["name"] == "DCC Web"]
         self.assertEqual(len(entries), 1)
         entry = entries[0]
-        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:0.1.1")
+        self.assertEqual(entry["image"], "ghcr.io/hattimon/dcc-web:0.1.2")
         self.assertEqual(entry["category"], "DCC")
         self.assertEqual(entry["categories"], ["DCC", "Administracja 🛠", "WWW 🌐"])
         self.assertEqual(entry["categories_en"], ["DCC", "Administration 🛠", "WWW 🌐"])
         self.assertIn("/apps/dcc-web", entry["homepage_url"])
         self.assertIn("/apps/dcc-web/docs", entry["docs_url"])
-        self.assertIn("/tree/dcc-web-v0.1.1/apps/dcc-web", entry["source_url"])
-        self.assertIn("/tree/dcc-web-v0.1.1/apps/dcc-web/docs", entry["docs_url"])
+        self.assertIn("/tree/dcc-web-v0.1.2/apps/dcc-web", entry["source_url"])
+        self.assertIn("/tree/dcc-web-v0.1.2/apps/dcc-web/docs", entry["docs_url"])
         self.assertEqual(entry["homepage_url"], entry["source_url"])
         self.assertEqual(entry["container_port"], "8789")
         self.assertIn("dcc_web_data:/data", entry["extra"])

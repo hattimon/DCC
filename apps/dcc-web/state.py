@@ -64,6 +64,8 @@ class State:
                 CREATE TABLE IF NOT EXISTS compose_projects(profile TEXT, name TEXT, file TEXT, directory TEXT, PRIMARY KEY(profile,name));
             """)
         self.path.chmod(0o600)
+        from profile_ssh import ProfileSSH
+        self.ssh = ProfileSSH(self)
 
     @contextmanager
     def connect(self):
@@ -97,6 +99,7 @@ class State:
         result = dict(json.loads(row["public"]), id=row["id"])
         if private:
             result["credentials"] = json.loads(self.vault.decrypt(row["private"]))
+            result = self.ssh.resolve(result)
         return result
 
     def save_profile(self, profile_id, public, private=None):

@@ -144,12 +144,15 @@ jobs:
           python -m unittest discover -s apps/dcc-web/tests -v
           node apps/dcc-web/tests/frontend_unit.mjs
       - name: Build DCC Web cross-platform source archive
-        run: python packaging/web/build_source_archive.py
+        id: web-source
+        run: |
+          python packaging/web/build_source_archive.py
+          echo "version=$(tr -d '\r\n' < apps/dcc-web/VERSION)" >> "$GITHUB_OUTPUT"
       - name: Upload DCC Web source package
         uses: actions/upload-artifact@v4
         with:
-          name: dcc-web-0.1.1-source
-          path: release/DCC-Web-0.1.1-source.zip
+          name: dcc-web-${{ steps.web-source.outputs.version }}-source
+          path: release/DCC-Web-${{ steps.web-source.outputs.version }}-source.zip
           if-no-files-found: error
       - name: Build the candidate Web image
         run: docker build -f apps/dcc-web/Dockerfile -t dcc-web:release-candidate .

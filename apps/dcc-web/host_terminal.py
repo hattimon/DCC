@@ -7,6 +7,7 @@ import threading
 import time
 
 from engine import EngineError
+from profile_ssh import configure_client
 
 
 class PTYConnection:
@@ -16,8 +17,7 @@ class PTYConnection:
         if self.kind in {"ssh","balena"}:
             import paramiko
             client=paramiko.SSHClient()
-            client.load_system_host_keys()
-            client.set_missing_host_key_policy(paramiko.RejectPolicy())
+            configure_client(client, profile)
             credentials=profile.get("credentials",{})
             try:
                 client.connect(profile["host"],port=profile.get("port",22),username=profile["username"],password=credentials.get("password") or None,passphrase=credentials.get("passphrase") or None,key_filename=profile.get("key_path") or None,timeout=12,auth_timeout=12,banner_timeout=12)
@@ -159,3 +159,10 @@ class HostTerminals:
             value=self.get(terminal_id,owner,login)
             value.close()
             self.sessions.pop(terminal_id,None)
+
+    def close_profiles(self, profile_ids):
+        with self.lock:
+            for ident, value in list(self.sessions.items()):
+                if value.profile in profile_ids:
+                    value.close()
+                    self.sessions.pop(ident, None)
