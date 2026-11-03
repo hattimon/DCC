@@ -135,6 +135,82 @@ class ContainerSafetyTests(unittest.TestCase):
         result = service.inspect_container(container, [])
         self.assertFalse(result["supported"])
 
+    def _dcc_web_https_pair(self):
+        network = "dcc-web-https-0123456789-network"
+        web = self._container(
+            Config={"Image": "ghcr.io/hattimon/dcc-web:0.1.4", "Labels": {}},
+            HostConfig={"NetworkMode": "bridge", "AutoRemove": False},
+            NetworkSettings={"Networks": {
+                "bridge": {},
+                network: {"Aliases": ["dcc-web", "dcc-web-upstream"], "IPAMConfig": None},
+            }},
+            Mounts=[],
+        )
+        web.name = "dcc-web"
+        proxy_name = network.removesuffix("-network")
+        proxy = SimpleNamespace(
+            id="proxy-id",
+            name=proxy_name,
+            attrs={
+                "Config": {"Image": "caddy:2", "Labels": {"io.dcc.web.proxy": "dcc-web"}},
+                "HostConfig": {"NetworkMode": network},
+                "NetworkSettings": {"Networks": {network: {}}},
+                "Mounts": [],
+            },
+        )
+        return web, proxy, network
+
+    def test_managed_dcc_web_https_network_is_supported_with_its_caddy_peer(self):
+        web, proxy, network = self._dcc_web_https_pair()
+        updater = self._container()
+        updater.id = "updater-id"
+        updater.name = "dcc-container-updater"
+
+        self.assertEqual(UpdateService._dcc_web_proxy_attachment(web, [web, proxy, updater]),
+                         (network, "dcc-web-https-0123456789", ("dcc-web", "dcc-web-upstream")))
+        self.assertIsNone(UpdateService._unsupported_reason(web, [web, proxy, updater]))
+        self.assertIsNone(UpdateService.automatic_dependency_blocker(web, [web, proxy, updater]))
+
+    def test_custom_peer_or_static_network_config_keeps_dcc_web_update_blocked(self):
+        web, proxy, network = self._dcc_web_https_pair()
+        peer = SimpleNamespace(
+            id="unrelated-id", name="unrelated",
+            attrs={"NetworkSettings": {"Networks": {network: {}}}, "Mounts": []},
+        )
+        self.assertIsNone(UpdateService._dcc_web_proxy_attachment(web, [web, proxy, peer]))
+        self.assertIsNotNone(UpdateService._unsupported_reason(web, [web, proxy, peer]))
+
+        web.attrs["NetworkSettings"]["Networks"][network]["IPAMConfig"] = {"IPv4Address": "172.31.0.20"}
+        self.assertIsNone(UpdateService._dcc_web_proxy_attachment(web, [web, proxy]))
+
+    def test_unverified_https_network_explains_how_to_update_safely(self):
+        web, proxy, _network = self._dcc_web_https_pair()
+        proxy.attrs["Config"]["Labels"] = {}
+        reason = UpdateService._unsupported_reason(web, [web, proxy])
+        self.assertIn("usuń rozszerzenie HTTPS", reason)
+        self.assertIn("Samo zatrzymanie Caddy", reason)
+        from i18n import translate_text
+        self.assertIn("remove the HTTPS extension", translate_text(reason, "en"))
+
+    def test_managed_https_exception_does_not_accept_changed_peers_or_namespaces(self):
+        for change in ("label", "image", "peer_network", "namespace", "alias", "other_web"):
+            with self.subTest(change=change):
+                web, proxy, network = self._dcc_web_https_pair()
+                if change == "label":
+                    proxy.attrs["Config"]["Labels"]["io.dcc.web.proxy"] = "other-web"
+                elif change == "image":
+                    proxy.attrs["Config"]["Image"] = "example/caddy:2"
+                elif change == "peer_network":
+                    proxy.attrs["NetworkSettings"]["Networks"]["bridge"] = {}
+                elif change == "namespace":
+                    web.attrs["HostConfig"]["NetworkMode"] = "container:other"
+                elif change == "alias":
+                    web.attrs["NetworkSettings"]["Networks"][network]["Aliases"] = []
+                else:
+                    web.attrs["Config"]["Image"] = "example/dcc-web:0.1.7"
+                self.assertIsNone(UpdateService._dcc_web_proxy_attachment(web, [web, proxy]))
+                self.assertIsNotNone(UpdateService._unsupported_reason(web, [web, proxy]))
+
     def test_registry_update_never_bypasses_runtime_blocker_and_reports_storage(self):
         service = UpdateService(SimpleNamespace(), catalog_loader=lambda: [])
         container = self._container(
@@ -879,6 +955,87 @@ class ContainerConfigurationTests(unittest.TestCase):
                 {"host_config": {"NetworkMode": "host"}},
             )
 
+
+class DccWebHttpsUpdateTests(unittest.TestCase):
+    def _run_update(self, fail_replacement_start=False):
+        web, proxy, network_name = ContainerSafetyTests()._dcc_web_https_pair()
+        events = []
+
+        class FakeApi:
+            def create_container_config(self, **kwargs):
+                return kwargs
+
+            def create_container_from_config(self, _config, name):
+                events.append(("create", name))
+                return {"Id": "replacement-id"}
+
+        class FakeNetwork:
+            def disconnect(self, container):
+                events.append(("disconnect", container.name))
+
+            def connect(self, container, aliases):
+                events.append(("connect", container.name, aliases))
+
+        replacement = SimpleNamespace(
+            id="replacement-id", name="dcc-web",
+            attrs={"Config": {"Image": "ghcr.io/hattimon/dcc-web:0.1.6"},
+                   "Image": "sha256:new", "State": {"Status": "running"}},
+            start=None,
+            stop=lambda timeout: events.append(("stop-replacement", timeout)),
+            remove=lambda v=False: events.append(("remove-replacement", v)),
+        )
+
+        class FakeContainers:
+            def list(self, all=False, ignore_removed=False):
+                return [web, proxy]
+
+            def get(self, identifier):
+                self.asserted_id = identifier
+                return replacement
+
+        class FakeImages:
+            def pull(self, image):
+                events.append(("pull", image))
+
+        def start_replacement():
+            events.append(("start-replacement",))
+            if fail_replacement_start:
+                raise RuntimeError("replacement failed")
+
+        replacement.start = start_replacement
+
+        web.stop = lambda timeout: events.append(("stop-old", timeout))
+        web.rename = lambda name: (events.append(("rename-old", name)), setattr(web, "name", name))
+        web.start = lambda: events.append(("start-old",))
+        web.remove = lambda v=False: events.append(("remove-old", v))
+        client = SimpleNamespace(
+            api=FakeApi(), containers=FakeContainers(), images=FakeImages(),
+            networks=SimpleNamespace(get=lambda name: self.assertEqual(name, network_name) or FakeNetwork()),
+        )
+        service = UpdateService(client, wait_seconds=1)
+        with patch.object(service, "_wait_until_healthy"):
+            if fail_replacement_start:
+                with self.assertRaisesRegex(RuntimeError, "przywrócono poprzedni kontener"):
+                    service.update_one(web, "ghcr.io/hattimon/dcc-web:0.1.6")
+                return events, web
+            message = service.update_one(web, "ghcr.io/hattimon/dcc-web:0.1.6")
+        return message, events
+
+    def test_update_moves_the_managed_proxy_alias_to_the_replacement(self):
+        message, events = self._run_update()
+
+        self.assertIn("Zaktualizowano", message)
+        self.assertIn(("disconnect", "dcc-backup-0123456789"), events)
+        self.assertIn(("connect", "dcc-web", ["dcc-web", "dcc-web-upstream"]), events)
+        self.assertLess(events.index(("disconnect", "dcc-backup-0123456789")), events.index(("create", "dcc-web")))
+        self.assertLess(events.index(("create", "dcc-web")), events.index(("connect", "dcc-web", ["dcc-web", "dcc-web-upstream"])))
+
+    def test_failed_replacement_restores_the_original_https_alias_and_container(self):
+        events, web = self._run_update(fail_replacement_start=True)
+        self.assertEqual(web.name, "dcc-web")
+        self.assertIn(("connect", "dcc-backup-0123456789", ["dcc-web", "dcc-web-upstream"]), events)
+        self.assertIn(("rename-old", "dcc-web"), events)
+        self.assertIn(("start-old",), events)
 
 class UpdateRollbackTests(unittest.TestCase):
     def test_transient_pull_retries_before_touching_the_running_container(self):
