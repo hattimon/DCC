@@ -1,7 +1,7 @@
 {
   "name": "Docker Control Center official application catalog",
   "schema_version": 1,
-  "updated": "2026-11-03",
+  "updated": "2026-11-01",
   "repository": "https://github.com/hattimon/DCC",
   "apps": [
     {
@@ -789,8 +789,8 @@
       "homepage_url": "https://openwebui.com/",
       "icon_text": "💬",
       "upstream_repo": "open-webui/open-webui",
-      "latest_release": "v0.12.5",
-      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.12.5",
+      "latest_release": "v0.13.0",
+      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.13.0",
       "icon_url": "catalog/media/icons/open-webui.png"
     },
     {
@@ -1725,8 +1725,8 @@
       "homepage_url": "https://adguard.com/adguard-home/overview.html",
       "icon_text": "🌐",
       "upstream_repo": "AdguardTeam/AdGuardHome",
-      "latest_release": "v0.107.79",
-      "latest_release_url": "https://github.com/AdguardTeam/AdGuardHome/releases/tag/v0.107.79",
+      "latest_release": "v0.107.80",
+      "latest_release_url": "https://github.com/AdguardTeam/AdGuardHome/releases/tag/v0.107.80",
       "icon_url": "catalog/media/icons/adguard-home.png"
     },
     {
