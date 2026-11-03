@@ -15,11 +15,11 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 
 [![Windows EXE](https://img.shields.io/badge/Windows-EXE-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter-Setup-1.3.12.exe)
 [![Linux DEB](https://img.shields.io/badge/Linux-DEB-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter_1.3.12_amd64.deb)
-[![DCC Web v0.1.6](https://img.shields.io/badge/DCC%20Web-v0.1.6-20bfc8?logo=docker&logoColor=white)](apps/dcc-web/docs/installation.md)
+[![DCC Web v0.1.7](https://img.shields.io/badge/DCC%20Web-v0.1.7-20bfc8?logo=docker&logoColor=white)](apps/dcc-web/docs/installation.md)
 
-DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker Compose or run directly with Python. Its installer checks Docker-published ports and local port availability, uses 8789 when free, and chooses another available port when necessary. See the [installation guide](apps/dcc-web/docs/installation.md).
+DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker Compose or run directly with Python. Its installer checks Docker-published ports and local port availability, uses 8789 when free, and chooses another available port when necessary. Optional local HTTPS is available from panel settings through a managed Caddy extension, without replacing the existing HTTP endpoint. See the [installation guide](apps/dcc-web/docs/installation.md).
 
-[DCC Web 0.1.6 — installer source ZIP / archiwum z instalatorem](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.6/DCC-Web-0.1.6-source.zip) · [Release notes / opis wydania](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.1.6) · [Instrukcja po polsku](apps/dcc-web/docs/installation.pl.md)
+[DCC Web 0.1.7 — installer source ZIP / archiwum z instalatorem](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.7/DCC-Web-0.1.7-source.zip) · [Release notes / opis wydania](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.1.7) · [Instrukcja po polsku](apps/dcc-web/docs/installation.pl.md)
 
 ## What's New in DCC Web 0.1.6
 
@@ -36,6 +36,26 @@ DCC Web can be installed on Windows, macOS and Debian-family Linux with Docker C
 - Dodano sformatowaną dokumentację po polsku z wyborem języka, domyślnie zwijaną sekcję kluczy SSH i instrukcję konfiguracji agenta.
 - Poprawiono eksport MCP dla instalacji kontenerowych oraz sprawdzono ograniczenia narzędzi i odbieranie dostępu.
 - Ustabilizowano potwierdzanie folderów tylko do odczytu i zautomatyzowano publikowanie obrazu Web, archiwum instalatora oraz jednego aktualnego wpisu w sklepie.
+
+## What's New in DCC Web 0.1.7
+
+### EN
+
+- Added optional LAN HTTPS managed from Settings. Caddy binds only to the selected private/loopback host address and selects a free port from 9443–9499.
+- Kept the existing HTTP endpoint and DCC Web data volume unchanged; Docker port conflicts are retried without replacing the working HTTPS sidecar.
+- Added authenticated proxy handling for secure cookies, downloadable local CA and English/Polish setup guidance.
+- Loads the App Store catalog before contacting a slow Docker host; installed-app checks and install/removal operations continue asynchronously with visible progress.
+- Added profile-scoped MCP read/write grants, reauthentication for write access, selectable permissions and explicit destructive-operation consent. MCP remains stdio-only.
+- Added CPU/RAM table sorting and an inline host address in the Containers heading; local profiles show the panel address used by the browser, and SSH profiles show their configured SSH destination.
+
+### PL
+
+- Dodano opcjonalne lokalne HTTPS zarządzane z Ustawień. Caddy wiąże port z wybranym prywatnym adresem hosta i wybiera wolny port z zakresu 9443–9499.
+- Zachowano dotychczasowy HTTP i wolumen danych DCC Web; konflikt portu Docker powoduje próbę kolejnego portu bez utraty działającego rozszerzenia HTTPS.
+- Dodano uwierzytelnianie nagłówków proxy, bezpieczne ciasteczka, pobieranie lokalnego CA i instrukcje konfiguracji po polsku i angielsku.
+- Sklep ładuje katalog przed połączeniem z wolnym hostem Docker; odczyt zainstalowanych aplikacji oraz instalowanie i usuwanie działają asynchronicznie z widocznym postępem.
+- Dodano uprawnienia MCP ograniczone do profilu i narzędzi, ponowne uwierzytelnienie przy zapisie oraz osobne potwierdzenie operacji destrukcyjnych. MCP działa wyłącznie przez stdio.
+- Dodano sortowanie tabeli według CPU i pamięci oraz adres hosta w tym samym wierszu co nagłówek Kontenery. Dla profilu lokalnego jest to adres panelu z przeglądarki, a dla SSH — skonfigurowany host SSH.
 
 ## What's New in v1.3.12
 
@@ -258,4 +278,4 @@ Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom wła
 
 DCC Web is the browser-based counterpart to DCC Desktop and runs as a separate service. See the [product overview](apps/dcc-web/README.md) and the [GitHub repository](https://github.com/hattimon/DCC).
 
-DCC Web provides container management, profiles, logs, monitoring, Compose and the shared App Store, along with themes, local audio, English and Polish, clickable panel links, an AI configuration assistant and a read-only MCP Preview. See the [installation guide](apps/dcc-web/docs/installation.md) and [feature matrix](apps/dcc-web/docs/feature-matrix.md) for setup and adapter limitations. Its Docker image is published in GHCR and listed in the App Store catalog.
+DCC Web provides container management, profiles, logs, monitoring, Compose and the shared App Store, along with themes, local audio, English and Polish, clickable panel links, an AI configuration assistant and scoped MCP tools for authorized read and write operations. See the [installation guide](apps/dcc-web/docs/installation.md) and [feature matrix](apps/dcc-web/docs/feature-matrix.md) for setup and adapter limitations. Its Docker image is published in GHCR and listed in the App Store catalog.

@@ -1,7 +1,7 @@
 {
   "name": "Docker Control Center official application catalog",
   "schema_version": 1,
-  "updated": "2026-11-01",
+  "updated": "2026-11-03",
   "repository": "https://github.com/hattimon/DCC",
   "apps": [
     {
@@ -275,7 +275,7 @@
         "Administration 🛠",
         "WWW 🌐"
       ],
-      "image": "ghcr.io/hattimon/dcc-web:0.1.6",
+      "image": "ghcr.io/hattimon/dcc-web:0.1.7",
       "category": "Administracja 🛠",
       "category_en": "Administration 🛠",
       "description": "Przeglądarkowy panel DCC do zarządzania kontenerami, profilami i hostami Docker.",
@@ -286,6 +286,7 @@
         "Zarządzanie kontenerami, obrazami, wolumenami, sieciami i projektami Compose.",
         "Profile lokalne i zdalne, uprawnienia użytkowników oraz terminal hosta.",
         "Wspólny folder kluczy SSH, bezpieczne przesyłanie plików i zarządzanie zaznaczonymi profilami.",
+        "Opcjonalne lokalne HTTPS przez Caddy, prywatny adres IP, automatyczny wybór portu i pobranie certyfikatu CA.",
         "Wspólny katalog aplikacji DCC, wyszukiwanie i podgląd instalacji.",
         "Interfejs polski i angielski; ustawienie języka jest zapamiętywane."
       ],
@@ -293,6 +294,7 @@
         "Manage containers, images, volumes, networks and Compose projects.",
         "Local and remote profiles, user permissions and host terminals.",
         "Shared SSH key directory, explicit file uploads and selected profile management.",
+        "Optional local HTTPS through Caddy, a private IP address, automatic port selection and downloadable CA certificate.",
         "Shared DCC app catalog, search and installation previews.",
         "Polish and English interface with a saved language preference."
       ],
@@ -301,8 +303,8 @@
       "host_port": "8789",
       "extra": "-v /var/run/docker.sock:/var/run/docker.sock -v dcc_web_data:/data --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true --read-only --tmpfs /tmp:size=64m,mode=1777 --pids-limit=128 --memory=512m --restart unless-stopped",
       "command": "",
-      "notes": "Socket Docker zapewnia panelowi administracyjny dostęp do hosta. Proces serwera działa jako UID 10001 i otrzymuje tylko grupę socketu; SETUID/SETGID służą wyłącznie do obniżenia uprawnień. Dane profili i ustawień są przechowywane w wolumenie dcc_web_data. Przy pierwszym uruchomieniu generowane jest silne, losowe hasło administratora; nazwa użytkownika to admin, a hasło pojawi się w wyniku instalacji i logach kontenera. Zmień je po pierwszym logowaniu. Dostęp HTTP ogranicz do zaufanej sieci; przed udostępnieniem spoza LAN skonfiguruj HTTPS, VPN lub zaufany reverse proxy.",
-      "notes_en": "The Docker socket gives the panel administrative access to the host. The server runs as UID 10001 and receives only the socket group; SETUID/SETGID are used only to drop privileges. Profile and settings data persist in the dcc_web_data volume. On first start, DCC Web generates a strong random administrator password; the username is admin and the password appears in the installation result and container logs. Change it after signing in. Restrict HTTP to a trusted network; configure HTTPS, a VPN or a trusted reverse proxy before exposing it beyond your LAN.",
+      "notes": "Socket Docker zapewnia panelowi administracyjny dostęp do hosta. Proces serwera działa jako UID 10001 i otrzymuje tylko grupę socketu; SETUID/SETGID służą wyłącznie do obniżenia uprawnień. Dane profili i ustawień są przechowywane w wolumenie dcc_web_data. Przy pierwszym uruchomieniu generowane jest silne, losowe hasło administratora; nazwa użytkownika to admin, a hasło pojawi się w wyniku instalacji i logach kontenera. Zmień je po pierwszym logowaniu. HTTP pozostaje dostępne na dotychczasowym porcie. W Ustawieniach możesz opcjonalnie uruchomić lokalne HTTPS przez Caddy dla prywatnego IP/nazwy; port 9443–9499 jest wybierany automatycznie, a certyfikat lokalnego CA trzeba zaufać na urządzeniach klienckich. Publiczne HTTPS nadal wymaga własnej domeny i osiągalnych portów 80/443.",
+      "notes_en": "The Docker socket gives the panel administrative access to the host. The server runs as UID 10001 and receives only the socket group; SETUID/SETGID are used only to drop privileges. Profile and settings data persist in the dcc_web_data volume. On first start, DCC Web generates a strong random administrator password; the username is admin and the password appears in the installation result and container logs. Change it after signing in. HTTP remains available on its existing port. Settings can optionally enable local Caddy HTTPS for a private IP/name; a free host port from 9443–9499 is selected automatically, and clients must trust the local CA certificate. Public HTTPS still requires your own domain and reachable ports 80/443.",
       "lightweight": false,
       "engines": [
         "docker"
@@ -311,25 +313,27 @@
         "amd64",
         "arm64"
       ],
-      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.6/apps/dcc-web",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.6/apps/dcc-web/docs",
-      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.6/apps/dcc-web",
+      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.7/apps/dcc-web",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.7/apps/dcc-web/docs",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.7/apps/dcc-web",
       "icon_text": "◇",
       "post_install_hints": [
         "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",
         "Zaloguj się jako admin; silne losowe hasło znajdziesz w wyniku instalacji lub logach kontenera. Zmień je po pierwszym logowaniu.",
-        "Panel ma administracyjny dostęp do Dockera. Ogranicz go do zaufanej sieci i skonfiguruj HTTPS przed publicznym dostępem.",
+        "Opcjonalne lokalne HTTPS włączysz w Ustawieniach administracyjnych. Podaj prywatny adres hosta, zastosuj ustawienia, otwórz wyświetlony adres i pobierz lokalny certyfikat CA, aby zaufać mu na tym urządzeniu.",
+        "Panel ma administracyjny dostęp do Dockera. Ogranicz go do zaufanej sieci; publiczne HTTPS wymaga własnej domeny i osiągalnych portów 80/443.",
         "Profile i ustawienia zachowuje wolumen dcc_web_data."
       ],
       "post_install_hints_en": [
         "Open http://<active-host-address>:<port>/login; if port 8789 is busy, use the port selected by DCC.",
         "Sign in as admin; find the strong random password in the installation result or container logs. Change it after your first sign-in.",
-        "The panel has administrative Docker access. Keep it on a trusted network and configure HTTPS before public access.",
+        "Optional local HTTPS is available in Administration settings. Enter a private host address, apply the settings, open the displayed URL and download/trust the local CA certificate on this device.",
+        "The panel has administrative Docker access. Keep it on a trusted network; public HTTPS requires your own domain and reachable ports 80/443.",
         "The dcc_web_data volume retains profiles and settings."
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "dcc-web-v0.1.6",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.1.6",
+      "latest_release": "dcc-web-v0.1.7",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.1.7",
       "release_tag_pattern": "dcc-web-v[0-9]+\\.[0-9]+\\.[0-9]+",
       "image_tag_from_release": "strip-prefix:dcc-web-v"
     },

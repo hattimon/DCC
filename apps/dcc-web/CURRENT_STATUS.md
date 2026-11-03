@@ -1,4 +1,6 @@
-# DCC Web 0.1.6
+# DCC Web 0.1.7
+
+Optional local HTTPS is managed through a Caddy sidecar. It binds only to the selected private/loopback host address, keeps the existing HTTP mapping and `/data` volume unchanged, scans Docker ports from 9443 to 9499 and retries port-allocation conflicts. The local CA can be downloaded from Settings after the HTTPS endpoint has issued its first certificate. Trust that CA on each client device.
 
 The store merges app versions by stable identity and uses the fetched/cached official catalog for membership, with bundled data only as offline fallback. New applications need only a catalog edit.
 

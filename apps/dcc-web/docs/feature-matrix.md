@@ -23,7 +23,7 @@ Audit source: Desktop `DockerControlCenter.py` dialogs, MainWindow actions, Dock
 | Volumes | List/search/inspect/create/delete with irreversible consent and attachment check | API + browser; backup/restore UI pending |
 | Networks | List/search/inspect/create bridge/remove | API + browser; advanced network wizard pending |
 | Compose | Discover/import/validate/ps/up/pull/stop/restart/logs/down; multiple files | API + browser; remote imports require host file provisioning |
-| Store installation/manual container | Canonical presets/configuration preview/confirmation/build and uninstall retaining volumes | API canonical presets + browser mock install |
+| Store installation/manual container | Catalog renders without Docker round trips; installed-app scan is asynchronous; install/uninstall show progress; uninstall retains volumes | API canonical presets, background-scan and job tests + browser mock install |
 | Store categories | All → Installed → bold DCC → AI, multiple memberships, Balena OS | Shared helper/Desktop/Web tests |
 | Additional catalogs | GitHub/HTTPS/file, enable/delete/validate/cache/fallback/hourly/manual refresh | API + browser source manager |
 | Container updates | Existing safe UpdateService with confirmed check/apply | Local/TLS/verified SSH/tunnel API; WSL uses TLS or host Updater/Compose; Balena requires its CLI dial-stdio support |
@@ -31,9 +31,9 @@ Audit source: Desktop `DockerControlCenter.py` dialogs, MainWindow actions, Dock
 | Theme/audio settings | Five native Web themes, live previews, local audio, user preferences | API + browser playback/screenshots |
 | Desktop PL/EN interface | Preserved; full Web EN (default) and PL with per-user persistence | API, browser and authored-fragment translation tests |
 | Desktop AI command generator/provider settings | Web has OpenAI Responses, compatible endpoint and Ollama proposal adapters | Explicit generation only; encrypted keys, no automatic execution; provider tests mocked |
-| MCP profiles/client grants | Scoped read-only stdio, adapters, expiry/revoke/audit | Unit/stdin lifecycle tests; external client sessions pending |
+| MCP profiles/client grants | Scoped stdio read and write tools, reauthentication for write grants, per-profile permission checks, expiry/revoke/audit | Unit/stdin lifecycle tests; external client sessions pending |
 | Repo Builder native editor | Existing Desktop executable included in builds | Web catalog import/manage works; native editor stays Desktop |
-| OS dependencies / Docker installation / host reboot / native SSH/PowerShell terminal | Existing Desktop paths preserved | Web does not perform OS installation/reboot or expose host shell |
+| OS dependencies / Docker installation / host reboot / host terminal | Existing Desktop paths preserved | Native Web can open its local shell; containerized Web manages its local Docker Engine by socket and reaches the same host shell through an explicitly configured, verified SSH profile. Web does not perform OS installation or host reboot. |
 | Tray, pin/taskbar identity, native shortcuts, full screen/transparency/tutorial | Native Desktop features preserved | Existing Desktop UI/installer regressions |
 | Browser security/user audit | New auth/CSRF/RBAC/vault/confirmation/audit | Dedicated Web security tests |
 

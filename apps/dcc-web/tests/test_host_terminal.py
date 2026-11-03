@@ -1,11 +1,13 @@
 """PTY session boundaries without opening host shells or remote connections."""
 import base64
+import os
 from pathlib import Path
 import queue
 import sys
 import tempfile
 import threading
 import time
+from unittest.mock import patch
 import unittest
 from urllib.parse import urlsplit
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -78,6 +80,12 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(len(base64.b64decode(output['data'])),1_000_000)
         self.assertEqual(output['offset'],1_000_020)
         with self.assertRaises(ValueError):session.output(2_000_000,wait=0)
+
+    def test_containerized_local_docker_profile_never_claims_to_open_the_host_shell(self):
+        from host_terminal import PTYConnection
+        with patch.dict(os.environ, {'DCC_WEB_CONTAINER_NAME':'dcc-web'}):
+            with self.assertRaisesRegex(ValueError, 'Create or select an SSH profile for this same Docker host'):
+                PTYConnection({'kind':'local'})
 
 class TerminalTransportTests(unittest.TestCase):
     def setUp(self):

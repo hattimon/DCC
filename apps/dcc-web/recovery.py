@@ -33,7 +33,7 @@ class Recovery:
         rows = self.state.rows('SELECT data FROM settings WHERE user_id=?',(SMTP_ID,))
         return self.state.decode_profile(rows[0]['data']) if rows else {}
 
-    def configure_smtp(self,data):
+    def smtp_values(self,data):
         host = str(data.get('host','')).strip()
         if not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?',host):
             raise ValueError('Invalid SMTP hostname')
@@ -45,8 +45,31 @@ class Recovery:
         password = data.get('password') or old.get('password','')
         if len(username)>254 or not isinstance(password,str) or len(password)>4096 or '\r' in username or '\n' in username:
             raise ValueError('Invalid SMTP credentials')
-        value = dict(host=host,port=port,username=username,password=password,sender=email_address(data.get('sender')),implicit_tls=bool(data.get('implicit_tls',port==465)))
+        return dict(host=host,port=port,username=username,password=password,sender=email_address(data.get('sender')),implicit_tls=bool(data.get('implicit_tls',port==465)))
+
+    def configure_smtp(self,data):
+        value = self.smtp_values(data)
         self.state.execute('INSERT OR REPLACE INTO settings VALUES(?,?)',(SMTP_ID,self.state.encode_profile(value)))
+
+    def test_smtp(self,data,recipient):
+        config=self.smtp_values(data)
+        message=EmailMessage()
+        message['Subject']='DCC Web — SMTP configuration test'
+        message['From'],message['To']=config['sender'],email_address(recipient)
+        message.set_content('This is a test message from DCC Web. SMTP TLS and sender configuration are working.')
+        try:
+            context=ssl.create_default_context()
+            if config['implicit_tls']:
+                client=smtplib.SMTP_SSL(config['host'],config['port'],timeout=10,context=context)
+            else:
+                client=smtplib.SMTP(config['host'],config['port'],timeout=10)
+                client.ehlo();client.starttls(context=context);client.ehlo()
+            with client:
+                if config['username']:
+                    client.login(config['username'],config['password'])
+                client.send_message(message)
+        except (OSError,smtplib.SMTPException):
+            raise ValueError('SMTP test failed. Check TLS, credentials, sender and recipient configuration.') from None
 
     def address(self,user):
         rows = self.state.rows('SELECT email FROM recovery_addresses WHERE user_id=?',(user,))
@@ -117,6 +140,15 @@ def register_recovery(app,state,reauthenticate):
             recovery.configure_smtp(data)
         config = recovery.smtp()
         return jsonify({key:config.get(key) for key in ('host','port','username','sender','implicit_tls')},configured=bool(config),password_set=bool(config.get('password')))
+
+    @app.post('/api/admin/smtp/test')
+    def smtp_test():
+        admin()
+        data=request.get_json() or {}
+        reauthenticate(data)
+        recovery.throttle(g.user['id']+':smtp-test')
+        recovery.test_smtp(data,data.get('test_recipient'))
+        return jsonify(ok=True)
 
     @app.get('/api/account/recovery-email')
     def email_status():

@@ -1,6 +1,20 @@
 // Only authored UI strings/template fragments are translated. Interpolated Docker data is preserved.
 let language='EN';
 const pairs=`
+Ładowanie zainstalowanych aplikacji z hosta. Katalog pozostaje dostępny.|Loading installed apps from the host. The catalog remains available.
+Odświeżanie stanu hosta w tle; katalog pozostaje dostępny.|Refreshing host status in the background; the catalog remains available.
+Stan hosta jest sprawdzany w tle|Host status is being checked in the background
+Stan hosta nieznany|Host status unknown
+Sprawdzanie hosta…|Checking host…
+Sprawdzanie połączenia, portów i konfiguracji na wybranym hoście…|Checking the connection, ports and configuration on the selected host…
+Konfiguracja sprawdzona. Przygotowuję bezpieczny podgląd instalacji…|Configuration checked. Preparing the installation review…
+Nie udało się sprawdzić konfiguracji hosta. Szczegóły są widoczne powyżej.|Could not check the host configuration. Details are shown above.
+Łączenie z hostem…|Connecting to host…
+Adres odbiorcy testowego|Test recipient address
+Wysyłanie testowego emaila…|Sending test email…
+Testowy email został wysłany.|The test email was sent.
+Wyślij wiadomość testową|Send test message
+Bez zaznaczenia: wymagane STARTTLS. Certyfikat jest weryfikowany. Dane SMTP są szyfrowane. Test wysyła neutralną wiadomość i nie zapisuje ustawień.|Without this option, STARTTLS is required. The certificate is verified. SMTP credentials are encrypted. The test sends a neutral message and does not save settings.
 Wybierz klucze i zaufany plik known_hosts z własnego komputera. Zawartość kluczy nie będzie wyświetlana. Eksport kluczy jest możliwy wyłącznie w szyfrowanej kopii po dodatkowym potwierdzeniu.|Select intended keys and a trusted known_hosts file from your computer. Key contents are never displayed. Exporting keys is possible only in a password-protected backup after additional confirmation.
 Zezwalam na zapis wybranych plików SSH w prywatnym folderze DCC Web. Klucze prywatne zostaną zaszyfrowane w magazynie. Administrator hosta mający dostęp do klucza głównego może je odszyfrować. Zalecany jest osobny klucz z passphrase. Przesyłaj przez HTTPS lub lokalne połączenie.|I authorize storing the selected SSH files in DCC Web. Private keys will be encrypted in the vault. A host administrator with the master key can decrypt them. Prefer a dedicated passphrase-protected key. Upload over HTTPS or loopback.
 
@@ -97,12 +111,31 @@ Hasło SMTP — puste zachowuje obecne|SMTP password — blank keeps the current
 TLS od początku (zwykle port 465)|Implicit TLS (usually port 465)
 Bez zaznaczenia: wymagane STARTTLS. Certyfikat jest weryfikowany. Dane SMTP są szyfrowane. Nie jest używana płatna usługa SMS.|Otherwise STARTTLS is required. Certificates are verified. SMTP credentials are encrypted. No paid SMS service is used.
 Domena lokalna|Local domain
+Nazwa lub prywatny adres IP w sieci lokalnej|Local name or private IP address
+Możesz podać prywatny adres IP, np. 192.168.0.222, albo nazwę z DNS/hosts. Lokalne HTTPS używa własnego CA; po instalacji pobierz certyfikat i zaufaj mu na urządzeniach. HTTP na dotychczasowym porcie localhost pozostaje dostępne.|Enter a private IP address such as 192.168.0.222 or a name from DNS/hosts. Local HTTPS uses its own CA; download the certificate after setup and trust it on your devices. HTTP on the existing localhost port remains available.
 Nazwa w sieci lokalnej|Local network hostname
 Dodaj w DNS routera lub pliku hosts wpis: adres IP hosta Docker → nazwa lokalna. To ustawienie dopuszcza nazwę w panelu; nie zmienia konfiguracji routera. Port panelu pozostaje bez zmian.|Add Docker host IP → local hostname in your router DNS or hosts file. This allows that name in the panel; it does not configure the router. The panel port is unchanged.
 Domena publiczna|Public domain
 Twoja domena publiczna|Your public domain
 Publiczny DNS musi wskazywać hosta. Rozszerzenie Caddy może automatycznie uzyskać certyfikat HTTPS na portach 80/443. Wymaga publicznej osiągalności hosta. Przy CGNAT użyj własnego tunelu lub VPN i reverse proxy. Włącz silne hasło i 2FA przed publikacją.|Public DNS must point to this host. The Caddy extension can obtain HTTPS certificates automatically on ports 80/443. The host must be publicly reachable. With CGNAT, configure your own tunnel or VPN and reverse proxy. Enable a strong password and 2FA before publishing.
 Zapisz domeny|Save domains
+Dostęp HTTPS|HTTPS access
+HTTPS w sieci lokalnej|Local network HTTPS
+Działa bez publicznej domeny. Panel wybierze wolny port od 9443 wzwyż. Przy pierwszym użyciu przeglądarka może nie ufać lokalnemu CA; pobierz certyfikat poniżej i zainstaluj go jako zaufany urząd certyfikacji.|Works without a public domain. DCC Web selects a free port starting at 9443. Your browser may not trust the local CA initially; download the certificate below and install it as a trusted certificate authority.
+Pobierz lokalny certyfikat CA|Download local CA certificate
+Włącz lokalne HTTPS|Enable local HTTPS
+Zastosuj ustawienia lokalnego HTTPS|Apply local HTTPS settings
+HTTPS publiczne|Public HTTPS
+Włącz publiczne HTTPS|Enable public HTTPS
+Zastosuj ustawienia publicznego HTTPS|Apply public HTTPS settings
+Opcjonalne. Ustaw domenę publiczną, DNS i osiągalność portów 80/443, jeśli zechcesz wystawić panel z Internetu.|Optional. Configure a public domain, DNS and reachable ports 80/443 if you want to expose the panel to the Internet.
+Wyłącz HTTPS|Disable HTTPS
+Włącz zapisane tryby HTTPS|Enable saved HTTPS modes
+Usuń rozszerzenie HTTPS|Remove HTTPS extension
+HTTPS zostało skonfigurowane. Otwórz podany adres i pobierz lokalny certyfikat CA.|HTTPS is configured. Open the displayed address and download the local CA certificate.
+Lokalne HTTPS utworzy lub zaktualizuje usługę Caddy, wybierze wolny port od 9443 wzwyż i zachowa wolumen danych oraz certyfikat CA.|Local HTTPS creates or updates the Caddy service, selects a free port starting at 9443, and preserves its data volume and CA certificate.
+Operacja może zająć porty 80/443 i/lub port lokalnego HTTPS. Zatrzymanie wyłącza aktywne tryby, a usunięcie zachowuje wolumeny certyfikatów.|This operation may use ports 80/443 and/or the local HTTPS port. Stopping disables active modes; removing the extension preserves certificate volumes.
+Potwierdzam zmianę konfiguracji HTTPS.|I confirm changing the HTTPS configuration.
 Publiczny dostęp HTTPS|Public HTTPS access
 Rozszerzenie działa na tym samym hoście Docker co DCC Web. Instalacja pobiera oficjalny obraz Caddy i publikuje porty 80 oraz 443. Certyfikaty są przechowywane w osobnym wolumenie.|The extension runs on the same Docker host as DCC Web. Installation pulls the official Caddy image and publishes ports 80 and 443. Certificates use a separate persistent volume.
 Zainstaluj HTTPS|Install HTTPS
@@ -233,7 +266,9 @@ Nazwa|Name
 Stan|State
 Obraz|Image
 CPU|CPU
+Sortuj według CPU|Sort by CPU usage
 Pamięć|Memory
+Sortuj według RAM|Sort by memory usage
 Akcje|Actions
 Porty / panele|Ports / panels
 Porty|Ports
@@ -545,6 +580,23 @@ Zmień hasło|Change password
 Zarządzaj użytkownikami|Manage users
 Hasła są hashowane scrypt. Sesja: HttpOnly, SameSite Strict i ochrona CSRF. Administrator przypisuje uprawnienia w profilach.|Passwords use scrypt. Sessions use HttpOnly, SameSite Strict and CSRF protection. Administrators assign profile permissions.
 Włącz dźwięki, aby uruchomić odsłuch|Enable sounds to play a sample
+Zaznacz wszystkie|Select all
+Odznacz wszystkie|Deselect all
+Wybór języka|Language selection
+Tylko odczyt|Read only
+Odczyt i modyfikacje|Read and modify
+Uprawnienia MCP|MCP permissions
+Wybierz konkretne narzędzia i profile. Uprawnienia profilu są sprawdzane przy każdym wywołaniu.|Choose specific tools and profiles. Profile permissions are checked on every call.
+Modyfikacje wymagają ponownego potwierdzenia hasłem i 2FA, jeśli jest włączone.|Write access requires password confirmation and 2FA, if enabled.
+Operacje destrukcyjne wymagają osobnego zaznaczenia.|Destructive actions require a separate confirmation.
+Profil nie ma uprawnienia wymaganego przez wybrane narzędzie|The profile does not have the permission required by the selected tool
+Zezwól na usuwanie kontenerów|Allow container removal
+Test SMTP|Test SMTP
+Adres odbiorcy testowego|Test recipient address
+Wyślij wiadomość testową|Send test message
+Wiadomość testowa została wysłana|Test message sent
+Podaj poprawny adres odbiorcy testowego|Enter a valid test recipient address
+Test wiadomości DCC Web — konfiguracja SMTP działa prawidłowo.|DCC Web mail test — SMTP configuration is working.
 Obecne hasło|Current password
 Nowe hasło — co najmniej 12 znaków|New password — at least 12 characters
 Użytkownicy|Users
@@ -576,7 +628,7 @@ Zapisz token w menedżerze sekretów klienta. Nie będzie można ponownie go odc
 Eksport konfiguracji jest dostępny w tabeli; zamiast tokenu zawiera bezpieczny znacznik środowiska.|Configuration export is available in the table and contains no token value.
 Konfiguracja MCP stdio|MCP stdio configuration
 Dostęp odebrany|Access revoked
-Działa read-only stdio: kontenery, inspekcja, logi, monitoring, obrazy, wolumeny i sieci. Operacje zapisu i Streamable HTTP nie są udostępniane w tym Preview.|Read-only stdio supports containers, inspect, logs, monitoring, images, volumes and networks. Writes and Streamable HTTP are unavailable in this Preview.
+DCC Web udostępnia zakresowane narzędzia MCP przez stdio. Dostępy do odczytu i modyfikacji wybiera administrator; uprawnienia profilu są sprawdzane przy każdym wywołaniu.|DCC Web provides scoped MCP tools over stdio. Administrators choose read or write access; profile permissions are checked on every call.
 Konfiguracja pozostaje niezależna od dostawcy AI. Eksport używa standardowego procesu MCP, a token trafia do środowiska klienta lub menedżera sekretów.|Configuration is provider-neutral. Export starts a standard MCP process; the token comes from the client environment or secret manager.
 Tylko wybrane profile i narzędzia. Odczyt jako domyślny zakres, termin ważności, dziennik i możliwość natychmiastowego odebrania dostępu.|Only selected profiles and tools are accessible. Read-only scope, optional expiry, audit and immediate revocation.
 Lokalny lub zewnętrzny model do tworzenia i poprawiania konfiguracji Docker.|Use a local or external model to create and improve Docker configurations.
@@ -685,6 +737,7 @@ known_hosts — indywidualna ścieżka (opcjonalnie)|known_hosts — individual 
 const messages=Object.fromEntries(pairs.trim().split('\n').filter(line=>line.includes('|')).map(line=>line.split('|')));
 const reverse=Object.fromEntries(Object.entries(messages).filter(([a,b])=>a!==b).map(([a,b])=>[b,a]));
 const errorPL={
+"The DCC Web container cannot open a host shell through the Docker socket. Create or select an SSH profile for this same Docker host, then enable host.exec for it.":"Kontener DCC Web nie otworzy powłoki systemowej przez socket Docker. Utwórz lub wybierz profil SSH prowadzący do tego samego hosta Docker i włącz w nim uprawnienie host.exec.",
 "Use a simple SSH filename without directories":"Podaj prostą nazwę pliku SSH bez katalogów.",
 "SSH paths must not contain symbolic links":"Ścieżki SSH nie mogą zawierać dowiązań symbolicznych.",
 "Copy a trusted known_hosts file into the shared SSH directory first":"Najpierw wgraj zaufany plik known_hosts do wspólnego folderu SSH.",
