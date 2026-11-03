@@ -64,9 +64,16 @@ class Release1312Tests(unittest.TestCase):
         for name in ('DockerControlCenter-Setup-1.3.12.exe','DockerControlCenter_1.3.12_amd64.deb','SHA256SUMS-1.3.12.txt'):
             self.assertIn(name,notes)
         readme=(ROOT/'README.md').read_text(encoding='utf-8')
-        self.assertIn('### Download Latest Version \u2014 1.3.12',readme)
+        self.assertIn('### Download Latest Version',readme)
+        for image in ('images/release-1.3.5/09-v1.3.5-overview-en.png','images/release-1.3.5/08-v1.3.5-overview-pl.png'):
+            self.assertIn(image,readme)
         self.assertIn('/v1.3.12/',readme)
-        self.assertIn(f'DCC%20Web-v{WEB_VERSION}',readme)
+        import re
+        badge=re.search(r'DCC%20Web-v(\d+\.\d+\.\d+)',readme)
+        self.assertIsNotNone(badge)
+        published_web=badge.group(1)
+        self.assertIn(f'dcc-web-v{published_web}/DCC-Web-{published_web}-source.zip',readme)
+        self.assertIn(f'/releases/tag/dcc-web-v{published_web}',readme)
         self.assertIn('apps/dcc-web/docs/installation.md',readme)
 
     def test_dcc_web_source_archive_contains_cross_platform_port_installer(self):
