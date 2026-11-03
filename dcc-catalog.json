@@ -56,8 +56,8 @@
       "homepage_url": "https://ollama.com/",
       "icon_text": "🧠",
       "upstream_repo": "ollama/ollama",
-      "latest_release": "v0.40.13",
-      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.13",
+      "latest_release": "v0.40.14",
+      "latest_release_url": "https://github.com/ollama/ollama/releases/tag/v0.40.14",
       "icon_url": "catalog/media/icons/ollama.png"
     },
     {
@@ -1431,8 +1431,8 @@
       "homepage_url": "https://ntfy.sh/",
       "icon_text": "🔔",
       "upstream_repo": "binwiederhier/ntfy",
-      "latest_release": "v2.37.0",
-      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.37.0",
+      "latest_release": "v2.37.1",
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.37.1",
       "icon_url": "catalog/media/icons/ntfy.png"
     },
     {
