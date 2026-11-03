@@ -242,7 +242,7 @@ class MCPService:
                 version = "2025-11-25"
             mode = self.grant().get("mode", "read")
             result = {"protocolVersion": version, "capabilities": {"tools": {"listChanged": False}},
-                      "serverInfo": {"name": "dcc-web", "version": "0.1.8"},
+                      "serverInfo": {"name": "dcc-web", "version": "0.1.9"},
                       "instructions": ("Read-only tools are enabled." if mode == "read" else "Only explicitly granted tools and profiles are enabled. Every operation is checked against the current profile permissions. Container removal does not delete volumes.") + " Use stdio transport; HTTP transport is not exposed."}
             self.negotiated = True
         elif method == "ping":
