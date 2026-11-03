@@ -116,7 +116,9 @@ def register_recovery(app,state,reauthenticate):
             reauthenticate(data)
             recovery.configure_smtp(data)
         config = recovery.smtp()
-        return jsonify({key:config.get(key) for key in ('host','port','username','sender','implicit_tls')},configured=bool(config),password_set=bool(config.get('password')))
+        public_config = {key:config.get(key) for key in ('host','port','username','sender','implicit_tls')}
+        public_config.update(configured=bool(config),password_set=bool(config.get('password')))
+        return jsonify(public_config)
 
     @app.get('/api/account/recovery-email')
     def email_status():
