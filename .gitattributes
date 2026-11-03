@@ -1,0 +1,3 @@
+
+# Preserve the Linux container entrypoint when building on Windows.
+apps/dcc-web/container-entrypoint.sh text eol=lf

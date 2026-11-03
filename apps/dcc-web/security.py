@@ -32,8 +32,10 @@ def trusted_https_request(app):
         return True
     if trusted_public_https_request(app):
         return True
-    if request.headers.get("X-Forwarded-Proto","").split(",",1)[0].strip().lower()!="https":
-        return False
+    # Waitress clears standard forwarded headers from untrusted network peers.
+    # The private, per-installation marker authenticates our TLS-only proxy
+    # independently of those headers; client-supplied X-Forwarded-Proto is not
+    # sufficient to mark an ordinary HTTP request as secure.
     domains=app.extensions.get("dcc_domains")
     return bool(domains and domains.trusts_proxy(request.headers.get("X-DCC-Web-Internal-TLS", "")))
 

@@ -235,11 +235,21 @@ class Domains:
     @staticmethod
     def _proxy_config(saved,local_enabled,public_enabled,token):
         lines=['{',' admin off']
+        local_name=local_host(saved.get('local')) or '127.0.0.1'
+        if local_enabled:
+            try:
+                address=ipaddress.ip_address(local_name)
+            except ValueError:
+                pass
+            else:
+                # IP-address clients omit SNI. Docker's listener address is the
+                # container IP, so explicitly select the configured LAN cert.
+                lines.append(f' default_sni {address.compressed}')
         if not public_enabled:
             lines.append(' auto_https disable_redirects')
         lines.append('}')
         if local_enabled:
-            host=saved.get('local') or '127.0.0.1'
+            host=local_name
             host=f'[{host}]' if ':' in host else host
             lines.extend([
                 f'https://{host}:9443 {{',

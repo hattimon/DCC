@@ -119,7 +119,25 @@ Domena publiczna|Public domain
 Twoja domena publiczna|Your public domain
 Publiczny DNS musi wskazywać hosta. Rozszerzenie Caddy może automatycznie uzyskać certyfikat HTTPS na portach 80/443. Wymaga publicznej osiągalności hosta. Przy CGNAT użyj własnego tunelu lub VPN i reverse proxy. Włącz silne hasło i 2FA przed publikacją.|Public DNS must point to this host. The Caddy extension can obtain HTTPS certificates automatically on ports 80/443. The host must be publicly reachable. With CGNAT, configure your own tunnel or VPN and reverse proxy. Enable a strong password and 2FA before publishing.
 Zapisz domeny|Save domains
+Adres hosta|Host address
 Dostęp HTTPS|HTTPS access
+Dostęp do panelu i HTTPS (TLS)|Panel access and HTTPS (TLS)
+Adres IP, domenę i szyfrowanie ustawisz w sekcji „Dostęp do panelu i HTTPS (TLS)”. Uwierzytelnianie i odzyskiwanie konta mają osobne sekcje poniżej.|Set the IP address, domain and encryption in “Panel access and HTTPS (TLS)”. Authentication and account recovery have their own sections below.
+Ustaw logowanie dwuetapowe i sposób odzyskania konta w sekcjach poniżej.|Set up two-factor authentication and account recovery in the sections below.
+Lokalny adres IP, domena publiczna, szyfrowanie i certyfikat.|Local IP address, public domain, encryption and certificate.
+Najpierw wybierz „Adresy panelu”, aby zapisać lokalny adres IP lub domenę. W „HTTPS i certyfikaty” włącz szyfrowanie i znajdź dokładny adres panelu oraz certyfikat CA.|Choose “Panel addresses” to save your local IP address or domain. Open “HTTPS and certificates” to enable encryption and find the exact panel URL and CA certificate.
+Adresy panelu — IP i domeny|Panel addresses — IP and domains
+HTTPS i certyfikaty|HTTPS and certificates
+Logowanie i uwierzytelnianie 2FA|Sign-in and two-factor authentication
+Serwer poczty, szyfrowanie TLS i test wysyłania kodów odzyskiwania.|Mail server, TLS encryption and a recovery message delivery test.
+Skonfiguruj serwer poczty i wyślij wiadomość testową. Następnie zweryfikuj adres odbiorcy w sekcji „Odzyskiwanie dostępu”.|Configure the mail server and send a test message. Then verify the recipient address in “Account recovery”.
+Konfiguruj pocztę odzyskiwania|Configure recovery email
+Konto i użytkownicy|Account and users
+Hasło konta oraz role i uprawnienia użytkowników panelu.|Account password and panel user roles and permissions.
+Dostęp publiczny — domena|Public access — domain
+Zapisz adresy i przejdź do HTTPS|Save addresses and continue to HTTPS
+HTTPS (TLS) i certyfikaty|HTTPS (TLS) and certificates
+Działa bez publicznej domeny. Panel wybierze wolny port od 9443 wzwyż i przypisze go tylko do wybranego prywatnego adresu hosta. Pobierz lokalny certyfikat CA, zaufaj mu na swoich urządzeniach i otwórz wyświetlony adres HTTPS. Numer portu jest częścią adresu i pozostaje zapisany.|Works without a public domain. DCC Web selects a free port starting at 9443 and binds it only to the selected private host address. Download the local CA certificate, trust it on your devices and open the displayed HTTPS URL. The port is part of the URL and remains saved.
 HTTPS w sieci lokalnej|Local network HTTPS
 Działa bez publicznej domeny. Panel wybierze wolny port od 9443 wzwyż. Przy pierwszym użyciu przeglądarka może nie ufać lokalnemu CA; pobierz certyfikat poniżej i zainstaluj go jako zaufany urząd certyfikacji.|Works without a public domain. DCC Web selects a free port starting at 9443. Your browser may not trust the local CA initially; download the certificate below and install it as a trusted certificate authority.
 Pobierz lokalny certyfikat CA|Download local CA certificate

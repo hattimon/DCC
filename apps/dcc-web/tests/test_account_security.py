@@ -268,7 +268,10 @@ class AccountSecurityTests(unittest.TestCase):
         token=self.app.extensions['dcc_domains'].proxy_token()
         client=self.app.test_client()
         base_url='https://192.168.0.222:9444'
-        headers={'X-Forwarded-Proto':'https','X-DCC-Web-Internal-TLS':token}
+        # A real Waitress server strips X-Forwarded-Proto before Flask sees it.
+        headers={'X-DCC-Web-Internal-TLS':token}
+        forwarded=self.app.test_client().get('/login',base_url='http://192.168.0.222:9444',headers=headers)
+        self.assertIn('; Secure;',forwarded.headers['Set-Cookie'])
         login=client.get('/login',base_url=base_url,headers=headers)
         self.assertIn('; Secure;',login.headers['Set-Cookie'])
         self.assertNotIn('Strict-Transport-Security',login.headers)
@@ -280,6 +283,9 @@ class AccountSecurityTests(unittest.TestCase):
             **headers,'Origin':base_url,'X-CSRF-Token':csrf,
         })
         self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+        untrusted=self.app.test_client().get('/login',base_url='http://192.168.0.222:9444',headers={
+            'X-Forwarded-Proto':'https','X-DCC-Web-Internal-TLS':'wrong-marker'})
+        self.assertNotIn('; Secure;',untrusted.headers['Set-Cookie'])
 
     def test_mount_confirmation_ignores_inspect_order_but_detects_actual_changes(self):
         container=MagicMock()
@@ -341,6 +347,7 @@ class AccountSecurityTests(unittest.TestCase):
         with tarfile.open(fileobj=io.BytesIO(config_archive)) as archive:
             config=archive.extractfile('Caddyfile').read().decode()
         self.assertIn('https://192.168.0.222:9443 {',config)
+        self.assertIn('default_sni 192.168.0.222',config)
         self.assertIn('issuer internal',config)
         self.assertIn('dcc.example.com {',config)
         old.remove.assert_called_once_with(v=False)

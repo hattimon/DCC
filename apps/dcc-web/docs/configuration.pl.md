@@ -50,3 +50,9 @@ Nie przekazuj agenta dalej do hosta SSH. Agent pozwala używać wszystkich zała
 ## Pozostałe funkcje
 
 Aktualizator używa bezpiecznej usługi UpdateService, zachowuje szyfrowane dane i weryfikuje klucze hostów. Ustawienia pozwalają włączyć opcjonalne TOTP 2FA, odzyskiwanie przez zweryfikowany email z TLS SMTP i osobne domeny lokalne/publiczne. Zobacz [model bezpieczeństwa](security.md).
+
+## Dostęp do panelu i HTTPS (TLS)
+
+W Ustawieniach wybierz **Administracja i bezpieczeństwo**, a następnie rozwiń **Dostęp do panelu i HTTPS (TLS)**. Przycisk **Adresy panelu — IP i domeny** zapisuje lokalny IP lub nazwę oraz opcjonalną domenę publiczną. Przycisk **HTTPS i certyfikaty** otwiera bezpośrednio instalowanie HTTPS i pobieranie lokalnego CA.
+
+Port 8789 pozostaje portem HTTP. Lokalne HTTPS wybiera wolny port od 9443 do 9499 i zapamiętuje wynik, np. `https://192.168.0.222:9444/`. Pobierz CA z panelu i zainstaluj je jako zaufane na swoich urządzeniach. Podany port i certyfikat są zachowywane podczas restartu.

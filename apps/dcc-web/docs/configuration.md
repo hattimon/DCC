@@ -80,3 +80,9 @@ Docker Desktop documents `/run/host-services/ssh-auth.sock` forwarding for **Mac
 ## Connection wizard and account security
 
 Web 0.1.4 adds a three-step connection wizard, encrypted configuration/key storage, selected key deletion, encrypted backups, optional TOTP 2FA and verified email recovery. See the [complete profile and security guide](profiles-security.md), including read-only host folder mounting and separate local/public domain settings.
+
+## Panel access and HTTPS (TLS)
+
+In Settings, choose **Administration and security**, then expand **Panel access and HTTPS (TLS)**. **Panel addresses — IP and domains** saves the LAN IP/name and an optional public domain. **HTTPS and certificates** opens HTTPS installation and the local CA download directly.
+
+Port 8789 remains HTTP. Local HTTPS selects and remembers an available port from 9443 to 9499, for example `https://192.168.0.222:9444/`. Download the CA from the panel and trust it on your client devices. The configured port and certificate are retained on restart.
