@@ -25,6 +25,9 @@ SELF_LABEL = "com.hattimon.dcc-updater"
 SELF_UPDATE_HELPER_LABEL = "com.hattimon.dcc-updater-self-update-helper"
 SELF_IMAGE = "ghcr.io/hattimon/dcc-container-updater:latest"
 SELF_UPDATE_HELPER_NAME = "dcc-updater-self-update-helper"
+DCC_WEB_IMAGE = "ghcr.io/hattimon/dcc-web"
+DCC_WEB_PROXY_LABEL = "io.dcc.web.proxy"
+DCC_WEB_PROXY_ALIAS = "dcc-web-upstream"
 SUPPORTED_NETWORK_MODES = {"default", "bridge", "host", "none"}
 COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
 COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
@@ -515,7 +518,69 @@ class UpdateService:
         return bool(labels.get(COMPOSE_PROJECT_LABEL))
 
     @staticmethod
-    def _unsupported_reason(container: Any) -> str | None:
+    def _dcc_web_proxy_attachment(
+        container: Any, all_containers: list[Any] | None,
+    ) -> tuple[str, str, tuple[str, ...]] | None:
+        """Recognize only DCC Web's managed Caddy network and its required alias."""
+        if not all_containers:
+            return None
+        attrs = getattr(container, "attrs", {}) or {}
+        config = attrs.get("Config") or {}
+        container_name = str(getattr(container, "name", "")).lstrip("/")
+        if normalized_repository(str(config.get("Image") or "")) != normalized_repository(DCC_WEB_IMAGE):
+            return None
+        host = attrs.get("HostConfig") or {}
+        if str(host.get("NetworkMode") or "default") not in {"default", "bridge"}:
+            return None
+        networks = (attrs.get("NetworkSettings") or {}).get("Networks") or {}
+        custom_names = sorted(name for name in networks if name not in {"bridge", "host", "none"})
+        if len(custom_names) != 1:
+            return None
+        network_name = str(custom_names[0])
+        suffix = "-network"
+        if not network_name.startswith("dcc-web-https-") or not network_name.endswith(suffix):
+            return None
+        proxy_name = network_name[:-len(suffix)]
+        if not re.fullmatch(r"dcc-web-https-[a-f0-9]{10}", proxy_name):
+            return None
+        endpoint = networks.get(network_name) or {}
+        endpoint_aliases = endpoint.get("Aliases") or []
+        if endpoint.get("IPAMConfig") or DCC_WEB_PROXY_ALIAS not in endpoint_aliases:
+            return None
+        aliases = tuple(dict.fromkeys(
+            alias for alias in (container_name, DCC_WEB_PROXY_ALIAS)
+            if alias in endpoint_aliases
+        ))
+        if DCC_WEB_PROXY_ALIAS not in aliases:
+            return None
+
+        peers = []
+        for item in all_containers:
+            item_attrs = getattr(item, "attrs", {}) or {}
+            item_networks = (item_attrs.get("NetworkSettings") or {}).get("Networks") or {}
+            if network_name in item_networks:
+                peers.append(item)
+        if len(peers) != 2 or not any(str(getattr(item, "id", "")) == str(getattr(container, "id", "")) for item in peers):
+            return None
+        proxies = [item for item in peers if str(getattr(item, "id", "")) != str(getattr(container, "id", ""))]
+        if len(proxies) != 1:
+            return None
+        proxy = proxies[0]
+        proxy_attrs = getattr(proxy, "attrs", {}) or {}
+        proxy_config = proxy_attrs.get("Config") or {}
+        proxy_labels = proxy_config.get("Labels") or {}
+        proxy_networks = (proxy_attrs.get("NetworkSettings") or {}).get("Networks") or {}
+        if (
+            str(getattr(proxy, "name", "")).lstrip("/") != proxy_name
+            or normalized_repository(str(proxy_config.get("Image") or "")) != normalized_repository("caddy:2")
+            or proxy_labels.get(DCC_WEB_PROXY_LABEL) != container_name
+            or set(proxy_networks) != {network_name}
+        ):
+            return None
+        return network_name, proxy_name, aliases
+
+    @staticmethod
+    def _unsupported_reason(container: Any, all_containers: list[Any] | None = None) -> str | None:
         attrs = container.attrs
         config = attrs.get("Config") or {}
         labels = config.get("Labels") or {}
@@ -533,6 +598,15 @@ class UpdateService:
         networks = (attrs.get("NetworkSettings") or {}).get("Networks") or {}
         names = set(networks)
         if not is_compose and (len(names) > 1 or any(name not in {"bridge", "host", "none"} for name in names)):
+            if UpdateService._dcc_web_proxy_attachment(container, all_containers):
+                return None
+            if normalized_repository(str(config.get("Image") or "")) == normalized_repository(DCC_WEB_IMAGE):
+                return (
+                    "Nie można potwierdzić zarządzanej sieci HTTPS DCC Web. "
+                    "Sprawdź kontener Caddy i dodatkowe połączenia sieciowe. "
+                    "Ewentualnie usuń rozszerzenie HTTPS w ustawieniach DCC Web, zaktualizuj panel i ponownie włącz HTTPS. "
+                    "Samo zatrzymanie Caddy nie usuwa połączenia sieciowego."
+                )
             return "Kontener używa niestandardowej lub wielokrotnej sieci Docker."
         return None
 
@@ -1186,7 +1260,7 @@ class UpdateService:
         if self._is_self(container):
             result.update(supported=False, auto_update_supported=False, message="To jest panel aktualizujący; pominięto aktualizację samego panelu.")
             return result
-        runtime_blocker = self._unsupported_reason(container)
+        runtime_blocker = self._unsupported_reason(container, all_containers)
         if not current:
             result.update(
                 supported=False,
@@ -1665,7 +1739,14 @@ class UpdateService:
             raise RuntimeError("Aktualizacja samego panelu nie jest obsługiwana.")
         if self._is_compose(container):
             raise RuntimeError("Usługi Compose należy aktualizować przez kontrolowany tryb Compose.")
-        reason = self._unsupported_reason(container)
+        image = str(((container.attrs.get("Config") or {}).get("Image")) or "")
+        all_containers = None
+        proxy_attachment = None
+        if normalized_repository(image) == normalized_repository(DCC_WEB_IMAGE):
+            all_containers = self.client.containers.list(all=True, ignore_removed=True)
+            proxy_attachment = self._dcc_web_proxy_attachment(container, all_containers)
+        proxy_network = self.client.networks.get(proxy_attachment[0]) if proxy_attachment else None
+        reason = self._unsupported_reason(container, all_containers)
         if reason:
             raise RuntimeError(reason)
 
@@ -1676,10 +1757,9 @@ class UpdateService:
             self._pull_image_with_retry(target_image)
         original_name = str(getattr(container, "name", "")).lstrip("/")
         was_running = str((container.attrs.get("State") or {}).get("Status")) == "running"
-        existing_names = {
-            str(getattr(item, "name", "")).lstrip("/")
-            for item in self.client.containers.list(all=True, ignore_removed=True)
-        }
+        if all_containers is None:
+            all_containers = self.client.containers.list(all=True, ignore_removed=True)
+        existing_names = {str(getattr(item, "name", "")).lstrip("/") for item in all_containers}
         base_backup_name = f"dcc-backup-{str(container.id)[:10]}"
         backup_name = base_backup_name
         suffix = 1
@@ -1690,7 +1770,18 @@ class UpdateService:
             if was_running:
                 container.stop(timeout=15)
             container.rename(backup_name)
+            if proxy_network is not None:
+                proxy_network.disconnect(container)
         except Exception:
+            try:
+                if proxy_network is not None:
+                    proxy_network.connect(container, aliases=list(proxy_attachment[2]))
+            except Exception:
+                pass
+            try:
+                container.rename(original_name)
+            except Exception:
+                pass
             if was_running:
                 try:
                     container.start()
@@ -1702,6 +1793,8 @@ class UpdateService:
         try:
             created = self.client.api.create_container_from_config(raw_config, name=original_name)
             replacement = self.client.containers.get(created["Id"])
+            if proxy_network is not None:
+                proxy_network.connect(replacement, aliases=list(proxy_attachment[2]))
             if _expected_image_id and str(replacement.attrs.get("Image") or "") != _expected_image_id:
                 raise RuntimeError("Nowy kontener nie używa przypiętego obrazu aktualizacji; wycofano podmianę.")
             if was_running:
@@ -1723,11 +1816,23 @@ class UpdateService:
                     replacement.remove(v=False)
                 except Exception:
                     pass
+            rollback_errors = []
+            if proxy_network is not None:
+                try:
+                    proxy_network.connect(container, aliases=list(proxy_attachment[2]))
+                except Exception as rollback_exc:
+                    rollback_errors.append(rollback_exc)
             try:
                 container.rename(original_name)
-                if was_running:
-                    container.start()
             except Exception as rollback_exc:
+                rollback_errors.append(rollback_exc)
+            if was_running:
+                try:
+                    container.start()
+                except Exception as rollback_exc:
+                    rollback_errors.append(rollback_exc)
+            if rollback_errors:
+                rollback_exc = rollback_errors[0]
                 reason = "Docker wykrył konflikt portu" if port_conflict else "Aktualizacja nie powiodła się"
                 raise RuntimeError(
                     f"{reason} ({type(exc).__name__}); przywrócenie starego kontenera wymaga interwencji ({type(rollback_exc).__name__})."

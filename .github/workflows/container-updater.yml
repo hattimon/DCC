@@ -7,6 +7,12 @@ on:
     paths:
       - "apps/container-updater/**"
       - ".github/workflows/container-updater.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/container-updater/**"
+      - ".github/workflows/container-updater.yml"
   workflow_dispatch:
 
 permissions:
@@ -31,6 +37,10 @@ jobs:
         working-directory: apps/container-updater
         run: python -m unittest discover -s tests -v
 
+      - name: Verify managed HTTPS Web update and rollback with Docker
+        working-directory: apps/container-updater
+        run: python tests/docker_web_https_smoke.py
+
       - name: Publish only a new application version
         id: publish-check
         shell: bash
@@ -52,7 +62,7 @@ jobs:
 
   publish:
     needs: test
-    if: needs.test.outputs.publish == 'true'
+    if: github.event_name != 'pull_request' && needs.test.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
