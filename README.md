@@ -23,6 +23,12 @@ DCC Web: Windows, macOS, Linux · Docker Compose.
 
 Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.1.7](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.1.7) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
 
+### DCC Desktop — overview / widok aplikacji
+
+![Docker Control Center v1.3.5 - English overview](images/release-1.3.5/09-v1.3.5-overview-en.png)
+
+![Docker Control Center v1.3.5 - polskie podsumowanie](images/release-1.3.5/08-v1.3.5-overview-pl.png)
+
 ## English
 
 ### What it does
