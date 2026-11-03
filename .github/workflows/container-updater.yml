@@ -7,6 +7,12 @@ on:
     paths:
       - "apps/container-updater/**"
       - ".github/workflows/container-updater.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "apps/container-updater/**"
+      - ".github/workflows/container-updater.yml"
   workflow_dispatch:
 
 permissions:
@@ -56,7 +62,7 @@ jobs:
 
   publish:
     needs: test
-    if: needs.test.outputs.publish == 'true'
+    if: github.event_name != 'pull_request' && needs.test.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
