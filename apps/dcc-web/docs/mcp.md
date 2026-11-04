@@ -22,13 +22,31 @@ python apps/dcc-web/web.py --data PATH_TO_PRIVATE_STATE --mcp-stdio
 
 The client process must receive `DCC_MCP_TOKEN` from a secret manager or user environment. Do not put a real token in a shared configuration file. Stdout is reserved for protocol messages and stderr for diagnostics. The client must complete `initialize` and `notifications/initialized`. The server negotiates versions 2024-11-05, 2025-03-26, 2025-06-18 and 2025-11-25.
 
-## Client configuration export
+## Export configuration and agent instructions
 
 Codex, VS Code, Claude, Cursor and other client templates refer to the `DCC_MCP_TOKEN` environment variable; the token itself is shown only once. For a container installation the exporter discovers the DCC Web container and uses `docker exec -i`. The client machine needs Docker CLI with a context targeting that host. DCC Web does not save or modify client configuration files. Verify the configuration format supported by your client version.
 
-In **AI / MCP → Export**, choose a Codex download.
+1. In **AI / MCP → New grant**, choose the client, profiles, tools, access mode and expiry. Save the token when it appears.
+2. Open **Export** on the active grant. Download the configuration or the agent instructions separately, or select **Download project package (ZIP)** for both files and a bilingual setup guide.
+3. Merge the files at the paths below. Keep existing server entries and instructions. Start the client, check its MCP tool list, then try a granted read tool with a profile ID from the exported instructions. If no tool appears, check the token, runtime paths and client setup in the bundled README.
 
-- **Project package (ZIP).** Extract it at the root of the trusted project to add `.codex/config.toml`. If the file already exists, merge the `dcc` section from the TOML download into it. For project-only access, remove any existing global `dcc` entry from `~/.codex/config.toml`. Start a new chat in the project.
+| Client | MCP configuration in ZIP | Agent instructions |
+| --- | --- | --- |
+| OpenAI Codex | `.codex/config.toml` | `AGENTS.md` in a trusted project |
+| Claude Code | `.mcp.json` | `CLAUDE.md` at the project root |
+| Claude Desktop | `claude_desktop_config.json`, merge via Developer → Edit Config | Copy `DCC_INSTRUCTIONS.md` manually |
+| Cursor | `.cursor/mcp.json` | `.cursor/rules/dcc.mdc` |
+| Windsurf | `mcp_config.json`, merge via the client's MCP settings | `.windsurf/rules/dcc.md` |
+| VS Code / GitHub Copilot | `.vscode/mcp.json`, use the Local harness and its masked token prompt | `.github/copilot-instructions.md` |
+| Generic MCP | `mcp.json`, merge according to the client's documentation | Copy `DCC_INSTRUCTIONS.md` manually |
+
+Instructions list the grant's currently readable profiles and the tools currently allowed for each. Use this snapshot for identification and the live server for authorization. Paused, expired and revoked grants cannot be exported.
+
+### Codex and ChatGPT Web
+
+The standard variant is the default. The optional **ChatGPT Web** variant also describes how to check independently authorized indirect connections when direct access fails. Its standalone file is `AGENTS.chatgpt-web.md`. The selected variant is packaged as `AGENTS.md` in the project ZIP. In a regular ChatGPT Web chat, use **Copy instructions** or paste the downloaded text manually. The instructions require an independently configured connection to reach DCC.
+
+- **Project package (ZIP).** Merge the files at the root of the trusted project. For project-only access, remove any existing global `dcc` entry from `~/.codex/config.toml`. Start a new chat in the project.
 - **TOML.** Merge the `dcc` section into `~/.codex/config.toml` or the trusted project's `.codex/config.toml`.
 - **Codex plugin (ZIP).** Extract it into a separate directory, run `codex plugin marketplace add .` there, and install **DCC Web MCP** from the **DCC Web** source in the plugin directory.
 

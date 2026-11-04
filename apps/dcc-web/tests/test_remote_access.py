@@ -14,6 +14,8 @@ class RemoteAccessTests(unittest.TestCase):
     setup_fixture = WebFixture.setUp
     request = WebFixture.request
     confirmation = WebFixture.confirmation
+    wait = WebFixture.wait
+    wait_scan = WebFixture.wait_scan
 
     def setUp(self):
         self.setup_fixture()
@@ -120,6 +122,57 @@ class RemoteAccessTests(unittest.TestCase):
         self.assertEqual(installed(), [])
         container["Labels"] = "io.dcc.remote-access=" + self.remote.owner
         self.assertEqual([app["id"] for app in installed()], [apps[0]["id"]])
+
+    def test_renamed_local_profile_can_install_and_see_remote_access_in_store(self):
+        # Imported or renamed installations need not retain the original 'local' ID.
+        self.state.save_profile("local-docker-2", {
+            "name": "Local", "kind": "local", "permissions": ["read", "install"]
+        })
+        self.state.execute("DELETE FROM profiles WHERE id=?", ("local",))
+        original_profiles = self.state.profiles()
+        selected = "local-docker-2"
+        response = self.client.get(f"/api/catalog?profile={selected}&category=DCC")
+        self.assertEqual(response.status_code, 200)
+        apps = [app for app in response.json["apps"] if app["name"] == "DCC Remote Access"]
+        self.assertEqual(len(apps), 1)
+        self.assertEqual(response.json["categories"][:4], ["all", "installed", "DCC", "AI"])
+
+        container = {"ID": "remote-fixture", "Names": self.remote.name,
+                     "Labels": "io.dcc.remote-access=" + self.remote.owner}
+        with patch("fixtures.FakeBackend.containers", return_value=[container]):
+            scanned = self.wait_scan(self.request("catalog/installed", {"profile": selected}))
+        self.assertEqual(scanned["status"], "success")
+        installed = self.client.get(f"/api/catalog?profile={selected}&category=installed").json
+        self.assertEqual([app["id"] for app in installed["apps"] if app["name"] == "DCC Remote Access"],
+                         [apps[0]["id"]])
+
+        approval = self.confirmation("remote-access.install", "dcc-remote-access", "workspace")
+        with patch.object(self.remote, "perform", return_value={"accepted": True}) as perform:
+            self.wait(self.request("admin/remote-access/install", {"profile": selected, "confirmation": approval}))
+            perform.assert_called_once()
+        self.assertEqual(self.state.profiles(), original_profiles)
+
+    def test_remote_access_refuses_unauthorized_or_nonlocal_profile(self):
+        self.state.save_profile("readonly", {"name": "Readonly Local", "kind": "local",
+                                               "permissions": ["read"]})
+        self.state.save_profile("remote-host", {"name": "Other Docker", "kind": "tcp",
+                                                  "endpoint": "tcp://192.0.2.4:2376",
+                                                  "permissions": ["read", "install"]})
+        self.state.save_profile("remote-context", {"name": "Other Context", "kind": "local",
+                                                     "context": "external", "permissions": ["read", "install"]})
+        for selected, expected_status in (("readonly", 403), ("remote-host", 409),
+                                          ("remote-context", 409)):
+            with self.subTest(selected=selected):
+                catalog = self.client.get(f"/api/catalog?profile={selected}&category=DCC").json
+                remote = [app for app in catalog["apps"] if app["name"] == "DCC Remote Access"]
+                self.assertEqual(bool(remote), selected == "readonly")
+                approval = self.confirmation("remote-access.install", "dcc-remote-access", "workspace")
+                with patch.object(self.remote, "perform") as perform:
+                    response = self.request("admin/remote-access/install", {
+                        "profile": selected, "confirmation": approval
+                    })
+                    self.assertEqual(response.status_code, expected_status, response.json)
+                    perform.assert_not_called()
 
     def test_provider_namespace_and_name_conflict(self):
         self.assertEqual(name_origin("fixture-dcc", {"namespaceToken":"public","namespaceName":"share.zrok.io"}), self.origin)

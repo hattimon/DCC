@@ -5,7 +5,7 @@ from io import BytesIO
 import json
 import os
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import secrets
 import sys
 import time
@@ -14,7 +14,10 @@ from urllib.parse import urlsplit
 from flask import abort, g, jsonify, request, send_file
 
 from engine import DockerBackend
-from client_adapters import codex_marketplace_archive, codex_project_archive, export_client
+from client_adapters import (
+    CONFIG_PATHS, MANUAL_INSTRUCTIONS, agent_instructions, client_project_archive,
+    codex_marketplace_archive, configuration_text, export_client, instruction_path,
+)
 from security import admin, redact
 
 CLIENTS = ["OpenAI Codex", "Claude Desktop", "Claude Code", "Cursor", "Windsurf", "VS Code / GitHub Copilot", "Generic MCP"]
@@ -328,7 +331,7 @@ class MCPService:
             choices=self.profile_choices(grant)
             selector_help=("Select a granted connection profile by its exact name or host/IP address; the profile ID also works when names or addresses are ambiguous. Granted profiles: "+", ".join(choices)+". ") if choices else "Select a granted connection profile by name, host/IP address, or profile ID. "
             result = {"protocolVersion": version, "capabilities": {"tools": {"listChanged": False}},
-                      "serverInfo": {"name": "dcc-web", "version": "0.2.3"},
+                      "serverInfo": {"name": "dcc-web", "version": "0.2.4"},
                       "instructions": selector_help+("Read-only tools are enabled." if mode == "read" else "Only explicitly granted tools and profiles are enabled. Every operation is checked against the current profile permissions. Container removal does not delete volumes.") + " Use stdio transport; HTTP transport is not exposed."}
             self.negotiated = True
         elif method == "ping":
@@ -452,18 +455,51 @@ def register_mcp(app, state, profile_lookup, reauthenticate, confirmed):
             state.write_audit(db, g.user["id"], "mcp.grant.history.deleted", grant_id, 200)
         return jsonify(ok=True)
 
-    @app.get("/api/mcp/config/<grant_id>")
-    def export(grant_id):
+    def export_grant(grant_id):
         admin()
-        rows = state.rows("SELECT data FROM grants WHERE id=? AND revoked=0", (grant_id,))
+        rows = state.rows("SELECT data,paused FROM grants WHERE id=? AND revoked=0", (grant_id,))
         if not rows:
             abort(404)
         metadata = json.loads(rows[0]["data"])
-        download = request.args.get("download")
-        if download not in (None, "config", "plugin", "project"):
-            abort(400)
-        if download in ("plugin", "project") and metadata["client"] != "OpenAI Codex":
-            abort(404)
+        expires = metadata.get("expires")
+        if rows[0]["paused"] or (expires is not None and expires <= time.time()):
+            abort(409, "This MCP grant is paused or expired.")
+        return metadata
+
+    def export_variant(metadata):
+        variant = request.args.get("variant", "standard")
+        try:
+            instruction_path(metadata["client"], variant)
+        except ValueError as error:
+            abort(400, str(error))
+        return variant
+
+    def render_grant(grant_id, metadata, variant):
+        tools = [
+            name for name in metadata.get("tools", [])
+            if name in TOOLS and (name in READ_TOOLS or metadata.get("mode") == "write")
+            and (name != "container_remove" or metadata.get("allow_destructive") is True)
+        ]
+        profiles = []
+        for profile_id in dict.fromkeys(metadata.get("profiles", [])):
+            try:
+                profile = state.profile(profile_id)
+            except ValueError:
+                continue
+            permissions = set(profile.get("permissions", ["read"]))
+            if "read" not in permissions:
+                continue
+            # Include hostname/IP aliases only, excluding endpoint userinfo, paths and queries.
+            addresses = sorted(host for host, port in _profile_addresses(profile) if port is None)
+            profiles.append({
+                "id": profile_id,
+                "name": profile.get("name") or profile_id,
+                "addresses": addresses,
+                "tools": [name for name in tools if required_capabilities(name) <= permissions],
+            })
+        return agent_instructions(grant_id, metadata, profiles, TOOLS, variant)
+
+    def export_launcher():
         args = [str(Path(__file__).with_name("web.py")), "--data", str(state.directory), "--mcp-stdio"]
         command = sys.executable
         if os.environ.get("DCC_WEB_CONTAINER_NAME"):
@@ -477,20 +513,65 @@ def register_mcp(app, state, profile_lookup, reauthenticate, confirmed):
                         "/usr/local/bin/dcc-web-entrypoint", sys.executable, *args]
             finally:
                 client.close()
+        return command, args
+
+    def send_bundle(grant_id, metadata, variant, config, filename):
+        instructions = render_grant(grant_id, metadata, variant)
+        bundle = client_project_archive(metadata["client"], config["configuration"], instructions, variant)
+        state.audit(g.user["id"], "mcp:bundle-download", grant_id, 200)
+        return send_file(bundle, mimetype="application/zip", as_attachment=True, download_name=filename)
+
+    @app.get("/api/mcp/config/<grant_id>")
+    def export(grant_id):
+        metadata = export_grant(grant_id)
+        client = metadata["client"]
+        download = request.args.get("download")
+        if download not in (None, "config", "1", "plugin", "project"):
+            abort(400)
+        if download in ("plugin", "project") and client != "OpenAI Codex":
+            abort(404)
+        variant = export_variant(metadata) if download == "project" else None
+        command, args = export_launcher()
         if download == "plugin":
             return send_file(codex_marketplace_archive(command, args), mimetype="application/zip",
                              as_attachment=True, download_name="dcc-web-codex.zip")
-        config = export_client(metadata["client"], command, args)
+        config = export_client(client, command, args)
         if download == "project":
-            return send_file(codex_project_archive(config["configuration"]), mimetype="application/zip",
-                             as_attachment=True, download_name="dcc-mcp-project.zip")
-        if download == "config":
+            return send_bundle(grant_id, metadata, variant, config, "dcc-mcp-project.zip")
+        if download in ("config", "1"):
             is_toml = config["format"] == "toml"
-            content = config["configuration"] if is_toml else json.dumps(config["configuration"], ensure_ascii=False, indent=2) + "\n"
+            content = configuration_text(config["configuration"])
+            filename = (PurePosixPath(CONFIG_PATHS[client]).name if download == "1"
+                        else f'dcc-mcp.{config["format"]}')
             return send_file(BytesIO(content.encode("utf-8")),
                              mimetype="application/toml" if is_toml else "application/json",
-                             as_attachment=True, download_name=f'dcc-mcp.{config["format"]}')
-        return jsonify(config)
+                             as_attachment=True, download_name=filename)
+        return jsonify(**config, path=CONFIG_PATHS[client])
+
+    @app.get("/api/mcp/instructions/<grant_id>")
+    def export_instructions(grant_id):
+        metadata = export_grant(grant_id)
+        variant = export_variant(metadata)
+        client = metadata["client"]
+        download = request.args.get("download")
+        if download not in (None, "1"):
+            abort(400)
+        filename = instruction_path(client, variant, standalone=True)
+        content = render_grant(grant_id, metadata, variant)
+        if download:
+            state.audit(g.user["id"], "mcp:instructions-download", grant_id, 200)
+            return send_file(BytesIO(content.encode("utf-8")), mimetype="text/markdown",
+                             as_attachment=True, download_name=filename)
+        return jsonify(content=content, filename=filename, path=instruction_path(client, variant),
+                       automatic=client not in MANUAL_INSTRUCTIONS)
+
+    @app.get("/api/mcp/bundle/<grant_id>")
+    def export_bundle(grant_id):
+        metadata = export_grant(grant_id)
+        variant = export_variant(metadata)
+        config = export_client(metadata["client"], *export_launcher())
+        suffix = "-chatgpt-web" if variant == "chatgpt-web" else ""
+        return send_bundle(grant_id, metadata, variant, config, f"dcc-mcp-project{suffix}.zip")
 
 
 def stdio(state, input_stream=None, output_stream=None):

@@ -706,6 +706,19 @@ Token — pokazany tylko raz|Token — shown once
 Zapisz token w menedżerze sekretów klienta. Nie będzie można ponownie go odczytać.|Save the token in your client's secret manager. It cannot be retrieved again.
 Eksport konfiguracji jest dostępny w tabeli; zamiast tokenu zawiera bezpieczny znacznik środowiska.|Configuration export is available in the table and contains no token value.
 Konfiguracja MCP stdio|MCP stdio configuration
+Eksport AI / MCP|AI / MCP export
+Instrukcje agenta AI|AI Agent Instructions
+Wariant instrukcji w podglądzie i paczce ZIP|Instruction variant for preview and ZIP
+Standardowy Codex — domyślnie|Standard Codex — default
+ChatGPT Web — połączenia pośrednie|ChatGPT Web — indirect connections
+Pobierz AGENTS.md|Download AGENTS.md
+Pobierz AGENTS.md — ChatGPT Web|Download AGENTS.md — ChatGPT Web
+Pobierz instrukcję|Download instructions
+Kopiuj instrukcje|Copy instructions
+Scal instrukcję w pokazanej ścieżce projektu. Kroki konfiguracji znajdziesz w README.md w paczce.|Merge the instructions at the displayed project path. Setup steps are in the bundled README.md.
+Skopiuj instrukcję ręcznie do czatu lub instrukcji projektu. Kroki konfiguracji znajdziesz w README.md w paczce.|Copy the instructions into chat or project instructions. Setup steps are in the bundled README.md.
+W zwykłym ChatGPT Web skopiuj instrukcję ręcznie do czatu lub instrukcji projektu. Czat nie wczytuje lokalnego AGENTS.md.|In a regular ChatGPT Web chat, copy the instructions into chat or project instructions. The chat does not load the local AGENTS.md file.
+Wygasł|Expired
 Pobierz konfigurację|Download configuration
 Pobierz paczkę projektu (ZIP)|Download project package (ZIP)
 Pobierz wtyczkę Codex (ZIP)|Download Codex plugin (ZIP)
@@ -828,6 +841,7 @@ known_hosts — indywidualna ścieżka (opcjonalnie)|known_hosts — individual 
 const messages=Object.fromEntries(pairs.trim().split('\n').filter(line=>line.includes('|')).map(line=>line.split('|')));
 const reverse=Object.fromEntries(Object.entries(messages).filter(([a,b])=>a!==b).map(([a,b])=>[b,a]));
 const errorPL={
+ 'This MCP grant is paused or expired.':'Ten dostęp MCP jest wstrzymany lub wygasł.',
 "The DCC Web container cannot open a host shell through the Docker socket. Create or select an SSH profile for this same Docker host, then enable host.exec for it.":"Kontener DCC Web nie otworzy powłoki systemowej przez socket Docker. Utwórz lub wybierz profil SSH prowadzący do tego samego hosta Docker i włącz w nim uprawnienie host.exec.",
 "Use a simple SSH filename without directories":"Podaj prostą nazwę pliku SSH bez katalogów.",
 "SSH paths must not contain symbolic links":"Ścieżki SSH nie mogą zawierać dowiązań symbolicznych.",

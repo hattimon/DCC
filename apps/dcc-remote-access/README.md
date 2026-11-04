@@ -4,7 +4,7 @@ DCC Remote Access is a managed zrok 2 sidecar for containerized DCC Web. NetFoun
 
 ## Install and activate
 
-1. Use the published DCC Web 0.2.3 Docker image or a newer Web release with Remote Access. To upgrade, select the existing DCC Web container in DCC Container Updater, check for updates, and apply the offered Web image. Reload your existing panel address afterward. For a fresh installation, follow the [DCC Web container instructions](../dcc-web/docs/installation.md).
+1. Use the published DCC Web 0.2.4 Docker image or a newer Web release with Remote Access. To upgrade, select the existing DCC Web container in DCC Container Updater, check for updates, and apply the offered Web image. Reload your existing panel address afterward. For a fresh installation, follow the [DCC Web container instructions](../dcc-web/docs/installation.md).
 2. Sign in locally as a DCC administrator. In the **local Docker** profile, enable **Install applications**. In **Settings → Administration and security → Login and two-factor authentication**, enroll a TOTP app and save the recovery codes.
 3. Install **DCC Remote Access** from the **DCC** category in the App Store or open **Settings → Administration and security → Panel access and HTTPS (TLS) → Remote Internet Access**. Both paths manage the same container.
 4. Create an account at [myzrok.io](https://myzrok.io/). In the zrok API console, copy the account token from the getting-started wizard. Open the local panel over trusted HTTPS for enrollment and reauthentication. Use **Configure** to enter the token and choose a name or let DCC generate one. The hosted service reserves the name. If your chosen name is taken, select another name.

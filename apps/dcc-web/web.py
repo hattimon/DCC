@@ -31,7 +31,7 @@ from remote_access import ACTIONS as REMOTE_ACTIONS, PORT as REMOTE_PORT, regist
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.2.3"
+VERSION = "0.2.4"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
 DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "refresh_changes_only":False, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 MCP_GRANT_ACTIONS={"mcp.grant.pause","mcp.grant.resume","mcp.grant.revoke","mcp.grant.delete-history"}
@@ -735,7 +735,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         remote = app.extensions["dcc_remote_access"]
         result = catalogs.view(request.args.get("lang","PL"),query=request.args.get("q",""),category=request.args.get("category","all"),
                                engine_kind="balena" if p["kind"]=="balena" else "docker",installed_map=installed_map,
-                               managed_remote_name=remote.name if remote.available and p["id"]=="local" and p["kind"]=="local" else None)
+                               managed_remote_name=remote.name if remote.available and p["kind"]=="local" and not p.get("context") else None)
         return jsonify(**result,connected=True if installed_map is not None else (False if scan["error"] else None),
                        installed_known=installed_map is not None,installed_pending=scan["pending"],installed_error=scan["error"],sources=catalogs.sources())
 
@@ -747,7 +747,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             containers = factory(p).containers()
             remote = app.extensions["dcc_remote_access"]
             result = catalogs.view("PL",containers=containers,engine_kind="balena" if p["kind"]=="balena" else "docker",
-                                   managed_remote_name=remote.name if remote.available and p["id"]=="local" and p["kind"]=="local" else None)["apps"]
+                                   managed_remote_name=remote.name if remote.available and p["kind"]=="local" and not p.get("context") else None)["apps"]
             return {item["id"]:{"installed":item["installed"],"installed_ids":item["installed_ids"]} for item in result}
         value = installed_scans.begin(g.user["id"],p["id"],work,force=data.get("force") is True)
         return jsonify(value),202

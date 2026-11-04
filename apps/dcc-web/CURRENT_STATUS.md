@@ -1,10 +1,10 @@
-# DCC Web 0.2.3
+# DCC Web 0.2.4
 
-Web 0.2.3 bundles DCC Remote Access 0.1.0. DCC Container Updater can replace the previous Web image while retaining the data volume and managed local HTTPS. The remote tunnel remains disabled until an administrator configures and confirms it. [Setup and security boundaries](../dcc-remote-access/README.md)
+Web 0.2.4 fixes Remote Access 0.1.0 installation when the local Docker profile has a custom ID and restores the managed module in the DCC App Store category. DCC Container Updater can replace the previous Web image while retaining the data volume and managed local HTTPS. The remote tunnel remains disabled until an administrator configures and confirms it. [Setup and security boundaries](../dcc-remote-access/README.md)
 
 This release displays each profile ID in the Profiles list, the active profile ID in Overview → Host details, and the selected profile ID beside the host address on the Containers page.
 
-This release adds pausable MCP grants with required confirmations, audited removal from the grant list, profile name/host selectors, manual container refresh, and configurable periodic/change-aware polling. It keeps the existing MCP downloads, operating-system-specific token setup guides and active SSH address in the terminal header. The previous SMTP settings fix continues to omit the password from API responses.
+Web 0.2.4 adds grant-scoped instructions and project ZIPs for all seven MCP clients. Codex users can choose a separate ChatGPT Web variant. Web 0.2.2 introduced pausable MCP grants, audited removal from the grant list, profile name/host selectors, manual refresh and configurable polling. [MCP setup and export](docs/mcp.md)
 
 IP-based HTTPS selects the configured certificate even without client SNI. The authenticated Caddy marker keeps HTTPS login, CSRF Origin checks and Secure cookies working behind Waitress. Administration settings use collapsed, described sections with direct access to IP/domain and HTTPS/certificate controls. Real Docker verification covers login and proxy recreation with the saved port and CA.
 

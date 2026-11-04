@@ -490,8 +490,8 @@ def register_remote_access(app, state, body, profile, confirmed, reauthenticate,
         if action == "check-update":
             return jsonify(remote.check_update())
         data = body()
-        p = profile("local", "install") if action in {"install", "uninstall"} else {"id": "local"}
-        if action in {"install", "uninstall"} and p["kind"] != "local":
+        p = profile(data.get("profile"), "install") if action in {"install", "uninstall"} else {"id": "local"}
+        if action in {"install", "uninstall"} and (p["kind"] != "local" or p.get("context")):
             abort(409, "Select the local Docker installation profile.")
         owner = g.user["id"]
         confirmed(data, "remote-access." + action, "workspace", "dcc-remote-access")
@@ -510,7 +510,7 @@ def register_remote_access(app, state, body, profile, confirmed, reauthenticate,
         def work():
             try:
                 result = remote.perform(action, data, owner, epoch)
-                invalidate("local")
+                invalidate(p["id"])
                 return result
             except DockerException:
                 raise RemoteError("Docker could not complete the managed tunnel operation.") from None

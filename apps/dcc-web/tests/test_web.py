@@ -25,7 +25,7 @@ from state import State
 from security import CAPABILITIES,redact,validate_profile
 from catalogs import Catalogs,install_plan,fetch_public,validate_catalog,image_repo
 from mcp_preview import MCPService,stdio
-from client_adapters import export_client
+from client_adapters import _zip_files, export_client
 from engine import DockerBackend,EngineError
 from ports import published_ports,enrich_containers,inventory,parse_bindings
 from remote_api import VerifiedProfileAdapter,ssh_docker_client
@@ -678,6 +678,9 @@ class WebTests(unittest.TestCase):
         vscode=export_client('VS Code / GitHub Copilot','python',['web.py'])['configuration']
         self.assertTrue(vscode['inputs'][0]['password'])
         self.assertIn('dcc',export_client('Claude Desktop','python',['web.py'])['configuration']['mcpServers'])
+        for client, token_reference in [('Claude Code', '${DCC_MCP_TOKEN}'), ('Cursor', '${env:DCC_MCP_TOKEN}')]:
+            server = export_client(client, 'python', ['web.py'])['configuration']['mcpServers']['dcc']
+            self.assertEqual(server['env'], {'DCC_MCP_TOKEN': token_reference})
         self.assertNotIn(grant['token'],json.dumps(codex)+json.dumps(vscode))
 
     def test_container_mcp_export_uses_verified_container_nonroot_entrypoint_and_environment(self):
@@ -711,8 +714,9 @@ class WebTests(unittest.TestCase):
         self.assertEqual(project.status_code,200)
         self.assertIn('attachment; filename=dcc-mcp-project.zip',project.headers['Content-Disposition'])
         with ZipFile(io.BytesIO(project.data)) as archive:
-            self.assertEqual(archive.namelist(),['.codex/config.toml'])
+            self.assertEqual(archive.namelist(),['.codex/config.toml','AGENTS.md','README.md'])
             self.assertEqual(archive.read('.codex/config.toml').decode(),preview)
+            self.assertNotIn(b'authorized indirect access',archive.read('AGENTS.md'))
 
         plugin=self.client.get(path+'?download=plugin')
         self.assertEqual(plugin.status_code,200)
@@ -741,6 +745,73 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.request('mcp/grants/'+grant['id'], {'confirmation': token}, method='DELETE').status_code, 200)
         for download in ('config','plugin','project'):
             self.assertEqual(self.client.get(path+'?download='+download).status_code,404)
+
+    def test_mcp_instruction_exports_follow_live_profile_permissions_and_exclude_secrets(self):
+        self.state.save_profile("granted-ssh", {
+            "name": "Żółć `<b>\n# injected heading", "kind": "ssh",
+            "host": "example.test", "endpoint": "https://user:secret@example.test/hidden?token=private",
+            "panel_host": "192.0.2.15", "permissions": sorted(CAPABILITIES),
+        }, {"password": "hidden-fixture-password"})
+        self.state.save_profile("excluded", {"name": "Excluded Host", "kind": "local", "permissions": ["read"]})
+        result = self.request("mcp/grants", {
+            "client": "OpenAI Codex", "profiles": ["local", "granted-ssh"], "mode": "write",
+            "tools": ["list_containers", "container_start"], "current_password": "ReviewPassword-44-long",
+        })
+        self.assertEqual(result.status_code, 201, result.json)
+        grant = result.json
+        path = "/api/mcp/instructions/" + grant["id"]
+        payload = self.client.get(path).json
+        instructions = payload["content"]
+        self.assertEqual(payload["path"], "AGENTS.md")
+        for expected in ("Review Docker", "granted-ssh", "Żółć", "example.test", "192.0.2.15", "container_start"):
+            self.assertIn(expected, instructions)
+        for secret in (grant["token"], "Excluded Host", "hidden-fixture-password", "user:secret", "/hidden",
+                       "token=private", "\n# injected heading", "authorized indirect access"):
+            self.assertNotIn(secret, instructions)
+        self.assertIn(r"\u0060<b>", instructions)
+        self.assertEqual(self.client.get(path + "?variant=../../file").status_code, 400)
+        web_variant = self.client.get(path + "?variant=chatgpt-web&download=1")
+        self.assertIn("filename=AGENTS.chatgpt-web.md", web_variant.headers["Content-Disposition"])
+        with ZipFile(io.BytesIO(self.client.get("/api/mcp/bundle/" + grant["id"] + "?variant=chatgpt-web").data)) as bundle:
+            self.assertEqual(bundle.read("AGENTS.md"), web_variant.data)
+            self.assertNotIn("AGENTS.chatgpt-web.md", bundle.namelist())
+        self.assertIn(b"authorized indirect access", web_variant.data)
+
+        self.state.save_profile("granted-ssh", {"name": "Read SSH", "kind": "ssh", "permissions": ["read"]})
+        self.state.save_profile("local", {"name": "Local without read", "kind": "local", "permissions": []})
+        updated = self.client.get(path).json["content"]
+        self.assertIn("Read SSH", updated)
+        self.assertIn("list_containers", updated)
+        self.assertNotIn("container_start", updated)
+        self.assertNotIn("Local without read", updated)
+
+    def test_mcp_export_requires_active_grant_and_administrator(self):
+        grant = self.request("mcp/grants", {"client": "Generic MCP", "profiles": ["local"]}).json
+        endpoints = [f"/api/mcp/{kind}/{grant['id']}" for kind in ("config", "instructions", "bundle")]
+        for path in endpoints:
+            self.assertEqual(self.app.test_client().get(path).status_code, 401)
+            self.assertEqual(self.client.get(path).status_code, 200)
+        self.assertEqual(self.client.get(endpoints[1] + "?variant=chatgpt-web").status_code, 400)
+        self.assertEqual(self.client.post("/api/mcp/grants/" + grant["id"] + "/pause", json={}).status_code, 403)
+        confirmation = self.confirmation("mcp.grant.pause", grant["id"], "workspace")
+        self.assertEqual(self.request("mcp/grants/" + grant["id"] + "/pause", {"confirmation": confirmation}).status_code, 200)
+        for path in endpoints:
+            self.assertEqual(self.client.get(path).status_code, 409)
+        metadata = json.loads(self.state.rows("SELECT data FROM grants WHERE id=?", (grant["id"],))[0]["data"])
+        metadata["expires"] = time.time() - 1
+        self.state.execute("UPDATE grants SET paused=0,data=? WHERE id=?", (json.dumps(metadata), grant["id"]))
+        for path in endpoints:
+            self.assertEqual(self.client.get(path).status_code, 409)
+        with self.client.session_transaction() as session:
+            digest = hashlib.sha256(session["sid"].encode()).hexdigest()
+        self.state.execute("UPDATE users SET role='viewer' WHERE id=(SELECT user_id FROM sessions WHERE token=?)", (digest,))
+        for path in endpoints:
+            self.assertEqual(self.client.get(path).status_code, 403)
+
+    def test_mcp_export_zip_rejects_unsafe_paths(self):
+        for path in ("../AGENTS.md", "/AGENTS.md", "C:/AGENTS.md", r".cursor\dcc.mdc", "rules//dcc.md"):
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, "Unsafe export path"):
+                _zip_files({path: "fixture"})
 
     def test_local_docs_routes_and_about_are_available(self):
         self.assertEqual(self.client.get('/about').status_code,200)

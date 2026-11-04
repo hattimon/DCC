@@ -22,13 +22,31 @@ python apps/dcc-web/web.py --data PATH_TO_PRIVATE_STATE --mcp-stdio
 
 Proces klienta musi otrzymać `DCC_MCP_TOKEN` z menedżera sekretów lub środowiska użytkownika. Nie wklejaj rzeczywistego tokenu do współdzielonego pliku konfiguracji. Stdout jest zarezerwowany na protokół, stderr na diagnostykę. Klient musi wykonać `initialize` i `notifications/initialized`. Serwer negocjuje wersje 2024-11-05, 2025-03-26, 2025-06-18 i 2025-11-25.
 
-## Eksport konfiguracji
+## Eksport konfiguracji i instrukcji agenta
 
 Konfiguracja Codex, VS Code, Claude, Cursor i innych klientów wskazuje nazwę zmiennej `DCC_MCP_TOKEN`; sam token jest pokazywany tylko raz. Dla instalacji kontenerowej eksporter rozpoznaje kontener DCC Web i używa `docker exec -i`. Klient musi mieć Docker CLI z kontekstem wskazującym host kontenera. Konfiguracja klienta nie jest zapisywana ani zmieniana automatycznie. Sprawdź format obsługiwany przez zainstalowaną wersję klienta.
 
-W **AI / MCP → Eksport** pobierz konfigurację dla klienta, którego wybrano przy tworzeniu dostępu. Dla Codex dostępne są trzy formaty.
+1. W **AI / MCP → Nowy dostęp** wybierz klienta, profile, narzędzia, tryb i czas ważności. Zapisz token, gdy się pojawi.
+2. Przy aktywnym grancie otwórz **Eksport**. Pobierz konfigurację lub instrukcje osobno albo wybierz **Pobierz paczkę projektu (ZIP)**, aby otrzymać oba pliki i dwujęzyczną instrukcję konfiguracji.
+3. Scal pliki we wskazanych ścieżkach, zachowując istniejące wpisy i instrukcje. Uruchom klienta, sprawdź listę narzędzi MCP i wypróbuj dozwolone narzędzie odczytu z ID profilu z eksportu. Jeśli narzędzia się nie pojawią, sprawdź token, ścieżki i konfigurację klienta według dołączonego README.
 
-- **Paczka projektu (ZIP).** Rozpakuj w katalogu głównym projektu. Paczka dodaje `.codex/config.toml` i działa w zaufanym projekcie. Jeśli ten plik już istnieje, scal z nim sekcję `dcc` z pliku TOML. Aby ograniczyć dostęp do projektu, usuń ewentualny wpis `dcc` z globalnego `~/.codex/config.toml`. Otwórz nowy czat w projekcie.
+| Klient | Konfiguracja MCP w ZIP | Instrukcje agenta |
+| --- | --- | --- |
+| OpenAI Codex | `.codex/config.toml` | `AGENTS.md` w zaufanym projekcie |
+| Claude Code | `.mcp.json` | `CLAUDE.md` w katalogu głównym |
+| Claude Desktop | `claude_desktop_config.json`, scal przez Developer → Edit Config | Skopiuj `DCC_INSTRUCTIONS.md` ręcznie |
+| Cursor | `.cursor/mcp.json` | `.cursor/rules/dcc.mdc` |
+| Windsurf | `mcp_config.json`, scal przez ustawienia MCP klienta | `.windsurf/rules/dcc.md` |
+| VS Code / GitHub Copilot | `.vscode/mcp.json`, wybierz tryb Local i użyj maskowanego monitu o token | `.github/copilot-instructions.md` |
+| Generic MCP | `mcp.json`, scal zgodnie z dokumentacją klienta | Skopiuj `DCC_INSTRUCTIONS.md` ręcznie |
+
+Instrukcje pokazują profile z aktywnym uprawnieniem odczytu oraz narzędzia dostępne w każdym z nich w chwili eksportu. Migawka pomaga ustalić profil, a serwer MCP sprawdza bieżące uprawnienia. Dostępy wstrzymane, wygasłe i odebrane nie są dostępne do eksportu.
+
+### Codex i ChatGPT Web
+
+Wariant standardowy jest domyślny. Opcjonalny wariant **ChatGPT Web** dodatkowo opisuje sprawdzenie niezależnie autoryzowanych połączeń pośrednich, gdy zawiedzie dostęp bezpośredni. Osobno pobierzesz go jako `AGENTS.chatgpt-web.md`. ZIP projektu zawiera wybrany wariant pod nazwą `AGENTS.md`. W zwykłym czacie ChatGPT Web wybierz **Kopiuj instrukcje** lub wklej pobraną treść ręcznie. Dotarcie do DCC wymaga osobno skonfigurowanego połączenia.
+
+- **Paczka projektu (ZIP).** Scal pliki w katalogu głównym zaufanego projektu. Aby ograniczyć dostęp do projektu, usuń ewentualny wpis `dcc` z globalnego `~/.codex/config.toml`. Otwórz nowy czat w projekcie.
 - **TOML.** Dodaj sekcję `[mcp_servers.dcc]` do `~/.codex/config.toml` lub do `.codex/config.toml` zaufanego projektu. Jeśli sekcja już istnieje, zaktualizuj istniejący wpis.
 - **Wtyczka Codex (ZIP).** Rozpakuj archiwum do osobnego katalogu i uruchom w nim `codex plugin marketplace add .`. Następnie zainstaluj **DCC Web MCP** ze źródła **DCC Web** w katalogu wtyczek Codex. W razie potrzeby odśwież katalog lub uruchom ponownie Codex.
 
