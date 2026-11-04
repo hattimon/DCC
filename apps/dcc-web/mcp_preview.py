@@ -1,6 +1,7 @@
 """Profile-scoped MCP stdio server with explicit read and write grants."""
 import hashlib
 import ipaddress
+from io import BytesIO
 import json
 import os
 import re
@@ -9,10 +10,10 @@ import secrets
 import sys
 import time
 
-from flask import abort, g, jsonify, request
+from flask import abort, g, jsonify, request, send_file
 
 from engine import DockerBackend
-from client_adapters import export_client
+from client_adapters import codex_marketplace_archive, codex_project_archive, export_client
 from security import admin, redact
 
 CLIENTS = ["OpenAI Codex", "Claude Desktop", "Claude Code", "Cursor", "Windsurf", "VS Code / GitHub Copilot", "Generic MCP"]
@@ -334,6 +335,11 @@ def register_mcp(app, state, profile_lookup, reauthenticate):
         if not rows:
             abort(404)
         metadata = json.loads(rows[0]["data"])
+        download = request.args.get("download")
+        if download not in (None, "config", "plugin", "project"):
+            abort(400)
+        if download in ("plugin", "project") and metadata["client"] != "OpenAI Codex":
+            abort(404)
         args = [str(Path(__file__).with_name("web.py")), "--data", str(state.directory), "--mcp-stdio"]
         command = sys.executable
         if os.environ.get("DCC_WEB_CONTAINER_NAME"):
@@ -347,7 +353,20 @@ def register_mcp(app, state, profile_lookup, reauthenticate):
                         "/usr/local/bin/dcc-web-entrypoint", sys.executable, *args]
             finally:
                 client.close()
-        return jsonify(export_client(metadata["client"], command, args))
+        if download == "plugin":
+            return send_file(codex_marketplace_archive(command, args), mimetype="application/zip",
+                             as_attachment=True, download_name="dcc-web-codex.zip")
+        config = export_client(metadata["client"], command, args)
+        if download == "project":
+            return send_file(codex_project_archive(config["configuration"]), mimetype="application/zip",
+                             as_attachment=True, download_name="dcc-mcp-project.zip")
+        if download == "config":
+            is_toml = config["format"] == "toml"
+            content = config["configuration"] if is_toml else json.dumps(config["configuration"], ensure_ascii=False, indent=2) + "\n"
+            return send_file(BytesIO(content.encode("utf-8")),
+                             mimetype="application/toml" if is_toml else "application/json",
+                             as_attachment=True, download_name=f'dcc-mcp.{config["format"]}')
+        return jsonify(config)
 
 
 def stdio(state, input_stream=None, output_stream=None):

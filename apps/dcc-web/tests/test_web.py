@@ -9,6 +9,7 @@ import time
 import unittest
 from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch,MagicMock
+from zipfile import ZipFile
 from types import SimpleNamespace
 import subprocess
 import threading
@@ -591,8 +592,10 @@ class WebTests(unittest.TestCase):
         self.assertIn('error',service.handle({'id':3,'method':'tools/list'}))
         service.handle({'method':'notifications/initialized'})
         self.assertIn('tools',service.handle({'id':4,'method':'tools/list'})['result'])
-        codex=export_client('OpenAI Codex','C:\\Python\\python.exe',['web.py'])
-        self.assertEqual(tomllib.loads(codex['configuration'])['mcp_servers']['dcc']['env_vars'],['DCC_MCP_TOKEN'])
+        command='C:\\Python 🐍\\python.exe'
+        codex=export_client('OpenAI Codex',command,['web.py'])
+        self.assertEqual(tomllib.loads(codex['configuration'])['mcp_servers']['dcc'],
+                         {'command':command,'args':['web.py'],'env_vars':['DCC_MCP_TOKEN']})
         vscode=export_client('VS Code / GitHub Copilot','python',['web.py'])['configuration']
         self.assertTrue(vscode['inputs'][0]['password'])
         self.assertIn('dcc',export_client('Claude Desktop','python',['web.py'])['configuration']['mcpServers'])
@@ -614,6 +617,50 @@ class WebTests(unittest.TestCase):
         self.assertEqual(config['args'][-1],'--mcp-stdio')
         self.assertNotIn(grant['token'],json.dumps(response.json))
         docker_client.close.assert_called_once()
+
+    def test_mcp_downloads_match_preview_and_exclude_grant_tokens(self):
+        grant=self.request('mcp/grants',{'profiles':['local'],'client':'OpenAI Codex'}).json
+        path='/api/mcp/config/'+grant['id']
+        preview=self.client.get(path).json['configuration']
+        toml=self.client.get(path+'?download=config')
+        self.assertEqual(toml.status_code,200)
+        self.assertIn('attachment; filename=dcc-mcp.toml',toml.headers['Content-Disposition'])
+        self.assertEqual(toml.get_data(as_text=True),preview)
+        self.assertNotIn(grant['token'],preview)
+
+        project=self.client.get(path+'?download=project')
+        self.assertEqual(project.status_code,200)
+        self.assertIn('attachment; filename=dcc-mcp-project.zip',project.headers['Content-Disposition'])
+        with ZipFile(io.BytesIO(project.data)) as archive:
+            self.assertEqual(archive.namelist(),['.codex/config.toml'])
+            self.assertEqual(archive.read('.codex/config.toml').decode(),preview)
+
+        plugin=self.client.get(path+'?download=plugin')
+        self.assertEqual(plugin.status_code,200)
+        self.assertIn('attachment; filename=dcc-web-codex.zip',plugin.headers['Content-Disposition'])
+        with ZipFile(io.BytesIO(plugin.data)) as archive:
+            self.assertIsNone(archive.testzip())
+            marketplace=json.loads(archive.read('.agents/plugins/marketplace.json'))
+            entry=marketplace['plugins'][0]
+            root=entry['source']['path'].removeprefix('./')
+            manifest=json.loads(archive.read(root+'/.codex-plugin/plugin.json'))
+            self.assertEqual(manifest['name'],entry['name'])
+            mcp=json.loads(archive.read(root+'/'+manifest['mcpServers'].removeprefix('./')))
+            self.assertEqual(mcp['mcpServers'],tomllib.loads(preview)['mcp_servers'])
+            for name in archive.namelist():
+                self.assertNotIn(grant['token'].encode(),archive.read(name))
+
+        generic=self.request('mcp/grants',{'profiles':['local'],'client':'Generic MCP'}).json
+        generic_path='/api/mcp/config/'+generic['id']
+        generic_config=self.client.get(generic_path+'?download=config')
+        self.assertIn('attachment; filename=dcc-mcp.json',generic_config.headers['Content-Disposition'])
+        self.assertEqual(generic_config.json,self.client.get(generic_path).json['configuration'])
+        self.assertEqual(self.client.get(generic_path+'?download=plugin').status_code,404)
+        self.assertEqual(self.client.get(generic_path+'?download=project').status_code,404)
+        self.assertEqual(self.app.test_client().get(path+'?download=plugin').status_code,401)
+        self.assertEqual(self.request('mcp/grants/'+grant['id'],method='DELETE').status_code,200)
+        for download in ('config','plugin','project'):
+            self.assertEqual(self.client.get(path+'?download='+download).status_code,404)
 
     def test_local_docs_routes_and_about_are_available(self):
         self.assertEqual(self.client.get('/about').status_code,200)

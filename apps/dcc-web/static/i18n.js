@@ -232,6 +232,7 @@ Wyloguj|Sign out
 Twoje profile. Twoje dane.|Your profiles. Your data.
 Sklep|Store
 Terminal hosta|Host terminal
+Adres SSH|SSH address
 Maksymalna liczba sesji terminala|Maximum terminal sessions
 Sprawdzaj aktualizacje panelu przy odświeżaniu|Check panel updates on refresh
 Nowa zakładka|New tab
@@ -645,6 +646,18 @@ Token — pokazany tylko raz|Token — shown once
 Zapisz token w menedżerze sekretów klienta. Nie będzie można ponownie go odczytać.|Save the token in your client's secret manager. It cannot be retrieved again.
 Eksport konfiguracji jest dostępny w tabeli; zamiast tokenu zawiera bezpieczny znacznik środowiska.|Configuration export is available in the table and contains no token value.
 Konfiguracja MCP stdio|MCP stdio configuration
+Pobierz konfigurację|Download configuration
+Pobierz paczkę projektu (ZIP)|Download project package (ZIP)
+Pobierz wtyczkę Codex (ZIP)|Download Codex plugin (ZIP)
+Pliki eksportu są generowane bez wartości tokenu. Ustaw DCC_MCP_TOKEN w kliencie MCP lub w środowisku, z którego jest uruchamiany.|Exported files omit the token value. Set DCC_MCP_TOKEN in your MCP client or its launch environment.
+Instrukcja tokenu według systemu|Token setup by operating system
+Jak połączyć Codex i podać token|Connect Codex and set the token
+Aby udostępnić MCP w projekcie, rozpakuj paczkę projektu w jego katalogu głównym i otwórz zaufany projekt w Codex. Jeśli projekt ma już plik .codex/config.toml, dopisz do niego sekcję dcc z pobranego TOML.|To enable MCP in a project, extract the project package at the project root and open the trusted project in Codex. If .codex/config.toml already exists, add the dcc section from the downloaded TOML to that file.
+Aby dodać wtyczkę do katalogu Codex, rozpakuj ZIP wtyczki w osobnym folderze i uruchom w nim poniższe polecenie. Następnie zainstaluj DCC Web MCP ze źródła DCC Web.|To add the plugin to the Codex directory, extract the plugin ZIP into a separate folder and run the command below in that folder. Then install DCC Web MCP from the DCC Web source.
+Jeśli eksport używa Dockera, wybierz kontekst, w którym działa kontener DCC Web. Zdalny host Docker wybierasz przez profil przydzielony tokenowi w DCC Web.|If the export uses Docker, select the context running the DCC Web container. Select a remote Docker host through a DCC Web profile assigned to the token.
+Przy ręcznym dodawaniu serwera STDIO możesz podać DCC_MCP_TOKEN w polu Klucz i wkleić token w polu Wartość. Codex zapisze go jawnie w swojej konfiguracji. Pole Klucz dostępu zmiennej środowiskowej służy do podania samej nazwy zmiennej.|When adding a custom STDIO server, you can set Key to DCC_MCP_TOKEN and paste the token into Value. Codex stores it in plain text in its configuration. The environment-variable allowlist field takes only the variable name.
+Token uprawnia do wybranych profili i narzędzi. Może z niego korzystać każdy czat z dostępem do tego serwera MCP. Kliknij Odbierz dostęp w DCC Web, aby zablokować kolejne wywołania tym tokenem.|The token grants access to the selected profiles and tools. Any chat with access to this MCP server can use it. Select Revoke access in DCC Web to block subsequent calls with the token.
+Instrukcja konfiguracji MCP|MCP setup guide
 Dostęp odebrany|Access revoked
 DCC Web udostępnia zakresowane narzędzia MCP przez stdio. Dostępy do odczytu i modyfikacji wybiera administrator; uprawnienia profilu są sprawdzane przy każdym wywołaniu.|DCC Web provides scoped MCP tools over stdio. Administrators choose read or write access; profile permissions are checked on every call.
 Konfiguracja pozostaje niezależna od dostawcy AI. Eksport używa standardowego procesu MCP, a token trafia do środowiska klienta lub menedżera sekretów.|Configuration is provider-neutral. Export starts a standard MCP process; the token comes from the client environment or secret manager.

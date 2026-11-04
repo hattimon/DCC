@@ -132,9 +132,17 @@ class TerminalTransportTests(unittest.TestCase):
             with self.subTest(base=base):
                 response=self.open(base)
                 self.assertEqual(response.status_code,201,response.json)
+                self.assertEqual(response.json['address'],'192.168.11.20:22')
                 terminal=self.manager.sessions[response.json['id']]
                 self.assertEqual(terminal.profile,'ssh')
                 self.assertEqual(terminal.connection.profile['host'],'192.168.11.20')
+
+    def test_balena_terminal_formats_ipv6_address_and_custom_port(self):
+        self.state.save_profile('ssh',{'name':'Fixture Balena','kind':'balena','host':'2001:db8::14',
+            'port':22222,'username':'fixture','permissions':['read','host.exec']})
+        response=self.open()
+        self.assertEqual(response.status_code,201,response.json)
+        self.assertEqual(response.json['address'],'[2001:db8::14]:22222')
 
     def test_loopback_requires_matching_origin_and_csrf(self):
         for origin in (False,'http://evil.invalid','http://localhost:9999'):

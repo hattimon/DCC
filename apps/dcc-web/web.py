@@ -559,7 +559,13 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         limit=int(json.loads(preferences[0]['data']).get('terminal_limit',16)) if preferences else 16
         value=terminals.open(p,g.user["id"],hashlib.sha256(session["sid"].encode()).hexdigest(),cols,rows,limit=limit)
         state.audit(g.user["id"],"host.terminal.open",p["id"],200)
-        return jsonify(id=value.id,profile=p["id"]),201
+        address = ""
+        if p["kind"] in {"ssh", "balena"}:
+            host = p["host"]
+            if ":" in host and not host.startswith("["):
+                host = f"[{host}]"
+            address = f"{host}:{p.get('port', 22)}"
+        return jsonify(id=value.id,profile=p["id"],address=address),201
 
     @app.get("/api/host-terminal/<terminal_id>")
     def host_terminal_output(terminal_id):
