@@ -3,6 +3,7 @@ import copy
 import json
 
 from engine import EngineError
+from ports import container_revision
 
 
 class FakeBackend:
@@ -21,6 +22,8 @@ class FakeBackend:
     def containers(self):
         if self.unavailable:raise EngineError("Docker unavailable")
         return copy.deepcopy(self.entries)
+    def container_revision(self):
+        return container_revision(self.containers())
     def inspect(self,target):
         entry=next((c for c in self.entries if c["ID"]==target or c["Names"]==target),self.entries[0])
         return {"Id":entry["ID"],"Name":"/"+entry["Names"],"Config":{"Image":entry["Image"],"Env":["APP_PASSWORD=fixture-secret","TZ=Europe/Warsaw"],"Labels":{}},"State":{"Running":entry["State"]=="running","Health":{"Status":"healthy"}},"Mounts":[{"Type":"volume","Name":"protected-data","Destination":"/data"}],"HostConfig":{"RestartPolicy":{"Name":"unless-stopped"}}}

@@ -1,5 +1,5 @@
 import{html,t,literal,setLanguage}from'./i18n.js';
-export const state={profile:localStorage.getItem('dcc-profile')||'local',settings:null,user:null,profiles:[],view:'overview',target:'',selected:new Set(),containers:[],stats:[],hostAddress:''};
+export const state={profile:localStorage.getItem('dcc-profile')||'local',settings:null,user:null,profiles:[],view:'overview',target:'',selected:new Set(),containers:[],stats:[],hostAddress:'',containerRevision:null};
 export async function api(path,options={}){
  const url=new URL('/api/'+path,location.origin);
  if(!url.searchParams.has('profile'))url.searchParams.set('profile',state.profile);

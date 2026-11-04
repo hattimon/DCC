@@ -2,7 +2,7 @@
 
 DCC Web provides an MCP server over UTF-8 JSON-RPC on `stdio`. It does not expose HTTP transport. Tools include container, inspect, log and stats reads, image/volume/network lists, selected container lifecycle operations, container creation and optional container removal.
 
-An administrator creates a separate client grant by selecting profiles, individual tools, access mode and expiry. **Read only** is the default. **Read and modify** requires the administrator's password and a fresh 2FA code when 2FA is enabled. Profile permissions are rechecked on every tool call, so revocation takes effect immediately. A new token is displayed once and only its SHA-256 digest is stored. Grants can be revoked at any time.
+An administrator creates a separate client grant by selecting profiles, individual tools, access mode and expiry. **Read only** is the default. **Read and modify** requires the administrator's password and a fresh 2FA code when 2FA is enabled. Profile permissions are rechecked on every tool call, so revocation takes effect immediately. A new token is displayed once and only its SHA-256 digest is stored. Grants can be paused and resumed. Revoking a grant, pausing/resuming it, or removing a revoked grant from the list requires an explicit checkbox confirmation. Removing it from the list preserves the audit record.
 
 ## Scope and safeguards
 
@@ -32,7 +32,7 @@ In **AI / MCP → Export**, choose a Codex download.
 - **TOML.** Merge the `dcc` section into `~/.codex/config.toml` or the trusted project's `.codex/config.toml`.
 - **Codex plugin (ZIP).** Extract it into a separate directory, run `codex plugin marketplace add .` there, and install **DCC Web MCP** from the **DCC Web** source in the plugin directory.
 
-If the export uses `docker exec`, select the context that runs the DCC Web container. MCP tools take a DCC Web profile ID in the `profile` argument. DCC Web checks the token's access to the profile and connects using the address stored there.
+If the export uses `docker exec`, select the context that runs the DCC Web container. MCP tools accept a profile ID, exact profile name, or host/IP address in the `profile` argument. The server lists the profiles included in the grant and resolves selectors only within that allowlist. If a name or address is ambiguous, use a unique name or ID. DCC Web connects using the address stored in the profile.
 
 ### Set the Codex token
 

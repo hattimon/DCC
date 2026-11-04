@@ -591,6 +591,13 @@ Odsłuchaj efekt|Play test sound
 Odświeżanie|Refresh
 Interwał odświeżania (sekundy)|Refresh interval (seconds)
 Odświeżanie zatrzymuje się na ukrytej karcie i podczas edycji formularzy. Katalogi mają osobne odświeżanie i cache.|Refresh pauses in hidden tabs and while editing forms. Catalogs have separate refresh and cache.
+Odświeżaj panel kontenerów tylko po wykryciu zmian|Refresh the Containers page only when changes are detected
+Ten tryb sprawdza skrót listy co ustawiony interwał. Przy braku zmian nie pobiera pełnych szczegółów ani metryk; zmiany pojawią się z opóźnieniem do długości interwału. To nadal okresowe sprawdzanie, a nie nasłuch zdarzeń Dockera.|This mode checks a compact container-list fingerprint at the selected interval. When nothing changes, it skips full details and metrics; changes appear within one interval. This remains periodic polling, not a Docker event stream.
+Odśwież kontenery|Refresh containers
+Sprawdzono|Checked
+Nie udało się sprawdzić zmian|Could not check for changes
+Panel kontenerów|Containers panel
+Sesje terminala|Terminal sessions
 Przywróć domyślne|Reset defaults
 Anuluj podgląd|Cancel preview
 Zapisz ustawienia|Save settings
@@ -636,6 +643,21 @@ Nazwa / klient|Name / client
 Ważny do|Expires
 Eksport|Export
 Odbierz dostęp|Revoke access
+Pauzuj dostęp|Pause access
+Wznów dostęp|Resume access
+Usuń z historii|Remove from history
+Odebrany|Revoked
+Potwierdź zmianę dostępu|Confirm access change
+Potwierdzam świadomie tę zmianę.|I consciously confirm this change.
+Zatrzymanie tego grantu natychmiast odrzuci kolejne wywołania MCP. Później możesz wznowić dostęp.|Pausing this grant immediately rejects further MCP calls. You can resume access later.
+Klient ponownie uzyska dostęp do przydzielonych profili i narzędzi.|The client will regain access to its granted profiles and tools.
+Token zostanie trwale unieważniony. Tego dostępu nie będzie można wznowić.|The token will be permanently revoked. This grant cannot be resumed.
+Grant zniknie z tej listy. Zapis odebrania dostępu pozostanie w dzienniku operacji.|The grant will be removed from this list. Its revocation record will remain in the operation log.
+Dostęp wstrzymany|Access paused
+Dostęp wznowiony|Access resumed
+Dostęp odebrany|Access revoked
+Grant usunięty z historii|Grant removed from history
+W Codexie profil wybierzesz po nazwie lub adresie hosta; ID pozostaje dostępne w razie niejednoznaczności.|In Codex, select a profile by its name or host address; the ID remains available if the name or address is ambiguous.
 Nowy dostęp MCP|New MCP grant
 Nazwa dostępu|Grant name
 Klient|Client

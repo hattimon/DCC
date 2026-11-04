@@ -9,6 +9,7 @@ import time
 
 import paramiko
 from profile_ssh import configure_client, connection_options
+from ports import container_revision
 
 
 class EngineError(RuntimeError):
@@ -144,13 +145,17 @@ class DockerBackend:
     def info(self):
         return self.json(["info", "--format", "{{json .}}"])
 
-    def containers(self):
+    def _container_list(self):
         data = self.json(["ps", "--all", "--no-trunc", "--format", "{{json .}}"])
         values=data if isinstance(data,list) else [data]
         for entry in values:
             if not entry.get('State') or entry.get('State')=='unknown':
                 text=str(entry.get('Status','')).lower()
                 entry['State']='paused' if 'paused' in text else 'running' if text.startswith('up ') else 'exited' if text.startswith('exited') else 'restarting' if text.startswith('restarting') else 'created' if text.startswith('created') else 'dead' if text.startswith('dead') else 'unknown'
+        return values
+
+    def containers(self):
+        values = self._container_list()
         if values:
             # One bounded inspect request per batch; never return environment/secrets.
             policies = {}
@@ -166,6 +171,9 @@ class DockerBackend:
             for entry in values:
                 entry['RestartPolicy'] = policies.get(entry.get('ID'))
         return values
+
+    def container_revision(self):
+        return container_revision(self._container_list())
 
     def inspect(self, target):
         return self.json(["inspect", target])[0]

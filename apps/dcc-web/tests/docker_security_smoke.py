@@ -185,7 +185,8 @@ def main():
         assert replies[0]['result']['serverInfo']['version']==version
         assert {tool['name'] for tool in replies[1]['result']['tools']}=={'list_containers'}
         assert replies[2]['error']['code']==-32001
-        api('mcp/grants/'+grant['id'],method='DELETE')
+        approval = api('confirmations', {'action': 'mcp.grant.revoke', 'target': grant['id']})
+        api('mcp/grants/'+grant['id'], approval, method='DELETE')
         assert mcp_messages(messages[:1])[0]['error']['code']==-32001
         mount_verified=False
         if args.mount_fixture:

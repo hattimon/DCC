@@ -1,8 +1,8 @@
-# DCC Web 0.2.1
+# DCC Web 0.2.2
 
 This release displays each profile ID in the Profiles list, the active profile ID in Overview → Host details, and the selected profile ID beside the host address on the Containers page.
 
-This release adds MCP downloads, operating-system-specific token setup guides and the active SSH address in the terminal header. The previous SMTP settings fix continues to omit the password from API responses.
+This release adds pausable MCP grants with required confirmations, audited removal from the grant list, profile name/host selectors, manual container refresh, and configurable periodic/change-aware polling. It keeps the existing MCP downloads, operating-system-specific token setup guides and active SSH address in the terminal header. The previous SMTP settings fix continues to omit the password from API responses.
 
 IP-based HTTPS selects the configured certificate even without client SNI. The authenticated Caddy marker keeps HTTPS login, CSRF Origin checks and Secure cookies working behind Waitress. Administration settings use collapsed, described sections with direct access to IP/domain and HTTPS/certificate controls. Real Docker verification covers login and proxy recreation with the saved port and CA.
 

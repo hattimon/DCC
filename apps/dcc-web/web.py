@@ -26,13 +26,14 @@ from markdown_render import render_markdown
 from engine import DockerBackend, EngineError, Jobs
 from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES, trusted_https_request
 from state import State
-from ports import enrich_containers,inventory
+from ports import container_revision,enrich_containers,inventory
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
-DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
+DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "refresh_changes_only":False, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
+MCP_GRANT_ACTIONS={"mcp.grant.pause","mcp.grant.resume","mcp.grant.revoke","mcp.grant.delete-history"}
 
 
 def profile_display_address(profile, info, panel_host):
@@ -320,6 +321,8 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def bootstrap():
         rows = state.rows("SELECT data FROM settings WHERE user_id=?", (g.user["id"],))
         settings = dict(DEFAULT_SETTINGS, **(json.loads(rows[0]["data"]) if rows else {}))
+        settings["refresh"]=max(15,min(900,int(settings.get("refresh",15))))
+        settings["refresh_changes_only"]=bool(settings.get("refresh_changes_only",False))
         profiles = []
         for p in state.profiles():
             if not p.get("users") or g.user["id"] in p["users"] or g.user["role"]=="admin":
@@ -330,7 +333,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def confirmation():
         data = body()
         action, target = str(data.get("action","")), str(data.get("target",""))
-        if action in WORKSPACE_ACTIONS:
+        if action in WORKSPACE_ACTIONS or action in MCP_GRANT_ACTIONS:
             admin()
             profile_id = "workspace"
         else:
@@ -608,15 +611,20 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         engine = backend()
         info, containers = engine.info(), engine.containers()
         info['HostAddress']=info['address']=profile_display_address(engine.profile,info,request.host)
-        return jsonify(info=redact(info), containers=enrich_containers(containers,engine.profile,urlsplit(request.host_url).hostname or 'localhost',catalogs.host_panel_ports()))
+        return jsonify(info=redact(info), revision=container_revision(containers), containers=enrich_containers(containers,engine.profile,urlsplit(request.host_url).hostname or 'localhost',catalogs.host_panel_ports()))
 
     @app.get("/api/containers")
     def containers():
         engine=backend()
-        values = enrich_containers(engine.containers(),engine.profile,urlsplit(request.host_url).hostname or 'localhost',catalogs.host_panel_ports())
+        raw=engine.containers()
+        values = enrich_containers(raw,engine.profile,urlsplit(request.host_url).hostname or 'localhost',catalogs.host_panel_ports())
         query = request.args.get("q","").casefold()
         status = request.args.get("status","")
-        return jsonify(containers=[v for v in values if query in json.dumps(v).casefold() and (not status or v.get("State")==status)])
+        return jsonify(revision=container_revision(raw),containers=[v for v in values if query in json.dumps(v).casefold() and (not status or v.get("State")==status)])
+
+    @app.get("/api/containers/revision")
+    def containers_revision():
+        return jsonify(revision=backend().container_revision())
 
     @app.get("/api/containers/<target>")
     def inspect_container(target):
@@ -1057,6 +1065,8 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def settings():
         rows = state.rows("SELECT data FROM settings WHERE user_id=?",(g.user["id"],))
         value = dict(DEFAULT_SETTINGS,**(json.loads(rows[0]["data"]) if rows else {}))
+        value["refresh"]=max(15,min(900,int(value.get("refresh",15))))
+        value["refresh_changes_only"]=bool(value.get("refresh_changes_only",False))
         if request.method=="PUT":
             incoming = body()
             if incoming.get('language',value['language']) not in {'PL','EN'}:
@@ -1069,7 +1079,8 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
                 if key in incoming:
                     value[key]=incoming[key]
             value["intensity"]=max(0,min(100,int(incoming.get("intensity",value["intensity"]))))
-            value["refresh"]=max(5,min(300,int(incoming.get("refresh",value["refresh"]))))
+            value["refresh"]=max(15,min(900,int(incoming.get("refresh",value["refresh"]))))
+            value["refresh_changes_only"]=bool(incoming.get("refresh_changes_only",value.get("refresh_changes_only",False)))
             value["terminal_limit"]=max(1,min(32,int(incoming.get("terminal_limit",value.get("terminal_limit",16)))))
             value["check_updates_on_refresh"]=bool(incoming.get("check_updates_on_refresh",value.get("check_updates_on_refresh",True)))
             audio = incoming.get("audio",value["audio"])
@@ -1107,7 +1118,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
 
     # MCP is scoped to explicit stdio grants; HTTP transport is not enabled.
     from mcp_preview import register_mcp
-    register_mcp(app,state,profile,reauthenticate)
+    register_mcp(app,state,profile,reauthenticate,confirmed)
     from ai_assistant import register_ai
     register_ai(app,state,profile,factory,body)
     return app

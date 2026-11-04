@@ -2,7 +2,7 @@
 
 DCC Web udostępnia serwer MCP przez UTF-8 JSON-RPC po `stdio`. Nie wystawia transportu HTTP. Narzędzia obejmują odczyt kontenerów, inspekcji, logów, statystyk, obrazów, wolumenów i sieci, a także wybrane operacje cyklu życia, tworzenie kontenera i opcjonalne usuwanie kontenera.
 
-Administrator tworzy osobny dostęp dla klienta, wybierając profile, konkretne narzędzia, tryb i czas ważności. Tryb **Tylko odczyt** jest domyślny. Tryb **Odczyt i modyfikacje** wymaga ponownego podania hasła oraz kodu 2FA, jeśli jest włączone. Uprawnienia profilu są sprawdzane ponownie przy każdym wywołaniu, więc cofnięcie ich od razu blokuje narzędzie. Nowy dostęp pokazuje token tylko raz i przechowuje wyłącznie jego SHA-256. Dostęp można w każdej chwili unieważnić.
+Administrator tworzy osobny dostęp dla klienta, wybierając profile, konkretne narzędzia, tryb i czas ważności. Tryb **Tylko odczyt** jest domyślny. Tryb **Odczyt i modyfikacje** wymaga ponownego podania hasła oraz kodu 2FA, jeśli jest włączone. Uprawnienia profilu są sprawdzane ponownie przy każdym wywołaniu, więc cofnięcie ich od razu blokuje narzędzie. Nowy dostęp pokazuje token tylko raz i przechowuje wyłącznie jego SHA-256. Dostęp można wstrzymać i później wznowić. Przed wstrzymaniem, wznowieniem, odebraniem lub usunięciem odebranego grantu z listy wymagane jest zaznaczenie potwierdzenia. Usunięcie z listy zachowuje wpis w dzienniku operacji.
 
 ## Zakres i zabezpieczenia
 
@@ -32,7 +32,7 @@ W **AI / MCP → Eksport** pobierz konfigurację dla klienta, którego wybrano p
 - **TOML.** Dodaj sekcję `[mcp_servers.dcc]` do `~/.codex/config.toml` lub do `.codex/config.toml` zaufanego projektu. Jeśli sekcja już istnieje, zaktualizuj istniejący wpis.
 - **Wtyczka Codex (ZIP).** Rozpakuj archiwum do osobnego katalogu i uruchom w nim `codex plugin marketplace add .`. Następnie zainstaluj **DCC Web MCP** ze źródła **DCC Web** w katalogu wtyczek Codex. W razie potrzeby odśwież katalog lub uruchom ponownie Codex.
 
-Jeśli konfiguracja używa `docker exec`, kontekst Dockera w Codex musi wskazywać na host z kontenerem DCC Web. Narzędzia MCP przyjmują identyfikator profilu w argumencie `profile`. DCC Web sprawdza, czy token obejmuje ten profil, i łączy się z adresem zapisanym w profilu. Adres urządzenia pozostaje w DCC Web.
+Jeśli konfiguracja używa `docker exec`, kontekst Dockera w Codex musi wskazywać na host z kontenerem DCC Web. Argument `profile` narzędzi MCP może zawierać ID profilu, jego dokładną nazwę albo adres hosta/IP. Serwer pokazuje klientowi profile objęte grantem. Nazwy i adresy rozpoznawane są wyłącznie wśród profili dozwolonych dla tokenu; przy niejednoznaczności użyj unikatowej nazwy lub ID. DCC Web łączy się z adresem zapisanym w profilu.
 
 ### Gdzie podać token Codex
 

@@ -1,10 +1,19 @@
 """Published Docker endpoints and advisory conflict checks, without scanning panels."""
 import ipaddress
+import hashlib
+import json
 import re
 from urllib.parse import urlsplit
 from dcc_catalog import image_repository
 
 WEB_PORTS={80,443,3000,3001,5000,5001,5006,8000,8001,8080,8081,8082,8086,8090,8096,8100,8123,8443,8788,8789,8888,9000,9001,9090,9443}
+
+
+def container_revision(containers):
+    fields=("ID", "Names", "Image", "State", "Ports", "Networks", "Labels", "CreatedAt")
+    values=sorted(({key:entry.get(key) for key in fields} for entry in containers), key=lambda value:str(value.get("ID") or ""))
+    payload=json.dumps(values,sort_keys=True,ensure_ascii=False,separators=(",",":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def parse_bindings(lines):

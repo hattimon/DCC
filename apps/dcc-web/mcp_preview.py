@@ -9,6 +9,7 @@ from pathlib import Path
 import secrets
 import sys
 import time
+from urllib.parse import urlsplit
 
 from flask import abort, g, jsonify, request, send_file
 
@@ -86,6 +87,43 @@ def _container_id(value):
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,200}", value):
         raise ValueError("Invalid container identifier")
     return value
+
+
+def _address_alias(value):
+    text = value.strip().casefold()
+    try:
+        return ipaddress.ip_address(text.removeprefix("[").removesuffix("]")).compressed, None
+    except ValueError:
+        pass
+    try:
+        parsed = urlsplit(text if "://" in text else "//" + text)
+        host = parsed.hostname
+        if host and not any(character.isspace() for character in host):
+            if ":" in host:
+                host = ipaddress.ip_address(host).compressed
+            return host, parsed.port
+    except ValueError:
+        pass
+    return None
+
+
+def _profile_addresses(profile):
+    addresses = set()
+    for key in ("host", "endpoint", "panel_host"):
+        value = profile.get(key)
+        if not isinstance(value,str) or not value.strip():
+            continue
+        address = _address_alias(value)
+        if address:
+            host, port = address
+            addresses.add((host, None))
+            port = profile.get("port", port) if key == "host" else port
+            if port is not None:
+                try:
+                    addresses.add((host, int(port)))
+                except (ValueError, TypeError):
+                    pass
+    return addresses
 
 
 def _create_args(arguments, engine):
@@ -170,21 +208,65 @@ class MCPService:
         self.initialized = False
 
     def grant(self):
-        rows = self.state.rows("SELECT * FROM grants WHERE token=? AND revoked=0", (self.digest,))
+        rows = self.state.rows("SELECT * FROM grants WHERE token=?", (self.digest,))
         if not rows:
             raise PermissionError("MCP access is invalid or revoked")
+        if rows[0]["revoked"]:
+            raise PermissionError("MCP access is invalid or revoked")
         value = json.loads(rows[0]["data"])
-        if value.get("expires") is not None and value["expires"] < time.time():
+        if value.get("expires") is not None and value["expires"] <= time.time():
             raise PermissionError("MCP access has expired")
+        if rows[0]["paused"]:
+            raise PermissionError("MCP access is paused")
         return value
+
+    def resolve_profile(self, selector, grant):
+        if not isinstance(selector,str) or not selector.strip():
+            raise ValueError("Provide a granted profile name, host address, or profile ID")
+        selector = selector.strip()
+        selected = selector.casefold()
+        address = _address_alias(selector)
+        profile_ids = dict.fromkeys(grant.get("profiles", []))
+        if selector in profile_ids:
+            return selector
+        matches = []
+        for profile_id in profile_ids:
+            try:
+                profile=self.state.profile(profile_id)
+            except ValueError:
+                continue
+            names = {str(profile.get(key) or "").strip().casefold() for key in ("name", "distro", "context")}
+            if selected in names or address in _profile_addresses(profile):
+                matches.append(profile_id)
+        if len(matches)==1:
+            return matches[0]
+        if len(matches)>1:
+            raise ValueError("This profile name or address matches multiple granted profiles; use a unique name or profile ID")
+        raise PermissionError("No granted profile matches this name or host address")
+
+    def profile_choices(self, grant):
+        choices=[]
+        for profile_id in grant.get("profiles",[]):
+            try:
+                profile=self.state.profile(profile_id)
+            except ValueError:
+                continue
+            name=str(profile.get("name") or profile_id)
+            address=profile.get("host") or profile.get("endpoint") or profile.get("distro") or profile.get("context")
+            if profile.get("host") and profile.get("port") and str(profile["port"]) != "22":
+                host = profile["host"]
+                address = f"[{host}]:{profile['port']}" if ":" in host and not host.startswith("[") else f"{host}:{profile['port']}"
+            choices.append(name+(f" ({address})" if address else ""))
+        return choices
 
     def call(self, name, arguments):
         grant = self.grant()
         profile_id = arguments.get("profile") if isinstance(arguments, dict) else None
         status = 200
         try:
-            if name not in TOOLS or name not in grant.get("tools", []) or profile_id not in grant.get("profiles", []):
+            if name not in TOOLS or name not in grant.get("tools", []):
                 raise PermissionError("Tool or profile is outside this grant")
+            profile_id=self.resolve_profile(profile_id,grant)
             if name in WRITE_TOOLS and grant.get("mode", "read") != "write":
                 raise PermissionError("Write tools require a write-enabled grant")
             if name == "container_remove" and not grant.get("allow_destructive", False):
@@ -241,10 +323,13 @@ class MCPService:
             version = params.get("protocolVersion")
             if version not in {"2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"}:
                 version = "2025-11-25"
-            mode = self.grant().get("mode", "read")
+            grant=self.grant()
+            mode = grant.get("mode", "read")
+            choices=self.profile_choices(grant)
+            selector_help=("Select a granted connection profile by its exact name or host/IP address; the profile ID also works when names or addresses are ambiguous. Granted profiles: "+", ".join(choices)+". ") if choices else "Select a granted connection profile by name, host/IP address, or profile ID. "
             result = {"protocolVersion": version, "capabilities": {"tools": {"listChanged": False}},
-                      "serverInfo": {"name": "dcc-web", "version": "0.2.1"},
-                      "instructions": ("Read-only tools are enabled." if mode == "read" else "Only explicitly granted tools and profiles are enabled. Every operation is checked against the current profile permissions. Container removal does not delete volumes.") + " Use stdio transport; HTTP transport is not exposed."}
+                      "serverInfo": {"name": "dcc-web", "version": "0.2.2"},
+                      "instructions": selector_help+("Read-only tools are enabled." if mode == "read" else "Only explicitly granted tools and profiles are enabled. Every operation is checked against the current profile permissions. Container removal does not delete volumes.") + " Use stdio transport; HTTP transport is not exposed."}
             self.negotiated = True
         elif method == "ping":
             result = {}
@@ -257,7 +342,7 @@ class MCPService:
                 if name not in TOOLS or name in WRITE_TOOLS and grant.get("mode", "read") != "write":
                     continue
                 definition = READ_SCHEMAS[name]
-                properties = {"profile": {"type": "string"}, **definition.get("properties", {})}
+                properties = {"profile": {"type": "string", "description": "Exact granted profile name or host/IP address; profile ID is also accepted."}, **definition.get("properties", {})}
                 write = name in WRITE_TOOLS
                 result["tools"].append({"name": name, "description": TOOLS[name],
                     "inputSchema": {"type": "object", "properties": properties, "required": definition["required"], "additionalProperties": False},
@@ -269,27 +354,31 @@ class MCPService:
         return {"jsonrpc": "2.0", "id": message["id"], "result": result}
 
 
-def register_mcp(app, state, profile_lookup, reauthenticate):
+def register_mcp(app, state, profile_lookup, reauthenticate, confirmed):
     @app.route("/api/mcp/grants", methods=["GET", "POST"])
     def grants():
         admin()
         if request.method == "GET":
             grants_list = []
-            for row in state.rows("SELECT id,data,revoked FROM grants"):
+            for row in state.rows("SELECT id,data,revoked,paused FROM grants"):
                 metadata = json.loads(row["data"])
                 metadata.setdefault("mode", "read")
                 metadata.setdefault("allow_destructive", False)
-                grants_list.append(dict(id=row["id"], revoked=bool(row["revoked"]), **metadata))
+                grants_list.append(dict(id=row["id"], revoked=bool(row["revoked"]), paused=bool(row["paused"]), **metadata))
             return jsonify(clients=CLIENTS, tools=TOOLS, read_tools=READ_TOOLS, write_tools=WRITE_TOOLS,
                            grants=grants_list, transports={"stdio": "scoped read/write", "streamable_http": "disabled"})
         data = request.get_json() or {}
         mode = data.get("mode", "read")
-        if mode not in {"read", "write"}:
+        if mode not in ("read", "write"):
             abort(400, "Choose read-only or read/write access")
         profiles = data.get("profiles", [])
         tools = data.get("tools", list(READ_TOOLS))
         client = data.get("client", "Generic MCP")
-        if client not in CLIENTS or not isinstance(profiles, list) or not profiles or len(profiles) > 100 or len(set(profiles)) != len(profiles) or not isinstance(tools, list) or not tools or len(set(tools)) != len(tools) or set(tools) - set(TOOLS):
+        if (client not in CLIENTS or not isinstance(profiles, list) or not 1 <= len(profiles) <= 100
+                or not all(isinstance(profile, str) and profile for profile in profiles)
+                or len(set(profiles)) != len(profiles) or not isinstance(tools, list) or not tools
+                or not all(isinstance(tool, str) for tool in tools)
+                or len(set(tools)) != len(tools) or set(tools) - set(TOOLS)):
             abort(400, "Choose existing profiles and available tools")
         if mode == "read" and set(tools) - set(READ_TOOLS):
             abort(400, "Read-only grants cannot include write tools")
@@ -309,7 +398,7 @@ def register_mcp(app, state, profile_lookup, reauthenticate):
         unlimited = data.get("unlimited") is True
         try:
             days = int(data.get("days", 30))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             abort(400, "Validity must be a positive number of days")
         if not unlimited and not 1 <= days <= 1_000_000:
             abort(400, "Validity must be between 1 and 1000000 days, or select No expiry")
@@ -319,13 +408,48 @@ def register_mcp(app, state, profile_lookup, reauthenticate):
                     "tools": tools, "mode": mode, "allow_destructive": allow_destructive,
                     "permissions": ["read", "write"] if mode == "write" else ["read"], "created": time.time(),
                     "expires": None if unlimited else time.time() + 86400 * days}
-        state.execute("INSERT INTO grants(id,token,data) VALUES(?,?,?)", (ident, hashlib.sha256(token.encode()).hexdigest(), json.dumps(metadata)))
+        with state.connect() as db:
+            db.execute("INSERT INTO grants(id,token,data) VALUES(?,?,?)", (ident, hashlib.sha256(token.encode()).hexdigest(), json.dumps(metadata)))
+            state.write_audit(db, g.user["id"], "mcp.grant.create", ident, 201)
         return jsonify(id=ident, token=token, notice="Shown once. Store this token in the client's environment, not its configuration file."), 201
+
+    def grant_transition(grant_id,action,sql):
+        admin()
+        data=request.get_json() or {}
+        confirmed(data,"mcp.grant."+action,"workspace",grant_id)
+        with state.connect() as db:
+            if db.execute(sql, (grant_id,)).rowcount != 1:
+                if not db.execute("SELECT 1 FROM grants WHERE id=?", (grant_id,)).fetchone():
+                    abort(404)
+                abort(409, "This grant has already been revoked")
+            state.write_audit(db, g.user["id"], "mcp.grant." + action, grant_id, 200)
+        return jsonify(ok=True)
+
+    @app.post("/api/mcp/grants/<grant_id>/pause")
+    def pause_grant(grant_id):
+        return grant_transition(grant_id,"pause","UPDATE grants SET paused=1 WHERE id=? AND revoked=0")
+
+    @app.post("/api/mcp/grants/<grant_id>/resume")
+    def resume_grant(grant_id):
+        return grant_transition(grant_id,"resume","UPDATE grants SET paused=0 WHERE id=? AND revoked=0")
 
     @app.delete("/api/mcp/grants/<grant_id>")
     def revoke(grant_id):
+        return grant_transition(grant_id,"revoke","UPDATE grants SET revoked=1 WHERE id=? AND revoked=0")
+
+    @app.delete("/api/mcp/grants/<grant_id>/history")
+    def delete_grant_history(grant_id):
         admin()
-        state.execute("UPDATE grants SET revoked=1 WHERE id=?", (grant_id,))
+        data=request.get_json() or {}
+        confirmed(data,"mcp.grant.delete-history","workspace",grant_id)
+        with state.connect() as db:
+            cursor=db.execute("DELETE FROM grants WHERE id=? AND revoked=1",(grant_id,))
+            if cursor.rowcount!=1:
+                exists=db.execute("SELECT revoked FROM grants WHERE id=?",(grant_id,)).fetchone()
+                if not exists:
+                    abort(404)
+                abort(409,"Only revoked grants can be removed from history")
+            state.write_audit(db, g.user["id"], "mcp.grant.history.deleted", grant_id, 200)
         return jsonify(ok=True)
 
     @app.get("/api/mcp/config/<grant_id>")

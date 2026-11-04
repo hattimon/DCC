@@ -425,6 +425,8 @@ class WebTests(unittest.TestCase):
 
     def test_settings_five_themes_audio_clamps_and_persistence(self):
         self.assertEqual(self.client.get('/api/settings').json['theme'], 'ocean')
+        self.assertEqual(self.client.get('/api/settings').json['refresh'], 15)
+        self.assertFalse(self.client.get('/api/settings').json['refresh_changes_only'])
         self.assertTrue(DEFAULT_SETTINGS['audio']['enabled'])
         self.assertTrue(self.client.get('/api/settings').json['audio']['enabled'])
         for theme in ('obsidian','violet','ocean','arctic','emerald'):
@@ -434,6 +436,13 @@ class WebTests(unittest.TestCase):
             self.assertEqual(response.json['audio']['notifications'],0)
             self.assertEqual(self.client.get('/api/settings').json['theme'],theme)
         self.assertEqual(self.request('settings',{'accent':'url(javascript:bad)'},method='PUT').status_code,400)
+        saved=self.request('settings',{'refresh':1,'refresh_changes_only':True},method='PUT')
+        self.assertEqual(saved.status_code,200,saved.json)
+        self.assertEqual(saved.json['refresh'],15)
+        self.assertTrue(saved.json['refresh_changes_only'])
+        saved=self.request('settings',{'refresh':9999,'refresh_changes_only':False},method='PUT')
+        self.assertEqual(saved.json['refresh'],900)
+        self.assertFalse(saved.json['refresh_changes_only'])
 
     def test_static_assets_audio_and_media_traversal(self):
         for name in ('app.js','app.css','audio/soft/success.wav','audio/clear/error.wav','audio/warm/tab.wav'):
@@ -452,8 +461,78 @@ class WebTests(unittest.TestCase):
         with self.assertRaises(PermissionError):service.call('list_containers',{'profile':'other'})
         self.assertNotIn('fixture-secret',service.call('container_logs',{'profile':'local','container':'redis'})['content'][0]['text'])
         self.assertNotIn(grant['token'],self.client.get('/api/mcp/config/'+grant['id']).get_data(as_text=True))
-        self.request('mcp/grants/'+grant['id'],{},method='DELETE')
+        token = self.confirmation('mcp.grant.revoke', grant['id'], 'workspace')
+        self.assertEqual(self.request('mcp/grants/'+grant['id'], {'confirmation': token}, method='DELETE').status_code, 200)
         with self.assertRaises(PermissionError):service.call('list_containers',{'profile':'local'})
+
+    def test_mcp_profile_names_and_host_addresses_resolve_only_within_grant(self):
+        self.state.save_profile('local',{'name':'Review Docker','kind':'local','host':'192.168.1.20','port':2376,'permissions':sorted(CAPABILITIES)})
+        grant=self.request('mcp/grants',{'profiles':['local']}).json
+        service=MCPService(self.state,grant['token'],FakeBackend)
+        for selector in ('Review Docker','review docker','192.168.1.20','192.168.1.20:2376','local'):
+            result=service.call('list_containers',{'profile':selector})
+            self.assertIn('dcc-container-updater',result['content'][0]['text'])
+        with self.assertRaises(PermissionError):
+            service.call('list_containers', {'profile':'192.168.1.20:2222'})
+        self.state.save_profile('other',{'name':'Other Docker','kind':'local','host':'192.168.1.20','port':2376,'permissions':['read']})
+        ambiguous=self.request('mcp/grants',{'profiles':['local','other']}).json
+        with self.assertRaisesRegex(ValueError,'matches multiple'):
+            MCPService(self.state,ambiguous['token'],FakeBackend).call('list_containers',{'profile':'192.168.1.20'})
+
+    def test_mcp_pause_resume_revoke_and_history_deletion_require_confirmation(self):
+        grant=self.request('mcp/grants',{'profiles':['local']}).json
+        service=MCPService(self.state,grant['token'],FakeBackend)
+        pause_path='mcp/grants/'+grant['id']+'/pause'
+        self.assertEqual(self.request(pause_path,{},method='POST').status_code,409)
+        token=self.confirmation('mcp.grant.pause',grant['id'],'workspace')
+        paused=self.request(pause_path,{'confirmation':token},method='POST')
+        self.assertEqual(paused.status_code,200,paused.json)
+        self.assertEqual(self.request(pause_path,{'confirmation':token},method='POST').status_code,409)
+        self.assertTrue(self.client.get('/api/mcp/grants').json['grants'][0]['paused'])
+        with self.assertRaisesRegex(PermissionError,'paused'):
+            service.call('list_containers',{'profile':'local'})
+        resume_path='mcp/grants/'+grant['id']+'/resume'
+        resumed=self.request(resume_path,{'confirmation':self.confirmation('mcp.grant.resume',grant['id'],'workspace')},method='POST')
+        self.assertEqual(resumed.status_code,200,resumed.json)
+        self.assertIn('dcc-container-updater',service.call('list_containers',{'profile':'local'})['content'][0]['text'])
+        revoke_path='mcp/grants/'+grant['id']
+        self.assertEqual(self.request(revoke_path,{},method='DELETE').status_code,409)
+        revoked=self.request(revoke_path,{'confirmation':self.confirmation('mcp.grant.revoke',grant['id'],'workspace')},method='DELETE')
+        self.assertEqual(revoked.status_code,200,revoked.json)
+        with self.assertRaises(PermissionError):
+            service.call('list_containers',{'profile':'local'})
+        history_path='mcp/grants/'+grant['id']+'/history'
+        self.assertEqual(self.request(history_path,{},method='DELETE').status_code,409)
+        deleted=self.request(history_path,{'confirmation':self.confirmation('mcp.grant.delete-history',grant['id'],'workspace')},method='DELETE')
+        self.assertEqual(deleted.status_code,200,deleted.json)
+        self.assertFalse(any(row['id']==grant['id'] for row in self.state.rows('SELECT id FROM grants')))
+        self.assertTrue(any(row['action']=='mcp.grant.history.deleted' and row['target']==grant['id'] for row in self.state.rows('SELECT action,target FROM audit')))
+
+    def test_mcp_legacy_grants_migrate_without_reactivating_expired_or_revoked_tokens(self):
+        key = Fernet.generate_key()
+        with tempfile.TemporaryDirectory() as directory:
+            legacy = State(directory, key)
+            legacy.execute('ALTER TABLE grants DROP COLUMN paused')
+            for token, expires, revoked in [('active', None, 0), ('expired', time.time()-1, 0), ('revoked', None, 1)]:
+                digest = hashlib.sha256(token.encode()).hexdigest()
+                legacy.execute('INSERT INTO grants VALUES(?,?,?,?)', (token, digest, json.dumps({'expires': expires}), revoked))
+            migrated = State(directory, key)
+            self.assertEqual(len(migrated.rows('SELECT id FROM grants WHERE paused=0')), 3)
+            self.assertIsNone(MCPService(migrated, 'active', FakeBackend).grant()['expires'])
+            for token in ('expired', 'revoked'):
+                with self.assertRaisesRegex(PermissionError, token):
+                    MCPService(migrated, token, FakeBackend).grant()
+
+    def test_container_revision_tracks_membership_and_lifecycle_state(self):
+        state=FakeBackend.entries[0]['State']
+        self.addCleanup(FakeBackend.entries[0].__setitem__,'State',state)
+        first=self.client.get('/api/containers/revision')
+        self.assertEqual(first.status_code,200,first.json)
+        self.assertEqual(first.json['revision'],self.client.get('/api/containers').json['revision'])
+        FakeBackend.entries[0]['State']='exited'
+        changed=self.client.get('/api/containers/revision')
+        self.assertNotEqual(first.json['revision'],changed.json['revision'])
+        self.assertEqual(self.client.get('/api/containers').json['revision'],changed.json['revision'])
 
     def test_mcp_write_grants_reauthenticate_and_recheck_profile_permissions(self):
         rejected=self.request('mcp/grants',{'profiles':['local'],'mode':'write','tools':['container_restart']})
@@ -658,7 +737,8 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.client.get(generic_path+'?download=plugin').status_code,404)
         self.assertEqual(self.client.get(generic_path+'?download=project').status_code,404)
         self.assertEqual(self.app.test_client().get(path+'?download=plugin').status_code,401)
-        self.assertEqual(self.request('mcp/grants/'+grant['id'],method='DELETE').status_code,200)
+        token = self.confirmation('mcp.grant.revoke', grant['id'], 'workspace')
+        self.assertEqual(self.request('mcp/grants/'+grant['id'], {'confirmation': token}, method='DELETE').status_code, 200)
         for download in ('config','plugin','project'):
             self.assertEqual(self.client.get(path+'?download='+download).status_code,404)
 
@@ -793,7 +873,8 @@ class WebTests(unittest.TestCase):
         self.assertIsNone(metadata['expires'])
         service=MCPService(self.state,value['token'],FakeBackend)
         self.assertTrue(service.call('list_containers',{'profile':'local'})['content'])
-        self.request('mcp/grants/'+value['id'],{},method='DELETE')
+        token = self.confirmation('mcp.grant.revoke', value['id'], 'workspace')
+        self.assertEqual(self.request('mcp/grants/'+value['id'], {'confirmation': token}, method='DELETE').status_code, 200)
         with self.assertRaises(PermissionError):service.grant()
 
     def test_ai_connection_encrypts_key_and_preserves_it_on_partial_credential_update(self):

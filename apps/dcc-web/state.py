@@ -59,10 +59,14 @@ class State:
                 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, at REAL, user_id TEXT, action TEXT, target TEXT, result INTEGER);
                 CREATE TABLE IF NOT EXISTS confirmations(token TEXT PRIMARY KEY, session TEXT, action TEXT, profile TEXT, target TEXT, expires REAL);
                 CREATE TABLE IF NOT EXISTS attempts(address TEXT, at REAL);
-                CREATE TABLE IF NOT EXISTS grants(id TEXT PRIMARY KEY, token TEXT UNIQUE, data TEXT, revoked INTEGER DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS grants(id TEXT PRIMARY KEY, token TEXT UNIQUE, data TEXT, revoked INTEGER DEFAULT 0, paused INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS samples(id INTEGER PRIMARY KEY, profile TEXT, at REAL, data TEXT);
                 CREATE TABLE IF NOT EXISTS compose_projects(profile TEXT, name TEXT, file TEXT, directory TEXT, PRIMARY KEY(profile,name));
             """)
+            db.execute("BEGIN IMMEDIATE")
+            grant_columns = {row["name"] for row in db.execute("PRAGMA table_info(grants)")}
+            if "paused" not in grant_columns:
+                db.execute("ALTER TABLE grants ADD COLUMN paused INTEGER NOT NULL DEFAULT 0")
         self.path.chmod(0o600)
         with self.connect() as db:
             db.execute('PRAGMA secure_delete=ON')
@@ -130,8 +134,12 @@ class State:
 
     def audit(self, user, action, target, result):
         with self.connect() as db:
-            db.execute("INSERT INTO audit(at,user_id,action,target,result) VALUES(?,?,?,?,?)", (time.time(), user, action[:120], target[:160], result))
-            db.execute("DELETE FROM audit WHERE id NOT IN (SELECT id FROM audit ORDER BY id DESC LIMIT 10000)")
+            self.write_audit(db, user, action, target, result)
+
+    @staticmethod
+    def write_audit(db, user, action, target, result):
+        db.execute("INSERT INTO audit(at,user_id,action,target,result) VALUES(?,?,?,?,?)", (time.time(), user, action[:120], target[:160], result))
+        db.execute("DELETE FROM audit WHERE id NOT IN (SELECT id FROM audit ORDER BY id DESC LIMIT 10000)")
 
     def confirm(self, session_id, action, profile, target):
         token = secrets.token_urlsafe(32)

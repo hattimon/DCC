@@ -50,7 +50,7 @@ async function enableManagement(ctx){
 function pageActions(){return button('Terminal','open-host-terminal')+'<a class="button" href="#store">'+t('Sklep')+'</a>'+button('+ Nowy kontener','new-container','primary');}
 function wirePageActions(root,ctx){root.querySelector('#new-container').onclick=()=>manualCreate(ctx);root.querySelector('#open-host-terminal').onclick=()=>window.open('/terminal?profile='+encodeURIComponent(state.profile),'_blank','popup,width=1100,height=760,noopener,noreferrer');}
 export async function overview(root,ctx){
- const data=await api('overview');if(!ctx.valid())return;state.containers=data.containers;ctx.connected(true);
+ const data=ctx.containerSnapshot||await api('overview');if(!ctx.valid())return;state.containers=data.containers;state.containerRevision={profile:state.profile,value:data.revision};ctx.connected(true);
  const monitor=await api('monitoring').catch(()=>({stats:[],history:[]}));if(!ctx.valid())return;state.stats=monitor.stats;
  const running=data.containers.filter(c=>c.State==='running').length,cpu=monitor.stats.reduce((sum,v)=>sum+number(v.CPUPerc),0),ram=monitor.stats.reduce((sum,v)=>sum+memory(v.MemUsage),0),info=data.info;
  const values=[['Kontenery',data.containers.length,'Wszystkie w tym profilu','cube'],['Uruchomione',running,html`${data.containers.length-running} zatrzymanych`,'play'],['CPU',monitor.stats.length?cpu.toFixed(1)+'%':'—',html`${info.NCPU??'—'} rdzeni hosta`,'cpu'],['Pamięć',monitor.stats.length?(ram/1024).toFixed(2)+' GB':'—','Użycie kontenerów','memory']];
@@ -62,8 +62,8 @@ export async function overview(root,ctx){
 
 
 export async function containers(root,ctx){
- const [data,metrics]=await Promise.all([api('containers'),api('monitoring').catch(()=>({stats:[]}))]);if(!ctx.valid())return;
- state.containers=data.containers;state.stats=metrics.stats;ctx.connected(true);
+ const [data,metrics]=await Promise.all([ctx.containerSnapshot||api('containers'),api('monitoring').catch(()=>({stats:[]}))]);if(!ctx.valid())return;
+ state.containers=data.containers;state.containerRevision={profile:state.profile,value:data.revision};state.stats=metrics.stats;ctx.connected(true);
  const groupStorage='dcc-container-grouping-'+state.user.id+'-'+state.profile;
  const sortStorage='dcc-container-sort-'+state.user.id+'-'+state.profile;
  let query=state.containerQuery||'',filter=state.containerStatus||'',group=localStorage.getItem(groupStorage)||'project';
@@ -71,12 +71,13 @@ export async function containers(root,ctx){
  if(!sort||!['cpu','ram'].includes(sort.key)||!['asc','desc'].includes(sort.direction))sort=null;
  if(!['project','network','none'].includes(group))group='project';
  const permission=can('containers.write')?'':html`<div class="notice warning container-permission"><span>Profil zezwala na odczyt, ale zarządzanie kontenerami jest wyłączone.</span>${state.user.role==='admin'?literal('<button id="enable-container-management">Włącz zarządzanie kontenerami</button>'):literal('<span>Poproś administratora o uprawnienie containers.write.</span>')}</div>`;
- root.innerHTML=heading('Kontenery','Pełna kontrola cyklu życia — z zachowaniem danych.',pageActions())+permission+html`<div class="toolbar container-toolbar"><div class="container-filters"><input id="container-search" aria-label="Szukaj kontenera" placeholder="Szukaj nazwy lub obrazu…" value="${esc(query)}"><select id="status-filter" aria-label="Filtr stanu"><option value="">Wszystkie stany</option><option value="running">Uruchomione</option><option value="exited">Zatrzymane</option><option value="paused">Wstrzymane</option><option value="created">Utworzony</option></select><select id="container-grouping" aria-label="Grupuj"><option value="project">Projekty</option><option value="network">Sieci</option><option value="none">Lista płaska</option></select></div>${bulkControls()}</div><section class="panel" id="containers-table"></section>`;
+ root.innerHTML=heading('Kontenery','Pełna kontrola cyklu życia — z zachowaniem danych.',pageActions())+permission+html`<div class="toolbar container-toolbar"><div class="container-filters"><button type="button" id="refresh-containers" class="icon-button small quiet container-refresh" aria-label="Odśwież kontenery" title="Odśwież kontenery">${icon('sync')}</button><input id="container-search" aria-label="Szukaj kontenera" placeholder="Szukaj nazwy lub obrazu…" value="${esc(query)}"><select id="status-filter" aria-label="Filtr stanu"><option value="">Wszystkie stany</option><option value="running">Uruchomione</option><option value="exited">Zatrzymane</option><option value="paused">Wstrzymane</option><option value="created">Utworzony</option></select><select id="container-grouping" aria-label="Grupuj"><option value="project">Projekty</option><option value="network">Sieci</option><option value="none">Lista płaska</option></select></div>${bulkControls()}</div><section class="panel" id="containers-table"></section>`;
  const redraw=()=>{const values=data.containers.filter(v=>(v.Names+' '+v.Image).toLowerCase().includes(query.toLowerCase())&&(!filter||v.State===filter));root.querySelector('#containers-table').innerHTML=containerTable(values,group,sort,true);root.querySelectorAll('[data-sort]').forEach(control=>{const key=control.dataset.sort,active=sort?.key===key,header=control.closest('th');header?.setAttribute('aria-sort',active?(sort.direction==='asc'?'ascending':'descending'):'none');control.setAttribute('aria-pressed',String(active));if(active)control.dataset.direction=sort.direction;control.onclick=()=>{sort=nextSortState(sort,key);if(sort)localStorage.setItem(sortStorage,JSON.stringify(sort));else localStorage.removeItem(sortStorage);redraw();};});wire(root,ctx,values);};
  root.querySelector('#status-filter').value=filter;root.querySelector('#container-grouping').value=group;
  root.querySelector('#container-search').oninput=e=>{state.containerQuery=query=e.target.value;redraw();};
  root.querySelector('#status-filter').onchange=e=>{state.containerStatus=filter=e.target.value;redraw();};
  root.querySelector('#container-grouping').onchange=e=>{group=e.target.value;localStorage.setItem(groupStorage,group);redraw();};
+ root.querySelector('#refresh-containers').onclick=()=>ctx.refresh();
  root.querySelector('#bulk-actions').onclick=()=>bulkMenu(ctx);
  root.querySelectorAll('[data-bulk]').forEach(b=>b.onclick=()=>bulkAction(b.dataset.bulk,ctx));
  root.querySelectorAll('[data-selected-action]').forEach(b=>b.onclick=()=>selectionAction(b.dataset.selectedAction,ctx));
