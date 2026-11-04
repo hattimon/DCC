@@ -1,4 +1,6 @@
-# DCC Web 0.2.4
+# DCC Web 0.2.5
+
+Web 0.2.5 fixes reporting the result of Remote Access configuration, activation and restart in workspaces with custom profile IDs.
 
 Web 0.2.4 fixes Remote Access 0.1.0 installation when the local Docker profile has a custom ID and restores the managed module in the DCC App Store category. DCC Container Updater can replace the previous Web image while retaining the data volume and managed local HTTPS. The remote tunnel remains disabled until an administrator configures and confirms it. [Setup and security boundaries](../dcc-remote-access/README.md)
 

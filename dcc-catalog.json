@@ -287,6 +287,7 @@
         "Profile lokalne i zdalne, uprawnienia użytkowników oraz terminal hosta.",
         "Wspólny folder kluczy SSH, bezpieczne przesyłanie plików i zarządzanie zaznaczonymi profilami.",
         "Opcjonalne lokalne HTTPS przez Caddy, prywatny adres IP, automatyczny wybór portu i pobranie certyfikatu CA.",
+        "DCC Remote Access instalujesz i konfigurujesz w panelu DCC Web przez Sklep aplikacji → DCC lub przez ustawienia dostępu do panelu.",
         "Wspólny katalog aplikacji DCC, wyszukiwanie i podgląd instalacji.",
         "Interfejs polski i angielski; ustawienie języka jest zapamiętywane."
       ],
@@ -295,6 +296,7 @@
         "Local and remote profiles, user permissions and host terminals.",
         "Shared SSH key directory, explicit file uploads and selected profile management.",
         "Optional local HTTPS through Caddy, a private IP address, automatic port selection and downloadable CA certificate.",
+        "Install and configure DCC Remote Access in the DCC Web panel through App Store → DCC or panel access settings.",
         "Shared DCC app catalog, search and installation previews.",
         "Polish and English interface with a saved language preference."
       ],

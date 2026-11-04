@@ -174,6 +174,42 @@ class RemoteAccessTests(unittest.TestCase):
                     self.assertEqual(response.status_code, expected_status, response.json)
                     perform.assert_not_called()
 
+    def test_can_poll_workspace_tunnel_jobs_without_default_local_profile(self):
+        self.state.save_profile("custom-local", {
+            "name": "Local Docker", "kind": "local", "permissions": ["read", "install"],
+        })
+        self.state.execute("DELETE FROM profiles WHERE id=?", ("local",))
+        self.enable_fixture_mfa()
+        with self.client.session_transaction() as session:
+            session["mfa_verified"] = True
+        actions = ("configure", "enable", "restart")
+        codes = [f"{number:016X}" for number in range(1, len(actions) + 1)]
+        self.state.execute("UPDATE mfa SET recovery=? WHERE user_id=?", (
+            json.dumps([hashlib.sha256(code.encode()).hexdigest() for code in codes]), self.user,
+        ))
+        local_https = {
+            "base_url": "https://localhost",
+            "environ_overrides": {"REMOTE_ADDR": "192.0.2.20"},
+        }
+        with patch.object(self.remote, "perform", return_value={"accepted": True}) as perform:
+            for action, code in zip(actions, codes):
+                with self.subTest(action=action):
+                    approval = self.confirmation("remote-access." + action, "dcc-remote-access", "workspace")
+                    response = self.request("admin/remote-access/" + action, {
+                        "profile": "custom-local", "confirmation": approval,
+                        "current_password": "ReviewPassword-44-long", "otp": code,
+                    }, **local_https)
+                    self.assertEqual(response.status_code, 202, response.json)
+                    path = "/api/jobs/" + response.json["id"]
+                    poll = self.client.get(path, **local_https)
+                    self.assertEqual(poll.status_code, 200, poll.json)
+                    self.assertEqual(self.wait(response), {"accepted": True})
+                    self.assertEqual(perform.call_args.args[0], action)
+        self.assertEqual(perform.call_count, len(actions))
+        self.assertEqual(self.app.test_client().get(path).status_code, 401)
+        self.state.execute("UPDATE users SET role='viewer' WHERE id=?", (self.user,))
+        self.assertEqual(self.client.get(path, **local_https).status_code, 403)
+
     def test_provider_namespace_and_name_conflict(self):
         self.assertEqual(name_origin("fixture-dcc", {"namespaceToken":"public","namespaceName":"share.zrok.io"}), self.origin)
         with self.assertRaises(RemoteError):

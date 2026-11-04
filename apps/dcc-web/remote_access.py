@@ -31,7 +31,9 @@ TOKEN = re.compile(r"[A-Za-z0-9]{8,128}")
 PROVIDER = "share.zrok.io"
 ENVIRONMENT = {"HOME": "/tmp", "ZROK2_API_ENDPOINT": "https://api-v2.zrok.io",
                "GODEBUG": "http2client=0,http2server=0"}
-ACTIONS = frozenset({"install", "configure", "enable", "disable", "restart", "uninstall"})
+PROFILE_ACTIONS = frozenset({"install", "uninstall"})
+WORKSPACE_JOB_ACTIONS = frozenset({"configure", "enable", "restart"})
+ACTIONS = PROFILE_ACTIONS | WORKSPACE_JOB_ACTIONS | {"disable"}
 WAIT = (Path(__file__).resolve().parents[1] / "dcc-remote-access" / "supervise.sh").read_text(encoding="utf-8")
 
 
@@ -490,8 +492,9 @@ def register_remote_access(app, state, body, profile, confirmed, reauthenticate,
         if action == "check-update":
             return jsonify(remote.check_update())
         data = body()
-        p = profile(data.get("profile"), "install") if action in {"install", "uninstall"} else {"id": "local"}
-        if action in {"install", "uninstall"} and (p["kind"] != "local" or p.get("context")):
+        profile_action = action in PROFILE_ACTIONS
+        p = profile(data.get("profile"), "install") if profile_action else {"id": "workspace"}
+        if profile_action and (p["kind"] != "local" or p.get("context")):
             abort(409, "Select the local Docker installation profile.")
         owner = g.user["id"]
         confirmed(data, "remote-access." + action, "workspace", "dcc-remote-access")
@@ -510,7 +513,8 @@ def register_remote_access(app, state, body, profile, confirmed, reauthenticate,
         def work():
             try:
                 result = remote.perform(action, data, owner, epoch)
-                invalidate(p["id"])
+                if profile_action:
+                    invalidate(p["id"])
                 return result
             except DockerException:
                 raise RemoteError("Docker could not complete the managed tunnel operation.") from None

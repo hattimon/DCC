@@ -26,7 +26,9 @@ state = State('/data')
 account = state.rows('SELECT id,name FROM users WHERE role=?', ('admin',))[0]
 password = 'fixture-dcc-remote-access-4488'
 state.execute('UPDATE users SET password=? WHERE id=?', (generate_password_hash(password), account['id']))
-state.save_profile('local', {'name':'Fixture Docker','kind':'local','permissions':['read','install']})
+profile_id = 'fixture-local-docker'
+state.save_profile(profile_id, {'name':'Fixture Docker','kind':'local','permissions':['read','install']})
+state.execute('DELETE FROM profiles WHERE id=?', ('local',))
 session = requests.Session()
 login = session.get(base+'/login').text
 import re
@@ -37,11 +39,14 @@ csrf = re.search(r'name="csrf-token" content="([^"]+)"',index)[1]
 headers = {'X-CSRF-Token':csrf}
 
 def api(path, data=None):
-    response = session.get(base+'/api/'+path,timeout=60) if data is None else session.post(base+'/api/'+path,json=data,headers=headers,timeout=60)
+    if data is None:
+        response = session.get(base+'/api/'+path, params={'profile': profile_id}, timeout=60)
+    else:
+        response = session.post(base+'/api/'+path, json={'profile': profile_id, **data}, headers=headers, timeout=60)
     assert response.ok, (path, response.status_code, response.json().get('error'))
     return response.json()
 
-def action(name, **options):
+def action(name, *, expected_error=None, **options):
     token = api('confirmations', {'action':'remote-access.'+name,'target':'dcc-remote-access'})['confirmation']
     result = api('admin/remote-access/'+name, {'confirmation':token, 'current_password':password, **options})
     if 'id' not in result:
@@ -49,7 +54,10 @@ def action(name, **options):
     for _ in range(180):
         job = api('jobs/'+result['id'])
         if job['status'] != 'running':
-            assert job['status'] == 'success', (name, job.get('error'))
+            if expected_error:
+                assert job['status'] == 'error' and job['error'] == expected_error, (name, job)
+            else:
+                assert job['status'] == 'success', (name, job.get('error'))
             return
         time.sleep(0.5)
     raise AssertionError('QA job did not finish')
@@ -59,6 +67,8 @@ assert initial['available'] and initial['state']=='not-installed', initial
 catalog = api('catalog?category=DCC&q=DCC%20Remote%20Access')['apps']
 assert [app['name'] for app in catalog] == ['DCC Remote Access']
 action('install')
+# Input validation returns the real job error before contacting zrok.
+action('configure', account_token='invalid/token', expected_error='Enter a valid zrok account token.')
 remote = RemoteAccess(Flask(__name__), state)
 with closing(docker.DockerClient(base_url='unix:///var/run/docker.sock',timeout=20)) as client:
     sidecar = client.containers.get(remote.name)
@@ -82,5 +92,5 @@ with closing(docker.DockerClient(base_url='unix:///var/run/docker.sock',timeout=
 action('uninstall',keep_data=True)
 assert api('admin/remote-access')['state'] == 'not-installed'
 assert api('health')['status'] == 'ok'
-print('Remote Access Docker QA passed: install, idempotency, private ingress, UID/mounts, stop, uninstall and local API.')
+print('Remote Access Docker QA passed: custom profile installation, workspace job polling, idempotency, private ingress, UID/mounts, stop and uninstall.')
 """

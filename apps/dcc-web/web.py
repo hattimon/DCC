@@ -27,15 +27,19 @@ from engine import DockerBackend, EngineError, Jobs
 from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES, trusted_https_request
 from state import State
 from ports import container_revision,enrich_containers,inventory
-from remote_access import ACTIONS as REMOTE_ACTIONS, PORT as REMOTE_PORT, register_remote_access
+from remote_access import (
+    ACTIONS as REMOTE_ACTIONS, PORT as REMOTE_PORT,
+    WORKSPACE_JOB_ACTIONS as REMOTE_WORKSPACE_JOB_ACTIONS, register_remote_access,
+)
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.2.4"
+VERSION = "0.2.5"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
 DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "refresh_changes_only":False, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 MCP_GRANT_ACTIONS={"mcp.grant.pause","mcp.grant.resume","mcp.grant.revoke","mcp.grant.delete-history"}
 REMOTE_CONFIRMATIONS = {"remote-access." + action for action in REMOTE_ACTIONS}
+REMOTE_WORKSPACE_JOBS = {"remote-access." + action for action in REMOTE_WORKSPACE_JOB_ACTIONS}
 
 
 def profile_display_address(profile, info, panel_host):
@@ -877,7 +881,10 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         value = jobs.history.get(job_id)
         if not value or value["owner"]!=g.user["id"]:
             abort(404)
-        profile(value["profile"])
+        if value["action"] in REMOTE_WORKSPACE_JOBS:
+            admin()
+        else:
+            profile(value["profile"])
         with jobs.lock:
             snapshot={key:item for key,item in value.items() if key not in {"owner","access_blob"}}
         return jsonify(redact(snapshot))
