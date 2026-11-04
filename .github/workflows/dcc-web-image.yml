@@ -40,6 +40,10 @@ jobs:
           docker run --rm --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true --volume /var/run/docker.sock:/var/run/docker.sock dcc-web:release-candidate python -c 'import os,subprocess; assert os.geteuid()==10001, os.geteuid(); assert os.access("/var/run/docker.sock",os.R_OK|os.W_OK); subprocess.run(["docker","version","--format","{{.Server.Version}}"],check=True,capture_output=True,text=True); subprocess.run(["docker","compose","version"],check=True,capture_output=True,text=True); print("socket group, dropped UID and Compose OK")'
           docker run --rm dcc-web:release-candidate --self-check
           python apps/dcc-web/tests/docker_security_smoke.py --image dcc-web:release-candidate
+          python apps/dcc-web/tests/docker_remote_access_smoke.py --image dcc-web:release-candidate
+          python apps/container-updater/tests/docker_web_https_smoke.py \
+            --old-image ghcr.io/hattimon/dcc-web:0.2.2 --target-image dcc-web:release-candidate \
+            --expected-version "$(cat apps/dcc-web/VERSION)" --local-target --expect-remote-access
 
   publish:
     needs: verify
@@ -101,7 +105,12 @@ jobs:
         with:
           python-version: "3.12"
       - name: Package the source archive
-        run: python packaging/web/build_source_archive.py
+        run: |
+          python packaging/web/build_source_archive.py
+          cd release
+          asset="DCC-Web-${{ steps.version.outputs.version }}-source.zip"
+          python -m zipfile -t "$asset"
+          sha256sum "$asset" > "$asset.sha256"
       - name: Create or update the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -115,9 +124,9 @@ jobs:
             gh release edit "$tag" --repo "$GITHUB_REPOSITORY" \
               --title "DCC Web ${{ steps.version.outputs.version }}" \
               --notes-file "$notes"
-            gh release upload "$tag" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$tag" "$asset" "$asset.sha256" --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$tag" "$asset" --repo "$GITHUB_REPOSITORY" \
+            gh release create "$tag" "$asset" "$asset.sha256" --repo "$GITHUB_REPOSITORY" \
               --title "DCC Web ${{ steps.version.outputs.version }}" \
               --latest=false \
               --notes-file "$notes"

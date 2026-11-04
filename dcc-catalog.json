@@ -348,7 +348,7 @@
       "engines": ["dcc-web-managed"],
       "archs": ["amd64", "arm64"],
       "icon_text": "RA",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-remote-access-v0.1.0/apps/dcc-remote-access"
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.2.3/apps/dcc-remote-access"
     },
     {
       "name": "Beszel Hub",

@@ -18,10 +18,15 @@ def source_files() -> list[Path]:
     files = [ROOT / "LICENSE", ROOT / "dcc_catalog.py", ROOT / "dcc-catalog.json"]
     files.extend((ROOT / "catalog" / "media").rglob("*"))
     files.append(ROOT / "apps" / "container-updater" / "updater.py")
-    supervisor = ROOT / "apps" / "dcc-remote-access" / "supervise.sh"
-    if supervisor.is_file():
-        files.append(supervisor)
+    remote_access = ROOT / "apps" / "dcc-remote-access"
+    files.extend(remote_access / name for name in (
+        "VERSION", "compose.yaml", "supervise.sh", "README.md", "README.pl.md", "SECURITY.md",
+        "RELEASE_NOTES_0.1.0.md",
+    ))
     files.extend((ROOT / "apps" / "dcc-web").rglob("*"))
+    missing = [str(path.relative_to(ROOT)) for path in files if not path.exists()]
+    if missing:
+        raise FileNotFoundError(", ".join(missing))
     result = []
     for path in files:
         if not path.is_file() or path.is_symlink():
@@ -30,9 +35,6 @@ def source_files() -> list[Path]:
         if any(part in EXCLUDED_PARTS for part in relative.parts):
             continue
         result.append(path)
-    missing = [str(path.relative_to(ROOT)) for path in result if not path.exists()]
-    if missing:
-        raise FileNotFoundError(", ".join(missing))
     return sorted(set(result), key=lambda item: item.relative_to(ROOT).as_posix())
 
 
@@ -44,6 +46,7 @@ def build_archive(output: Path = OUTPUT) -> Path:
             relative = path.relative_to(ROOT).as_posix()
             name = f"{ARCHIVE_ROOT}/{relative}"
             info = ZipInfo(name, date_time=(2024, 1, 1, 0, 0, 0))
+            info.create_system = 3
             info.compress_type = ZIP_DEFLATED
             executable = path.suffix == ".sh"
             mode = stat.S_IFREG | (0o755 if executable else 0o644)

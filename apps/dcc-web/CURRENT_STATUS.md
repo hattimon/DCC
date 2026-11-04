@@ -1,4 +1,6 @@
-# DCC Web 0.2.2
+# DCC Web 0.2.3
+
+Web 0.2.3 bundles DCC Remote Access 0.1.0. DCC Container Updater can replace the previous Web image while retaining the data volume and managed local HTTPS. The remote tunnel remains disabled until an administrator configures and confirms it. [Setup and security boundaries](../dcc-remote-access/README.md)
 
 This release displays each profile ID in the Profiles list, the active profile ID in Overview → Host details, and the selected profile ID beside the host address on the Containers page.
 

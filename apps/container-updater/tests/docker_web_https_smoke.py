@@ -3,6 +3,7 @@
 Run explicitly, not through unittest discovery. Uses synthetic credentials and
 unique QA resources only. No existing containers, keys or volumes are modified.
 """
+import argparse
 import base64
 import http.client
 import io
@@ -22,7 +23,7 @@ from urllib.parse import urlencode
 import docker
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from updater import UpdateService
+from updater import UpdateService, load_catalog
 
 
 def wait_for(check, description):
@@ -41,6 +42,14 @@ def archive_file(container, path):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--old-image', default='ghcr.io/hattimon/dcc-web:0.1.7')
+    parser.add_argument('--target-image', default='ghcr.io/hattimon/dcc-web:0.1.8')
+    parser.add_argument('--expected-version', default='0.1.8')
+    parser.add_argument('--local-target', action='store_true', help='Use an already-built release candidate')
+    parser.add_argument('--expect-remote-access', action='store_true')
+    parser.add_argument('--verify-catalog', action='store_true', help='Require the official catalog to offer the target')
+    args = parser.parse_args()
     client = docker.from_env()
     suffix = secrets.token_hex(5)
     name = 'dcc-web-update-qa-' + suffix
@@ -50,18 +59,26 @@ def main():
     volumes = []
     proxy = network = None
     runner = client.containers.get(os.environ['HOSTNAME']) if os.getenv('DCC_QA_IN_CONTAINER') else None
-    old_image = 'ghcr.io/hattimon/dcc-web:0.1.7'
-    target = 'ghcr.io/hattimon/dcc-web:0.1.8'
+    old_image, target = args.old_image, args.target_image
     service = UpdateService(client, wait_seconds=90)
     try:
-        for image in (old_image, target, 'caddy:2'):
+        for image in (old_image, 'caddy:2'):
             client.images.pull(image)
+        if args.local_target:
+            client.images.get(target)
+        else:
+            client.images.pull(target)
         for ending in ('data', 'certs', 'config'):
             volumes.append(client.volumes.create(name=name+'-'+ending, labels=labels))
+        web_mounts = {volumes[0].name: {'bind': '/data', 'mode': 'rw'}}
+        if args.expect_remote_access:
+            web_mounts['/var/run/docker.sock'] = {'bind': '/var/run/docker.sock', 'mode': 'rw'}
+        with socket.socket() as port_probe:
+            port_probe.bind(('127.0.0.1', 0))
+            web_port = port_probe.getsockname()[1]
         web = client.containers.run(old_image, name=name, detach=True, labels=labels,
             environment={'DCC_WEB_CONTAINER_NAME': name},
-            volumes={volumes[0].name: {'bind': '/data', 'mode': 'rw'}},
-            ports={'8789/tcp': ('127.0.0.1', None)},
+            volumes=web_mounts, ports={'8789/tcp': ('127.0.0.1', web_port)},
             read_only=True, tmpfs={'/tmp': 'size=64m,mode=1777'},
             cap_drop=['ALL'], cap_add=['SETUID', 'SETGID'])
         service._wait_until_healthy(web)
@@ -129,6 +146,14 @@ def main():
         inventory = client.containers.list(all=True, ignore_removed=True)
         assert service._unsupported_reason(web, inventory) is None
         assert service.automatic_dependency_blocker(web, inventory) is None
+        if args.verify_catalog:
+            apps = load_catalog()
+            candidate = service.inspect_container(web, apps, all_containers=inventory)
+            assert candidate['update_available'] and candidate['supported'], candidate
+            assert candidate['target_image'] == target, candidate
+            if args.expect_remote_access:
+                entries = [app for app in apps if app['name'] == 'DCC Remote Access']
+                assert len(entries) == 1 and entries[0]['category'] == 'DCC', entries
         # Inject an unhealthy replacement once and verify the real Docker
         # rollback restores the old container and the HTTPS DNS alias.
         with patch.object(service, '_wait_until_healthy', side_effect=RuntimeError('synthetic health failure')):
@@ -146,6 +171,7 @@ def main():
         web = client.containers.get(name)
         assert web.id != old_id and web.attrs['Config']['Image'] == target
         assert next(m for m in web.attrs['Mounts'] if m['Destination']=='/data')['Name'] == volumes[0].name
+        assert web.attrs['NetworkSettings']['Ports']['8789/tcp'][0]['HostPort'] == str(web_port)
         assert web.attrs['HostConfig']['ReadonlyRootfs'] is True
         assert 'dcc-web-upstream' in web.attrs['NetworkSettings']['Networks'][network_name]['Aliases']
         headers, page = wait_for(login_page, 'New Web HTTPS does not respond')
@@ -159,15 +185,44 @@ def main():
         cookie = headers['Set-Cookie'].split(';',1)[0]
         status, _, body = request('/api/bootstrap', headers={'Cookie':cookie})
         bootstrap = json.loads(body)
-        assert status == 200 and bootstrap['user']['role'] == 'admin' and bootstrap['version']=='0.1.8'
+        assert status == 200 and bootstrap['user']['role'] == 'admin' and bootstrap['version'] == args.expected_version
+        if args.expect_remote_access:
+            status, _, body = request('/api/admin/remote-access', headers={'Cookie':cookie})
+            remote = json.loads(body)
+            assert status == 200 and remote['available'] and remote['state'] == 'not-installed', remote
+            status, _, body = request('/static/views/remote_access.js')
+            assert status == 200 and 'Zdalny dostęp przez Internet'.encode() in body
+            if args.verify_catalog:
+                status, _, page = request('/', headers={'Cookie':cookie})
+                assert status == 200
+                csrf = re.search(rb'name="csrf-token" content="([^"]+)"', page)[1].decode()
+                status, _, body = request('/api/catalog/refresh', 'POST', '{}',
+                    {'Content-Type':'application/json','Origin':origin,'Cookie':cookie,'X-CSRF-Token':csrf})
+                assert status == 202, status
+                job = json.loads(body)['id']
+
+                def refreshed_catalog():
+                    status, _, result = request('/api/jobs/'+job, headers={'Cookie':cookie})
+                    assert status == 200 and json.loads(result)['status'] == 'success'
+                    return json.loads(result)
+
+                refresh = wait_for(refreshed_catalog, 'Catalog refresh did not complete')
+                official = next(source for source in refresh['result'] if source['id'] == 'official')
+                assert official['checked'] > 0 and not official['error'], official
+            status, _, body = request('/api/catalog?category=DCC', headers={'Cookie':cookie})
+            catalog = json.loads(body)
+            assert status == 200 and catalog['categories'][:4] == ['all', 'installed', 'DCC', 'AI']
+            cards = [app for app in catalog['apps'] if app['name'] == 'DCC Remote Access']
+            assert len(cards) == 1 and cards[0]['engines'] == ['dcc-web-managed'], cards
         status, _, _ = request('/static/app.css')
         assert status == 200
         proxy.reload()
         assert proxy.attrs['HostConfig']['PortBindings'] == bindings
         assert archive_file(proxy, '/data/caddy/pki/authorities/local/root.crt') == root
-        print(json.dumps({'upgrade':'0.1.7 -> 0.1.8','rollback':True,'https_login':True,
+        print(json.dumps({'old_image':old_image,'new_image':target,'rollback':True,'https_login':True,
             'same_caddy_container':True,'same_ca_and_port':True,'web_volume_preserved':True,
-            'managed_alias_preserved':True,'automatic_update_eligible':True}))
+            'same_http_port':True,'managed_alias_preserved':True,'automatic_update_eligible':True,
+            'remote_access_verified':args.expect_remote_access,'official_catalog_verified':args.verify_catalog}))
     finally:
         if runner and network:
             try: network.disconnect(runner)

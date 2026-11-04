@@ -1,4 +1,4 @@
-# Install DCC Web 0.2.2
+# Install DCC Web 0.2.3
 
 DCC Web runs on Windows, macOS and Debian-family Linux. Choose the Docker Compose installer or run the service directly with Python. The App Store installer in DCC Desktop remains available as well.
 
@@ -6,8 +6,8 @@ DCC Web runs on Windows, macOS and Debian-family Linux. Choose the Docker Compos
 
 Requirements: Docker Engine or Docker Desktop with Docker Compose v2, and Python 3.12 for the small port-scanning installer.
 
-1. Download and extract [DCC-Web-0.2.2-source.zip](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.2/DCC-Web-0.2.2-source.zip).
-2. Open a terminal in the extracted `DCC-Web-0.2.2` directory.
+1. Download and extract [DCC-Web-0.2.3-source.zip](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.3/DCC-Web-0.2.3-source.zip).
+2. Open a terminal in the extracted `DCC-Web-0.2.3` directory.
 3. Run the installer:
 
    ```powershell
@@ -46,13 +46,13 @@ For a native install, choose a free port yourself if 8789 is already in use. Ope
 
 ## Access and security
 
-The Compose installer is local-only by default. Do not expose the Docker administration panel directly to the public internet. Remote access requires a trusted HTTPS reverse proxy or VPN and a strong administrator password. The App Store profile must have **Application installation** permission.
+The Compose installer is local-only by default. Containerized Web 0.2.3 includes optional DCC Remote Access with zrok. After updating the existing Web container through DCC Container Updater, reload the same panel address. Open **Settings → Administration and security → Panel access and HTTPS (TLS) → Remote Internet Access**. The tunnel starts disabled, and activation requires administrator MFA. The local Docker profile must have **Install applications** permission. [Remote Access setup](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.3/apps/dcc-remote-access/README.md)
 
 For optional local HTTPS, sign in and open **Settings → Administration and security → Local and public domains**. Enter the host's private IP (recommended) or a local DNS name, save it, then open **HTTPS access → Enable local HTTPS**. The managed Caddy extension keeps the current HTTP address and data volume, binds only to that private/loopback address, and picks a free host port from 9443–9499. Open the displayed HTTPS address once, download the local CA certificate and install/trust it on the client device. Public HTTPS remains a separate option requiring a domain and reachable ports 80/443.
 
 ---
 
-# Instalacja DCC Web 0.2.2
+# Instalacja DCC Web 0.2.3
 
 DCC Web działa w systemach Windows, macOS i Linux z rodziny Debian. Wybierz instalator Docker Compose albo uruchom panel bezpośrednio przez Python. Aplikację można też instalować ze Sklepu DCC Desktop.
 
@@ -60,8 +60,8 @@ DCC Web działa w systemach Windows, macOS i Linux z rodziny Debian. Wybierz ins
 
 Wymagania: Docker Engine lub Docker Desktop z Docker Compose v2 oraz Python 3.12 do skanowania portów.
 
-1. Pobierz i rozpakuj [DCC-Web-0.2.2-source.zip](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.2/DCC-Web-0.2.2-source.zip).
-2. Otwórz terminal w rozpakowanym katalogu `DCC-Web-0.2.2`.
+1. Pobierz i rozpakuj [DCC-Web-0.2.3-source.zip](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.3/DCC-Web-0.2.3-source.zip).
+2. Otwórz terminal w rozpakowanym katalogu `DCC-Web-0.2.3`.
 3. Uruchom instalator:
 
    ```powershell
@@ -100,6 +100,6 @@ Przy instalacji natywnej wybierz samodzielnie inny wolny port, jeśli 8789 jest 
 
 ## Dostęp i bezpieczeństwo
 
-Instalator Compose wystawia panel tylko lokalnie. Nie udostępniaj panelu administracyjnego Docker bezpośrednio w publicznym internecie. Dostęp zdalny wymaga zaufanego reverse proxy HTTPS albo VPN oraz silnego hasła administratora. Profil w Sklepie musi mieć uprawnienie **Instalowanie aplikacji**.
+Instalator Compose wystawia panel tylko lokalnie. Kontenerowa wersja 0.2.3 zawiera opcjonalny DCC Remote Access z zrok. Po aktualizacji istniejącego kontenera przez DCC Container Updater odśwież panel pod dotychczasowym adresem. Otwórz **Ustawienia → Administracja i bezpieczeństwo → Dostęp do panelu i HTTPS (TLS) → Zdalny dostęp przez Internet**. Tunel jest domyślnie wyłączony, a aktywacja wymaga MFA administratora. Lokalny profil Dockera musi mieć uprawnienie **Instalowanie aplikacji**. [Konfiguracja Remote Access](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.3/apps/dcc-remote-access/README.pl.md)
 
 Lokalne HTTPS włączysz w **Ustawienia → Administracja i bezpieczeństwo → Domena lokalna i publiczna**. Podaj prywatny adres IP hosta (zalecane) albo nazwę z lokalnego DNS, zapisz ustawienia i wybierz **Dostęp HTTPS → Włącz lokalne HTTPS**. Zarządzane rozszerzenie Caddy zachowuje obecny adres HTTP i wolumen danych, wiąże port tylko z tym prywatnym/loopback adresem oraz wybiera wolny port z zakresu 9443–9499. Otwórz wyświetlony adres HTTPS, pobierz lokalny certyfikat CA i zainstaluj/zaufaj mu na urządzeniu klienckim. Publiczne HTTPS jest osobną opcją wymagającą domeny oraz osiągalnych portów 80/443.

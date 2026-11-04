@@ -1,12 +1,14 @@
-# DCC Web 0.2.2
+# DCC Web 0.2.3
 
 [English](README.md) · [Polski](README.pl.md) · [GitHub repository](https://github.com/hattimon/DCC)
 
 DCC Web is the browser workspace in Docker Control Center. It is independently versioned and complements the Windows and Linux desktop application. The DCC App Store entry opens this page from its **Website** button. Install DCC Web from the **DCC** category in Desktop 1.3.11 or newer.
 
+Web 0.2.3 adds optional DCC Remote Access for Docker installations. After updating the existing container through DCC Container Updater, open **Settings → Administration and security → Panel access and HTTPS (TLS) → Remote Internet Access**. [Remote Access setup](../dcc-remote-access/README.md)
+
 Web 0.2.2 adds pausable MCP grants, profile selection by name or host address, manual container refresh, and configurable change-aware polling. Web 0.2.1 displays profile IDs below profile names, in Overview → Host details, and beside the selected host address on the Containers page. Older Desktop clients can use **Administration** after refreshing the official catalog; Container Updater remains under **Updates**. Web 0.1.8 adds optional, managed local HTTPS while retaining the current HTTP endpoint and persistent data. Web 0.2.0 fixes the recovery SMTP settings dialog so administrators can configure mail. The 0.1.4 release fixed duplicate versions in the Web store, including stale caches retained from earlier images. See [catalog compatibility](docs/catalogs.md#older-desktop-clients) for the limitation of already published Desktop binaries with a bundled older Web entry.
 
-The implementation uses Flask, Waitress, SQLite, native ES modules and CSS. This follows the existing Container Updater stack and avoids adding a frontend framework or a JavaScript build pipeline. It shares `dcc_catalog.py` and the canonical `dcc-catalog.json` with Desktop, and delegates safe container recreation to the existing Container Updater service without modifying that module.
+The implementation uses Flask, Waitress, SQLite, native ES modules and CSS. It shares `dcc_catalog.py` and the canonical `dcc-catalog.json` with Desktop and delegates safe container recreation to DCC Container Updater.
 
 When installed from the DCC App Store, a fresh container creates the `admin` account with a strong random password. The installation result shows the credentials; the password is also written once to the container logs. Change it after signing in. The standalone local installer still lets you create the administrator interactively.
 
@@ -24,7 +26,7 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 
 ## Install on Windows, macOS or Linux
 
-Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.2/DCC-Web-0.2.2-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.2.2` directory:
+Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.3/DCC-Web-0.2.3-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.2.3` directory:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
