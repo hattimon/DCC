@@ -1,11 +1,13 @@
 """PTY session boundaries without opening host shells or remote connections."""
 import base64
+import os
 from pathlib import Path
 import queue
 import sys
 import tempfile
 import threading
 import time
+from unittest.mock import patch
 import unittest
 from urllib.parse import urlsplit
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -79,6 +81,12 @@ class TerminalTests(unittest.TestCase):
         self.assertEqual(output['offset'],1_000_020)
         with self.assertRaises(ValueError):session.output(2_000_000,wait=0)
 
+    def test_containerized_local_docker_profile_never_claims_to_open_the_host_shell(self):
+        from host_terminal import PTYConnection
+        with patch.dict(os.environ, {'DCC_WEB_CONTAINER_NAME':'dcc-web'}):
+            with self.assertRaisesRegex(ValueError, 'Create or select an SSH profile for this same Docker host'):
+                PTYConnection({'kind':'local'})
+
 class TerminalTransportTests(unittest.TestCase):
     def setUp(self):
         from cryptography.fernet import Fernet
@@ -124,9 +132,17 @@ class TerminalTransportTests(unittest.TestCase):
             with self.subTest(base=base):
                 response=self.open(base)
                 self.assertEqual(response.status_code,201,response.json)
+                self.assertEqual(response.json['address'],'192.168.11.20')
                 terminal=self.manager.sessions[response.json['id']]
                 self.assertEqual(terminal.profile,'ssh')
                 self.assertEqual(terminal.connection.profile['host'],'192.168.11.20')
+
+    def test_balena_terminal_formats_ipv6_address_and_custom_port(self):
+        self.state.save_profile('ssh',{'name':'Fixture Balena','kind':'balena','host':'2001:db8::14',
+            'port':22222,'username':'fixture','permissions':['read','host.exec']})
+        response=self.open()
+        self.assertEqual(response.status_code,201,response.json)
+        self.assertEqual(response.json['address'],'[2001:db8::14]:22222')
 
     def test_loopback_requires_matching_origin_and_csrf(self):
         for origin in (False,'http://evil.invalid','http://localhost:9999'):

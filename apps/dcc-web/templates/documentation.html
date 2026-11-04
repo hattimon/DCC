@@ -16,12 +16,12 @@
   <div class="docs-layout">
     <aside class="docs-sidebar">
       <a class="docs-back" href="/about?lang={{ language }}">← {{ tr('Dokumentacja') }}</a>
-      {% for name,label in [('installation','Instalacja i uruchamianie'),('configuration','Profile i konfiguracja'),('profiles-security','Profile, klucze i 2FA'),('security','Bezpieczeństwo'),('catalogs','Sklep i katalogi'),('ai','Asystent AI'),('mcp','AI / MCP Preview'),('themes-audio','Motywy i dźwięki'),('feature-matrix','Macierz funkcji desktop / web'),('testing','Testy i ograniczenia')] %}
+      {% for name,label in [('installation','Instalacja i uruchamianie'),('configuration','Profile i konfiguracja'),('profiles-security','Profile, klucze i 2FA'),('security','Bezpieczeństwo'),('catalogs','Sklep i katalogi'),('ai','Asystent AI'),('mcp','AI / MCP'),('themes-audio','Motywy i dźwięki'),('feature-matrix','Macierz funkcji desktop / web'),('testing','Testy i ograniczenia')] %}
         <a class="docs-nav-link{% if name == doc_name %} active{% endif %}" href="/docs/{{ name }}?lang={{ language }}">{{ tr(label) }}</a>
       {% endfor %}
     </aside>
     <main class="docs-main">
-      <div class="docs-actions"><span>{{ tr('Dokumentacja DCC Web') }}</span><div class="docs-actions-links"><div class="docs-language" aria-label="{{ tr('Język dokumentacji') }}"><a href="/docs/{{ doc_name }}?lang=EN"{% if language == 'EN' %} aria-current="true"{% endif %}>EN</a><a href="/docs/{{ doc_name }}?lang=PL"{% if language == 'PL' %} aria-current="true"{% endif %}>PL</a></div><a href="https://github.com/hattimon/DCC/tree/dcc-web-v0.1.6/apps/dcc-web/docs" target="_blank" rel="noopener noreferrer">{{ tr('Źródła na GitHubie') }} ↗</a></div></div>
+      <div class="docs-actions"><span>{{ tr('Dokumentacja DCC Web') }}</span><div class="docs-actions-links"><div class="docs-language" aria-label="{{ tr('Język dokumentacji') }}"><a href="/docs/{{ doc_name }}?lang=EN"{% if language == 'EN' %} aria-current="true"{% endif %}>EN</a><a href="/docs/{{ doc_name }}?lang=PL"{% if language == 'PL' %} aria-current="true"{% endif %}>PL</a></div><a href="https://github.com/hattimon/DCC/tree/dcc-web-v0.2.0/apps/dcc-web/docs" target="_blank" rel="noopener noreferrer">{{ tr('Źródła na GitHubie') }} ↗</a></div></div>
       <article class="markdown-content">{{ rendered_content }}</article>
       <footer class="docs-footer"><a href="/about?lang={{ language }}">◇ DCC Web</a><a href="https://github.com/hattimon/DCC" target="_blank" rel="noopener noreferrer">{{ tr('Repozytorium DCC na GitHubie') }} ↗</a><span>{{ version }}</span></footer>
     </main>

@@ -1,10 +1,10 @@
-# DCC Web 0.1.6
+# DCC Web 0.2.0
 
 [English](README.md) · [Polski](README.pl.md) · [GitHub repository](https://github.com/hattimon/DCC)
 
 DCC Web is the browser workspace in Docker Control Center. It is independently versioned and complements the Windows and Linux desktop application. The DCC App Store entry opens this page from its **Website** button. Install DCC Web from the **DCC** category in Desktop 1.3.11 or newer.
 
-Older Desktop clients can use **Administration** after refreshing the official catalog; Container Updater remains under **Updates**. Web 0.1.6 enables host terminals when the panel is opened over HTTP on the same computer, adds Polish formatted documentation, and keeps the SSH vault collapsed by default. The 0.1.4 release fixed duplicate versions in the Web store, including stale caches retained from earlier images. See [catalog compatibility](docs/catalogs.md#older-desktop-clients) for the limitation of already published Desktop binaries with a bundled older Web entry.
+Older Desktop clients can use **Administration** after refreshing the official catalog; Container Updater remains under **Updates**. Web 0.1.8 adds optional, managed local HTTPS while retaining the current HTTP endpoint and persistent data. Web 0.2.0 fixes the recovery SMTP settings dialog so administrators can configure mail. The 0.1.4 release fixed duplicate versions in the Web store, including stale caches retained from earlier images. See [catalog compatibility](docs/catalogs.md#older-desktop-clients) for the limitation of already published Desktop binaries with a bundled older Web entry.
 
 The implementation uses Flask, Waitress, SQLite, native ES modules and CSS. This follows the existing Container Updater stack and avoids adding a frontend framework or a JavaScript build pipeline. It shares `dcc_catalog.py` and the canonical `dcc-catalog.json` with Desktop, and delegates safe container recreation to the existing Container Updater service without modifying that module.
 
@@ -24,7 +24,7 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 
 ## Install on Windows, macOS or Linux
 
-Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.6/DCC-Web-0.1.6-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.1.6` directory:
+Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.0/DCC-Web-0.2.0-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.2.0` directory:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
@@ -45,9 +45,9 @@ For a native Python installation without a container, use Python 3.12, create a 
 - Unique panel endpoints with copy buttons, full image-reference copying, visible ports, direct bulk controls and grouped container actions.
 - Installation phases, bounded redacted logs, copy/download and explicitly revealed encrypted startup access details.
 - OpenAI, compatible endpoints and Ollama assistants for configuration proposals, previews and port conflict resolution.
-- Authentication, CSRF, strict cookies, RBAC, confirmations, bounded jobs, audit and a read-only MCP stdio Preview.
+- Authentication, CSRF, strict cookies, RBAC, confirmations, bounded jobs, audit and scoped read/write MCP stdio tools.
 
-See the [feature matrix](docs/feature-matrix.md) for adapter restrictions and desktop-specific functions. In particular, direct update/recreation uses local, TLS, verified SSH or explicit localhost-tunnel API profiles; WSL can use TLS or host Compose/Updater. The complete interface supports English (default) and Polish, with saved per-user selection. No external AI client has been certified. Streamable HTTP and MCP writes are planned and disabled.
+See the [feature matrix](docs/feature-matrix.md) for adapter restrictions and desktop-specific functions. In particular, direct update/recreation uses local, TLS, verified SSH or explicit localhost-tunnel API profiles; WSL can use TLS or host Compose/Updater. The complete interface supports English (default) and Polish, with saved per-user selection. No external AI client has been certified. Streamable HTTP and MCP write tools are explicitly granted and scoped to profile permissions.
 
 ## Structure
 
@@ -57,7 +57,7 @@ engine.py              Docker CLI/SSH/WSL transports and jobs
 state.py               SQLite state and encrypted credentials
 security.py            authentication, authorization, validation, redaction
 catalogs.py             compatible catalogs and deployment preview
-mcp_preview.py         scoped, revocable read-only stdio server
+mcp_preview.py         scoped, revocable stdio server with read and write grants
 client_adapters.py     Codex TOML, VS Code JSON and mcpServers JSON exports
 templates/             login, workspace, information page
 static/                native JS views, five CSS themes, local audio
@@ -84,6 +84,14 @@ Project repository: [hattimon/DCC](https://github.com/hattimon/DCC).
 ## Shared SSH keys for imported profiles
 
 In **Profiles**, upload selected SSH files to the managed private directory, then use checkboxes to apply it only to chosen SSH/Balena profiles. Individual paths remain available. Trusted `known_hosts`, host verification and profile permissions remain required. See [configuration](docs/configuration.md#shared-ssh-files-and-desktop-profile-imports) and [security](docs/security.md#ssh-file-storage) for storage, external read-only mounts, confirmations and bulk removal behavior.
+
+## 0.1.7 — optional local HTTPS
+
+- Configure an optional private IP or local DNS name from **Settings → Administration and security → Local and public domains**.
+- Install the managed Caddy extension to get a local HTTPS URL. It binds to the selected private/loopback host IP and automatically scans Docker-published ports from 9443 to 9499.
+- The existing HTTP port and the DCC Web data volume remain unchanged. If a host port is taken after the scan, setup retries another candidate and restores the previous proxy on failure.
+- Open the HTTPS URL once so Caddy issues its local certificate, then download `DCC-Web-local-root-CA.crt` from **Settings → HTTPS access** and trust it on the client device. The CA private key remains in the extension's persistent volume.
+- Public HTTPS remains optional and separate; it needs a public domain and reachable ports 80/443.
 
 ## 0.1.6 — host terminal and localized documentation
 

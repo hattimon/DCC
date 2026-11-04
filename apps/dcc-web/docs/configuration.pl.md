@@ -13,6 +13,10 @@ Panel zapisuje stan w katalogu --data lub DCC_WEB_DATA. Baza SQLite przechowuje 
 
 SSH/WSL wykonują operacje w środowisku docelowym. Pliki Compose i ścieżki montowań muszą być dostępne tam. Import Compose zapisuje pliki po stronie backendu. Profile mają domyślnie tylko odczyt; osobno można zezwolić na cykl życia, exec, obrazy, wolumeny, sieci, Compose, instalację, aktualizacje i operacje destrukcyjne. Rola użytkownika dodatkowo ogranicza dostęp. Puste ograniczenie użytkowników oznacza wszystkich zalogowanych, nadal zgodnie z rolą i prawami.
 
+### Terminal hosta Docker
+
+Profil `local` łączy się z Docker Engine dostępnym dla procesu DCC Web. W instalacji kontenerowej podłączony socket Docker pozwala zarządzać kontenerami na tym samym serwerze, ale nie udostępnia powłoki systemowej hosta. Aby otworzyć terminal na tym samym serwerze, utwórz lub wybierz profil `ssh` wskazujący osiągalny prywatny adres IP/LAN tego serwera (albo `host.docker.internal`, jeśli zapewnia go Docker Desktop), wgraj zaufany wpis `known_hosts` i klucz oraz nadaj uprawnienie `host.exec`. Sesja SSH jest szyfrowana, a klucz hosta weryfikowany. Na serwerze musi działać serwer SSH osiągalny z kontenera DCC Web. Przy natywnej instalacji DCC Web na hoście profil `local` może otworzyć lokalną powłokę bezpośrednio. Dostęp do panelu z innego urządzenia wymaga HTTPS; HTTP przez loopback jest dozwolone tylko na tym samym komputerze.
+
 Import przyjmuje szyfrowane kopie Web i starsze eksporty Desktop. Jawny eksport Desktop przenosi metadane bez haseł; panel może dopasować wcześniej wgrane klucze po nazwie. Kopia Web jest zawsze szyfrowana osobnym hasłem i może opcjonalnie zawierać zapisane sekrety oraz zarządzane klucze. Puste pola sekretów w edytowanym profilu zachowują poprzednią zaszyfrowaną wartość. Szczegóły opisuje [przewodnik importu i eksportu](profiles-security.md).
 
 | Zmienna | Znaczenie |
@@ -46,3 +50,9 @@ Nie przekazuj agenta dalej do hosta SSH. Agent pozwala używać wszystkich zała
 ## Pozostałe funkcje
 
 Aktualizator używa bezpiecznej usługi UpdateService, zachowuje szyfrowane dane i weryfikuje klucze hostów. Ustawienia pozwalają włączyć opcjonalne TOTP 2FA, odzyskiwanie przez zweryfikowany email z TLS SMTP i osobne domeny lokalne/publiczne. Zobacz [model bezpieczeństwa](security.md).
+
+## Dostęp do panelu i HTTPS (TLS)
+
+W Ustawieniach wybierz **Administracja i bezpieczeństwo**, a następnie rozwiń **Dostęp do panelu i HTTPS (TLS)**. Przycisk **Adresy panelu — IP i domeny** zapisuje lokalny IP lub nazwę oraz opcjonalną domenę publiczną. Przycisk **HTTPS i certyfikaty** otwiera bezpośrednio instalowanie HTTPS i pobieranie lokalnego CA.
+
+Port 8789 pozostaje portem HTTP. Lokalne HTTPS wybiera wolny port od 9443 do 9499 i zapamiętuje wynik, np. `https://192.168.0.222:9444/`. Pobierz CA z panelu i zainstaluj je jako zaufane na swoich urządzeniach. Podany port i certyfikat są zachowywane podczas restartu.

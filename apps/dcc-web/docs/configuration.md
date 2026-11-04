@@ -13,6 +13,10 @@ State is kept in the directory selected by `--data` / `DCC_WEB_DATA`. SQLite sto
 
 SSH/WSL operations run in their target environment. Compose files and bind mount paths must exist there. Compose YAML import currently writes to the backend and requires a local/TLS profile; discovered remote projects remain manageable when their Compose CLI is available. Source builds require a separately reviewed GitHub repository and explicit confirmation. GitHub/source builds are not automatic catalog side effects.
 
+### Terminal for the Docker host
+
+The `local` profile connects to the Docker Engine available to the DCC Web process. In a container deployment, the mounted Docker socket lets that profile manage containers on the same server, but it does not provide a host operating-system shell. To open a terminal on that very server, create/select an `ssh` profile whose host is the same server's reachable private/LAN address (or `host.docker.internal` when Docker Desktop provides it), upload a trusted `known_hosts` entry and key, and grant `host.exec`. The SSH session is encrypted and host-key verified. The host must have an SSH server enabled and reachable from the DCC Web container. If DCC Web is installed natively on the host, its `local` profile can open the native shell directly. Browser access from another device still requires HTTPS; loopback HTTP is allowed only from the same computer.
+
 Profile permissions start with `read`. Separate capabilities are `containers.write`, `exec`, `images.write`, `volumes.write`, `networks.write`, `compose.write`, `install`, `update`, `destructive`. User roles impose a second limit: viewer reads, operator reads/lifecycle/exec, admin may use enabled profile capabilities. Administrators can restrict profiles to comma-separated user IDs from Settings → users. An empty restriction permits all authenticated users, subject to role/capability checks. A partial API profile edit preserves existing restrictions and credentials.
 
 Import accepts encrypted Web backups and legacy Desktop profile lists. A plaintext Desktop export imports connection metadata without passwords and can match keys already uploaded to the vault by filename. Every Web export is encrypted with a separate password and can optionally include saved credentials and managed keys. Browser forms never repopulate stored secrets. Leaving a credential field empty keeps the encrypted previous value. See the [import and export guide](profiles-security.md).
@@ -76,3 +80,9 @@ Docker Desktop documents `/run/host-services/ssh-auth.sock` forwarding for **Mac
 ## Connection wizard and account security
 
 Web 0.1.4 adds a three-step connection wizard, encrypted configuration/key storage, selected key deletion, encrypted backups, optional TOTP 2FA and verified email recovery. See the [complete profile and security guide](profiles-security.md), including read-only host folder mounting and separate local/public domain settings.
+
+## Panel access and HTTPS (TLS)
+
+In Settings, choose **Administration and security**, then expand **Panel access and HTTPS (TLS)**. **Panel addresses — IP and domains** saves the LAN IP/name and an optional public domain. **HTTPS and certificates** opens HTTPS installation and the local CA download directly.
+
+Port 8789 remains HTTP. Local HTTPS selects and remembers an available port from 9443 to 9499, for example `https://192.168.0.222:9444/`. Download the CA from the panel and trust it on your client devices. The configured port and certificate are retained on restart.

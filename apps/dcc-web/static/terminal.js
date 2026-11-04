@@ -23,6 +23,9 @@ function drawHeader(){
  document.querySelector('#terminal-copy').disabled=!tab;
  banner(tab?.error||'');
  const info=tab&&infrastructure.get(tab.profile.id);
+ const address=tab?.id?tab.address:'';
+ document.querySelector('#terminal-address').hidden=!address;
+ document.querySelector('#terminal-address-value').textContent=address;
  document.querySelector('#terminal-host').textContent=info?[info.name,info.operating_system||info.os_type,info.architecture].filter(Boolean).join(' · '):'';
  document.querySelector('#terminal-engine').textContent=info?[info.docker_version?'Docker '+info.docker_version:'',info.cpus?info.cpus+' CPU':'',info.memory_bytes?(info.memory_bytes/2**30).toFixed(1)+' GiB RAM':''].filter(Boolean).join(' · '):'';
 }
@@ -46,7 +49,7 @@ async function connect(tab){
   const approval=await send(tab,'confirmations',{action:'host.terminal',target:tab.profile.id});
   const value=await send(tab,'host-terminal',{...approval,cols:Math.min(300,Math.max(20,tab.term.cols)),rows:Math.min(120,Math.max(5,tab.term.rows))});
   if(!tabs.includes(tab)){await send(tab,'host-terminal/'+value.id+'/close',{});return;}
-  tab.id=value.id;tab.offset=0;tab.closed=false;tab.term.options.disableStdin=false;tab.status='Połączono';poll(tab);
+  tab.id=value.id;tab.address=value.address||'';tab.offset=0;tab.closed=false;tab.term.options.disableStdin=false;tab.status='Połączono';poll(tab);
  }catch(error){tab.error=error.message;tab.status='Błąd';}
  finally{tab.connecting=false;if(tab===active)drawHeader();}
 }
@@ -83,7 +86,7 @@ function addTab(profileId){
  const style=getComputedStyle(document.documentElement);
  const term=new window.Terminal({fontFamily:'"Cascadia Code",Consolas,monospace',fontSize:13,scrollback:3000,disableStdin:true,cursorBlink:state.settings.animations!==false,theme:{background:style.getPropertyValue('--bg').trim(),foreground:style.getPropertyValue('--text').trim(),cursor:style.getPropertyValue('--accent').trim(),selectionBackground:style.getPropertyValue('--surface3').trim()}});
  const fit=new window.FitAddon.FitAddon();term.loadAddon(fit);term.open(pane);
- const tab={key,profile,pane,term,fit,id:'',offset:0,closed:false,connecting:false,polling:false,status:'Połącz',error:'',write:Promise.resolve(),serial:tabs.filter(v=>v.profile.id===profileId).length+1};
+ const tab={key,profile,pane,term,fit,id:'',address:'',offset:0,closed:false,connecting:false,polling:false,status:'Połącz',error:'',write:Promise.resolve(),serial:tabs.filter(v=>v.profile.id===profileId).length+1};
  term.onData(data=>{if(!tab.id)return;const id=tab.id;tab.write=tab.write.then(()=>send(tab,'host-terminal/'+encodeURIComponent(id)+'/input',{data:encode(data)})).catch(error=>{tab.error=error.message;if(tab===active)drawHeader();});});
  tabs.push(tab);activate(tab);
  api('infrastructure?profile='+encodeURIComponent(profile.id)).then(info=>{infrastructure.set(profile.id,info);if(tab===active)drawHeader();}).catch(error=>{tab.error=error.message;if(tab===active)drawHeader();});
@@ -93,6 +96,7 @@ async function main(){
  if(document.readyState!=='complete')await new Promise(resolve=>window.addEventListener('load',resolve,{once:true}));
  const bootstrap=await api('bootstrap');state.user=bootstrap.user;state.profiles=bootstrap.profiles;applySettings(bootstrap.settings);
  if(!state.profiles.some(p=>p.id===initialProfile))throw Error('Profile access denied');
+ document.querySelector('#terminal-address-label').textContent=t('Adres SSH');
  for(const [id,label]of [['terminal-connect','Połącz'],['terminal-copy','Kopiuj'],['terminal-disconnect','Rozłącz'],['terminal-new-tab','Nowa zakładka'],['terminal-new-window','Otwórz kolejne okno'],['terminal-scope','Wpisywane polecenia działają na wybranym hoście.']])document.getElementById(id).textContent=t(label);
  document.querySelector('#terminal-new-profile').innerHTML=state.profiles.map(p=>html`<option value="${esc(p.id)}" ${p.id===initialProfile?'selected':''}>${esc(p.name)}</option>`).join('');
  newTabButton.onclick=()=>addTab(document.querySelector('#terminal-new-profile').value);

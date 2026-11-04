@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import tarfile
 import tempfile
 import time
 import unittest
@@ -19,7 +20,7 @@ from state import State
 from mfa import MFA, totp
 from profile_transfer import ProfileTransfer, seal, unseal
 from profile_ssh import connection_options
-from host_setup import domain,mount_source,mount_plan,local_container,Domains,test_directory
+from host_setup import domain,local_host,mount_source,mount_plan,local_container,Domains,test_directory
 
 
 class AccountSecurityTests(unittest.TestCase):
@@ -191,6 +192,25 @@ class AccountSecurityTests(unittest.TestCase):
             with self.assertRaises(Exception) as error:recovery.throttle('test-fixture')
             self.assertEqual(error.exception.code,429)
 
+    def test_admin_can_test_smtp_without_saving_configuration(self):
+        data={'host':'smtp.example.invalid','port':587,'sender':'dcc@example.invalid','test_recipient':'owner@example.invalid',
+              'username':'fixture','password':'temporary-smtp-secret','current_password':self.password}
+        with patch('recovery.smtplib.SMTP') as smtp:
+            response=self.request('admin/smtp/test',data)
+            self.assertEqual(response.status_code,200,response.json)
+            smtp.return_value.starttls.assert_called_once()
+            context=smtp.return_value.starttls.call_args.kwargs['context']
+            self.assertTrue(context.check_hostname)
+            self.assertEqual(context.verify_mode,2)
+            smtp.return_value.login.assert_called_once_with('fixture','temporary-smtp-secret')
+            message=smtp.return_value.send_message.call_args.args[0]
+            self.assertEqual(message['To'],'owner@example.invalid')
+            self.assertIn('test',message['Subject'].lower())
+        self.assertEqual(self.state.recovery.smtp(),{})
+        self.assertEqual(self.state.rows('SELECT * FROM email_tokens'),[])
+        invalid=self.request('admin/smtp/test',{**data,'test_recipient':'invalid-address'})
+        self.assertEqual(invalid.status_code,400)
+
     def test_email_reset_requires_password_prior_verified_email_and_emailed_code(self):
         _,codes=self.enable_mfa();recovery=self.state.recovery
         recovery.configure_smtp({'host':'smtp.example.invalid','sender':'dcc@example.invalid'})
@@ -212,6 +232,10 @@ class AccountSecurityTests(unittest.TestCase):
         self.assertEqual(domain('DCC.HOME.ARPA'),'dcc.home.arpa')
         for value in ('https://dcc.example.com','x;bad.example','*.example.com','127.0.0.1','evil\n.example.com'):
             with self.assertRaises(ValueError):domain(value)
+        self.assertEqual(local_host('192.168.0.222'),'192.168.0.222')
+        self.assertEqual(local_host('dcc.home.arpa'),'dcc.home.arpa')
+        for value in ('8.8.8.8','0.0.0.0','169.254.1.2','https://dcc.home.arpa'):
+            with self.assertRaises(ValueError):local_host(value)
         self.assertEqual(mount_source(r'C:\Users\fixture\.ssh'),'/run/desktop/mnt/host/c/Users/fixture/.ssh')
         for value in ('../keys','/home/../root','//remote/keys'):
             with self.assertRaises(ValueError):mount_source(value)
@@ -229,8 +253,39 @@ class AccountSecurityTests(unittest.TestCase):
         self.assertEqual(result.status_code,200,result.json)
         public=self.app.test_client().get('/login',base_url='https://dcc.example.invalid')
         self.assertIn('; Secure;',public.headers['Set-Cookie'])
+        self.assertIn('Strict-Transport-Security',public.headers)
         self.assertEqual(self.client.get('/api/profiles').status_code,200)
         self.assertEqual(self.client.get('/api/health',headers={'Host':'untrusted.invalid'}).status_code,400)
+
+    def test_local_ip_allowlist_and_authenticated_caddy_https(self):
+        result=self.request('admin/domains',{'local':'192.168.0.222','public':'','current_password':self.password},method='PUT')
+        self.assertEqual(result.status_code,200,result.json)
+        self.assertIn('192.168.0.222',self.app.config['ALLOWED_HOSTS'])
+        self.assertEqual(self.client.get('/login',base_url='https://192.168.0.222:9444').status_code,200)
+
+    def test_internal_caddy_https_sets_secure_cookies_and_accepts_https_origin(self):
+        self.request('admin/domains',{'local':'192.168.0.222','public':'','current_password':self.password},method='PUT')
+        token=self.app.extensions['dcc_domains'].proxy_token()
+        client=self.app.test_client()
+        base_url='https://192.168.0.222:9444'
+        # A real Waitress server strips X-Forwarded-Proto before Flask sees it.
+        headers={'X-DCC-Web-Internal-TLS':token}
+        forwarded=self.app.test_client().get('/login',base_url='http://192.168.0.222:9444',headers=headers)
+        self.assertIn('; Secure;',forwarded.headers['Set-Cookie'])
+        login=client.get('/login',base_url=base_url,headers=headers)
+        self.assertIn('; Secure;',login.headers['Set-Cookie'])
+        self.assertNotIn('Strict-Transport-Security',login.headers)
+        with client.session_transaction(base_url=base_url) as session:csrf=session['csrf']
+        login=client.post('/login',base_url=base_url,headers=headers,data={'csrf':csrf,'username':'fixture-admin','password':self.password})
+        self.assertEqual(login.status_code,302)
+        with client.session_transaction(base_url=base_url) as session:csrf=session['csrf']
+        response=client.put('/api/admin/domains',base_url=base_url,json={'local':'192.168.0.222','public':'','current_password':self.password},headers={
+            **headers,'Origin':base_url,'X-CSRF-Token':csrf,
+        })
+        self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+        untrusted=self.app.test_client().get('/login',base_url='http://192.168.0.222:9444',headers={
+            'X-Forwarded-Proto':'https','X-DCC-Web-Internal-TLS':'wrong-marker'})
+        self.assertNotIn('; Secure;',untrusted.headers['Set-Cookie'])
 
     def test_mount_confirmation_ignores_inspect_order_but_detects_actual_changes(self):
         container=MagicMock()
@@ -272,6 +327,47 @@ class AccountSecurityTests(unittest.TestCase):
         for hostname in ('dcc.home.arpa','dcc.local','dcc.test','dcc.invalid',''):
             with self.assertRaises(ValueError):Domains(self.state).provision(client,container,hostname)
         client.images.pull.assert_not_called();client.networks.create.assert_not_called()
+
+    def test_local_https_uses_free_port_private_ca_and_keeps_public_proxy_if_present(self):
+        service=Domains(self.state)
+        service.save({'local':'192.168.0.222','public':'dcc.example.com','public_https_enabled':True})
+        client=MagicMock();container=MagicMock();container.id='a'*64;container.name='fixture-web'
+        old=MagicMock();old.id='proxy-old';old.name=service.proxy_name();old.attrs={'Config':{'Labels':{'io.dcc.web.proxy':'fixture-web'}},'HostConfig':{'PortBindings':{'80/tcp':[{'HostPort':'80'}],'443/tcp':[{'HostPort':'443'}]}}}
+        client.containers.list.return_value=[old]
+        client.networks.list.return_value=[]
+        client.containers.create.return_value.attrs={'Config':{'Labels':{}}}
+        client.containers.create.return_value.start.return_value=None
+        result=service.provision(client,container,'192.168.0.222','local')
+        self.assertEqual(result['local_https_port'],9443)
+        self.assertTrue(result['public_https_enabled'])
+        options=client.containers.create.call_args.kwargs
+        self.assertEqual(options['ports'],{'80/tcp':80,'443/tcp':443,'9443/tcp':('192.168.0.222',9443)})
+        self.assertEqual(options['environment']['XDG_DATA_HOME'],'/data')
+        config_archive=client.containers.create.return_value.put_archive.call_args.args[1]
+        with tarfile.open(fileobj=io.BytesIO(config_archive)) as archive:
+            config=archive.extractfile('Caddyfile').read().decode()
+        self.assertIn('https://192.168.0.222:9443 {',config)
+        self.assertIn('default_sni 192.168.0.222',config)
+        self.assertIn('issuer internal',config)
+        self.assertIn('dcc.example.com {',config)
+        old.remove.assert_called_once_with(v=False)
+
+    def test_local_https_retries_next_host_port_after_docker_bind_conflict(self):
+        service=Domains(self.state)
+        service.save({'local':'192.168.0.222'})
+        client=MagicMock();container=MagicMock();container.id='b'*64;container.name='fixture-web'
+        client.containers.list.return_value=[]
+        client.networks.list.return_value=[]
+        first=MagicMock();first.start.side_effect=RuntimeError('Bind for 192.168.0.222:9443 failed: port is already allocated')
+        second=MagicMock();second.start.return_value=None
+        client.containers.create.side_effect=[first,second]
+
+        result=service.provision(client,container,'192.168.0.222','local')
+
+        self.assertEqual(result['local_https_port'],9444)
+        self.assertEqual(client.containers.create.call_args_list[0].kwargs['ports']['9443/tcp'],('192.168.0.222',9443))
+        self.assertEqual(client.containers.create.call_args_list[1].kwargs['ports']['9443/tcp'],('192.168.0.222',9444))
+        first.remove.assert_called_once_with(force=True,v=False)
 
     def test_encrypted_backup_restores_keys_and_config_without_plaintext_database(self):
         self.upload()

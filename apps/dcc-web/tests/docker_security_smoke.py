@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import ssl
 import subprocess
 import tempfile
 import time
@@ -14,6 +15,84 @@ import tomllib
 import urllib.parse
 import urllib.request
 from urllib.error import HTTPError
+
+
+def verify_local_https(docker,name,api,credential):
+    """Exercise actual TLS without SNI, trusted cookies and login through Waitress."""
+    proxy=name+'-https';network=proxy+'-network'
+    volumes=[proxy+'-certs',proxy+'-config']
+    made_network=False;connected=False;made_proxy=False;made_volumes=[]
+    def create_proxy(port=''):
+        docker('create','--name',proxy,'--label','dcc.qa=security-smoke','--network',network,
+               '-p',f'127.0.0.1:{port}:9443','-v',volumes[0]+':/data','-v',volumes[1]+':/config',
+               '-e','XDG_DATA_HOME=/data','-e','XDG_CONFIG_HOME=/config',
+               '--cap-drop=ALL','--cap-add=NET_BIND_SERVICE','--security-opt=no-new-privileges:true',
+               'caddy:2','caddy','run','--config','/config/Caddyfile','--adapter','caddyfile')
+    try:
+        api('admin/domains',{'local':'127.0.0.1','public':'','current_password':credential[2]},'PUT')
+        code=('import base64;from state import State;from host_setup import Domains;'
+              'd=Domains(State("/data"));print(base64.b64encode(d._proxy_config('
+              'd.saved(),True,False,d.proxy_token())).decode())')
+        config=base64.b64decode(docker('exec','--user','10001:10001',name,'python','-c',code))
+        docker('network','create','--label','dcc.qa=security-smoke',network);made_network=True
+        docker('network','connect','--alias','dcc-web-upstream',network,name);connected=True
+        for volume in volumes:
+            docker('volume','create','--label','dcc.qa=security-smoke',volume);made_volumes.append(volume)
+        create_proxy()
+        made_proxy=True
+        with tempfile.TemporaryDirectory(prefix='dcc-web-https-qa-') as directory:
+            directory=Path(directory)
+            assert directory.resolve().is_relative_to(Path(tempfile.gettempdir()).resolve())
+            config_path=directory/'Caddyfile';config_path.write_bytes(config)
+            docker('cp',str(config_path),proxy+':/config/Caddyfile');docker('start',proxy)
+            ca=directory/'root.crt'
+            for attempt in range(60):
+                try:
+                    port=docker('port',proxy,'9443/tcp').rsplit(':',1)[1]
+                    origin='https://127.0.0.1:'+port
+                    docker('cp',proxy+':/data/caddy/pki/authorities/local/root.crt',str(ca))
+                    context=ssl.create_default_context(cafile=str(ca))
+                    # Python, like browsers, does not send SNI for an IP literal.
+                    with urllib.request.urlopen(origin+'/login',context=context,timeout=3) as response:
+                        assert '; Secure;' in response.headers['Set-Cookie']
+                    break
+                except Exception:
+                    if attempt==59:
+                        raise RuntimeError('HTTPS fixture failed: '+docker('logs',proxy)[-1800:])
+                    time.sleep(.5)
+            initial_ca=ca.read_bytes()
+            secure=urllib.request.build_opener(urllib.request.HTTPSHandler(context=context),
+                urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            with secure.open(origin+'/login') as response:page=response.read().decode()
+            csrf=re.search(r'name="csrf" value="([^"]+)"',page)[1]
+            request=urllib.request.Request(origin+'/login',headers={'Origin':origin},data=urllib.parse.urlencode(
+                {'csrf':csrf,'username':credential[1],'password':credential[2]}).encode())
+            with secure.open(request) as response:assert response.status==200
+            with secure.open(origin+'/api/bootstrap') as response:assert json.load(response)['user']['role']=='admin'
+            with secure.open(origin+'/static/app.css') as response:
+                assert response.status==200 and response.headers.get_content_type()=='text/css'
+            # Preserve the chosen port explicitly, as the production installer
+            # does. Docker may reassign an unpinned ephemeral port on restart.
+            docker('restart','--timeout','5',name)
+            docker('stop','--timeout','5',proxy);docker('rm',proxy)
+            create_proxy(port);docker('start',proxy)
+            for attempt in range(60):
+                try:
+                    with secure.open(origin+'/api/bootstrap',timeout=3) as response:
+                        assert json.load(response)['user']['role']=='admin'
+                    break
+                except Exception:
+                    if attempt==59:raise
+                    time.sleep(.5)
+            assert docker('port',proxy,'9443/tcp').rsplit(':',1)[1]==port
+            docker('cp',proxy+':/data/caddy/pki/authorities/local/root.crt',str(ca))
+            assert ca.read_bytes()==initial_ca,'HTTPS restart replaced the trusted CA'
+        return True
+    finally:
+        if made_proxy:docker('rm','--force',proxy)
+        if connected:docker('network','disconnect',network,name)
+        if made_network:docker('network','rm',network)
+        for volume in made_volumes:docker('volume','rm',volume)
 
 
 def main():
@@ -37,12 +116,13 @@ def main():
             '-v',volume+':/data','-v','/var/run/docker.sock:/var/run/docker.sock','-e','DCC_WEB_CONTAINER_NAME='+name,
             '--cap-drop=ALL','--cap-add=SETUID','--cap-add=SETGID','--read-only','--tmpfs','/tmp:size=64m,mode=1777',image)
         running=True
-        base='http://127.0.0.1:'+docker('port',name,'8789/tcp').rsplit(':',1)[1]
         for _ in range(60):
             try:
+                base='http://127.0.0.1:'+docker('port',name,'8789/tcp').rsplit(':',1)[1]
                 with urllib.request.urlopen(base+'/api/health',timeout=2):return base
             except Exception:time.sleep(.5)
-        raise RuntimeError('QA image failed health check')
+        details=re.sub(r'(password=)\S+',r'\1[REDACTED]',docker('logs',name))
+        raise RuntimeError('QA image failed health check: '+details[-1800:])
     opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     try:
         docker('volume','create','--label','dcc.qa=security-smoke',volume);created=True
@@ -131,9 +211,11 @@ def main():
             mount_verified=True
         inspected=json.loads(docker('inspect',name))[0]
         assert inspected['RestartCount']==0
+        https_verified=verify_local_https(docker,name,api,credential)
         print(json.dumps({'old_image':args.old_image,'new_image':args.image,'profile_configuration_preserved':True,
             'credentials_and_keys_encrypted':True,'settings_preserved':True,'catalog_unique':True,
             'mcp_container_stdio_verified':True,
+            'https_ip_login_cookies_and_restart_verified':https_verified,
             'read_only_host_mount_verified':mount_verified,'restart_count':inspected['RestartCount']},indent=2))
     finally:
         if running:

@@ -1,6 +1,9 @@
 .terminal-window{height:100vh;display:flex;flex-direction:column;overflow:hidden}
 .terminal-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px;border-bottom:1px solid var(--line)}
-.terminal-header>div:first-child{min-width:0}
+.terminal-identity{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px;min-width:0;max-width:100%}
+.terminal-identity>div{min-width:0;overflow-wrap:anywhere}
+.terminal-address{padding:6px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);font-size:12px}
+.terminal-address span{display:block;color:var(--muted)}
 .terminal-header .secondary,.terminal-header .fine{display:block;overflow-wrap:anywhere}
 .terminal-header .secondary{font-size:12px;color:var(--muted)}
 .terminal-buttons{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
