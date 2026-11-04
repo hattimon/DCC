@@ -275,7 +275,7 @@
         "Administration 🛠",
         "WWW 🌐"
       ],
-      "image": "ghcr.io/hattimon/dcc-web:0.1.9",
+      "image": "ghcr.io/hattimon/dcc-web:0.2.0",
       "category": "Administracja 🛠",
       "category_en": "Administration 🛠",
       "description": "Przeglądarkowy panel DCC do zarządzania kontenerami, profilami i hostami Docker.",
@@ -311,9 +311,9 @@
         "amd64",
         "arm64"
       ],
-      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.9/apps/dcc-web",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.9/apps/dcc-web/docs",
-      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.1.9/apps/dcc-web",
+      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.2.0/apps/dcc-web",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.2.0/apps/dcc-web/docs",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.2.0/apps/dcc-web",
       "icon_text": "◇",
       "post_install_hints": [
         "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",
@@ -328,8 +328,8 @@
         "The dcc_web_data volume retains profiles and settings."
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "dcc-web-v0.1.9",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.1.9",
+      "latest_release": "dcc-web-v0.2.0",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.2.0",
       "release_tag_pattern": "dcc-web-v[0-9]+\\.[0-9]+\\.[0-9]+",
       "image_tag_from_release": "strip-prefix:dcc-web-v"
     },
@@ -1431,8 +1431,8 @@
       "homepage_url": "https://ntfy.sh/",
       "icon_text": "🔔",
       "upstream_repo": "binwiederhier/ntfy",
-      "latest_release": "v2.37.1",
-      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.37.1",
+      "latest_release": "v2.37.2",
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.37.2",
       "icon_url": "catalog/media/icons/ntfy.png"
     },
     {
