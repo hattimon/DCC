@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch,MagicMock
 from types import SimpleNamespace
 import subprocess
+import threading
 import tomllib
 
 APP_ROOT=Path(__file__).resolve().parents[1]
@@ -65,6 +66,26 @@ class WebTests(unittest.TestCase):
                 return value.get('result')
             time.sleep(.01)
         self.fail('Job did not complete')
+
+    def wait_failure(self,response):
+        self.assertEqual(response.status_code,202,response.json)
+        for _ in range(100):
+            value=self.client.get('/api/jobs/'+response.json['id']).json
+            if value['status']!='running':
+                self.assertEqual(value['status'],'error',value)
+                return value
+            time.sleep(.01)
+        self.fail('Expected job failure did not complete')
+
+    def wait_scan(self,response):
+        self.assertEqual(response.status_code,202,response.json)
+        for _ in range(200):
+            value=self.client.get('/api/catalog/installed/'+response.json['id'])
+            self.assertEqual(value.status_code,200,value.get_data(as_text=True))
+            if value.json['status']!='running':
+                return value.json
+            time.sleep(.01)
+        self.fail('Installed application scan did not complete')
 
     def test_lan_first_start_creates_one_random_admin_and_exposes_it_for_install_result(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -205,13 +226,53 @@ class WebTests(unittest.TestCase):
     def test_catalog_same_68_entries_multi_category_search_and_installed(self):
         catalogs=self.app.extensions['dcc_catalogs']
         self.assertEqual(len(catalogs.fallback),68)
-        for category in ('DCC','Aktualizacje','installed'):
+        for category in ('DCC','Aktualizacje'):
             response=self.client.get('/api/catalog?category='+category)
             matches=[v for v in response.json['apps'] if v['name']=='DCC Container Updater']
             self.assertEqual(len(matches),1,category)
         self.assertEqual(self.client.get('/api/catalog').json['categories'][:4],['all','installed','DCC','AI'])
         self.assertEqual(len(self.client.get('/api/catalog?q=CoNtAiNeR%20UpDaTeR').json['apps']),1)
         self.assertEqual(len(self.client.get('/api/catalog?q=nonexistent-fixture-app').json['apps']),0)
+        scan=self.wait_scan(self.request('catalog/installed',{}))
+        self.assertEqual(scan['status'],'success',scan)
+        matches=[v for v in self.client.get('/api/catalog?category=installed').json['apps'] if v['name']=='DCC Container Updater']
+        self.assertEqual(len(matches),1,'installed')
+
+    def test_catalog_is_fast_while_slow_installed_host_scan_runs_in_background(self):
+        entered,release=threading.Event(),threading.Event()
+        def slow_containers(engine):
+            entered.set()
+            release.wait(3)
+            return FakeBackend.entries
+        with patch.object(FakeBackend,'containers',slow_containers):
+            response=self.client.get('/api/catalog?q=DCC%20Web')
+            self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+            self.assertEqual(len(response.json['apps']),1)
+            self.assertFalse(response.json['installed_known'])
+            self.assertFalse(entered.is_set(),'catalog rendering must not contact Docker')
+            scan=self.request('catalog/installed',{})
+            self.assertEqual(scan.status_code,202,scan.json)
+            self.assertTrue(entered.wait(1),'installed scan should run on its own worker')
+            while_scan=self.client.get('/api/catalog?category=installed')
+            self.assertEqual(while_scan.status_code,200)
+            self.assertTrue(while_scan.json['installed_pending'])
+            self.assertTrue(any(v['name']=='DCC Web' for v in self.client.get('/api/catalog').json['apps']))
+            release.set()
+            self.assertEqual(self.wait_scan(scan)['status'],'success')
+
+    def test_catalog_unavailable_host_reports_scan_failure_without_hiding_store(self):
+        FakeBackend.unavailable=True
+        response=self.client.get('/api/catalog')
+        self.assertEqual(response.status_code,200)
+        self.assertIsNone(response.json['connected'])
+        self.assertFalse(response.json['installed_known'])
+        self.assertGreater(len(response.json['apps']),50)
+        scan=self.wait_scan(self.request('catalog/installed',{}))
+        self.assertEqual(scan['status'],'error')
+        refreshed=self.client.get('/api/catalog')
+        self.assertEqual(refreshed.status_code,200)
+        self.assertTrue(refreshed.json['installed_error'])
+        self.assertGreater(len(refreshed.json['apps']),50)
 
     def test_live_catalog_replaces_bundled_web_version_without_duplicate_or_id_change(self):
         catalogs = self.app.extensions['dcc_catalogs']
@@ -276,13 +337,6 @@ class WebTests(unittest.TestCase):
         self.assertEqual(len(self.app.extensions['dcc_catalogs'].all()),68)
         self.assertTrue(self.app.extensions['dcc_catalogs'].sources()[0]['error'])
 
-    def test_catalog_available_when_docker_offline(self):
-        FakeBackend.unavailable=True
-        response=self.client.get('/api/catalog')
-        self.assertEqual(response.status_code,200)
-        self.assertFalse(response.json['connected'])
-        self.assertGreater(len(response.json['apps']),50)
-
     def test_install_preview_warnings_conflicts_and_uninstall_retain_volumes(self):
         entry=next(v for v in self.app.extensions['dcc_catalogs'].all() if v['name']=='DCC Container Updater')
         # Name and port are deliberately changed in this isolated fixture.
@@ -290,13 +344,32 @@ class WebTests(unittest.TestCase):
         preview=self.request('install/preview',{'app':entry['id'],'configuration':config})
         self.assertEqual(preview.status_code,200,preview.json)
         self.assertIn('docker-socket',preview.json['warnings'])
-        self.assertEqual(self.request('install',{'app':entry['id'],'configuration':config}).status_code,409)
+        nonce=self.confirmation('install',entry['id'])
+        missing_ack=self.request('install',{'app':entry['id'],'configuration':config,'confirmation':nonce})
+        failed=self.wait_failure(missing_ack)
+        self.assertIn('Acknowledge',failed['error'])
         nonce=self.confirmation('install',entry['id'])
         self.wait(self.request('install',{'app':entry['id'],'configuration':config,'acknowledged':preview.json['warnings'],'confirmation':nonce}))
         nonce=self.confirmation('uninstall',entry['id'])
         result=self.wait(self.request('uninstall',{'app':entry['id'],'confirmation':nonce}))
         self.assertTrue(result['volumes_retained'])
         self.assertFalse(any('volume' in cmd and 'rm' in cmd for cmd in FakeBackend.commands))
+
+    def test_uninstall_returns_job_while_slow_host_lookup_runs(self):
+        entry=next(v for v in self.app.extensions['dcc_catalogs'].all() if v['name']=='DCC Container Updater')
+        entered,release=threading.Event(),threading.Event()
+        def slow_containers(engine):
+            entered.set()
+            release.wait(3)
+            return FakeBackend.entries
+        nonce=self.confirmation('uninstall',entry['id'])
+        with patch.object(FakeBackend,'containers',slow_containers):
+            response=self.request('uninstall',{'app':entry['id'],'confirmation':nonce})
+            self.assertEqual(response.status_code,202,response.get_data(as_text=True))
+            self.assertTrue(entered.wait(1),'uninstall worker should begin independently')
+            release.set()
+            result=self.wait(response)
+        self.assertTrue(result['volumes_retained'])
 
     def test_all_canonical_presets_have_parseable_safe_options(self):
         engine=FakeBackend({})
@@ -380,6 +453,55 @@ class WebTests(unittest.TestCase):
         self.assertNotIn(grant['token'],self.client.get('/api/mcp/config/'+grant['id']).get_data(as_text=True))
         self.request('mcp/grants/'+grant['id'],{},method='DELETE')
         with self.assertRaises(PermissionError):service.call('list_containers',{'profile':'local'})
+
+    def test_mcp_write_grants_reauthenticate_and_recheck_profile_permissions(self):
+        rejected=self.request('mcp/grants',{'profiles':['local'],'mode':'write','tools':['container_restart']})
+        self.assertEqual(rejected.status_code,403)
+        created=self.request('mcp/grants',{'profiles':['local'],'mode':'write','tools':['container_restart'],
+                                            'current_password':'ReviewPassword-44-long'})
+        self.assertEqual(created.status_code,201,created.json)
+        service=MCPService(self.state,created.json['token'],FakeBackend)
+        initialized=service.handle({'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-11-25'}})
+        self.assertNotIn('error',initialized)
+        service.handle({'jsonrpc':'2.0','method':'notifications/initialized'})
+        tools=service.handle({'jsonrpc':'2.0','id':2,'method':'tools/list'})['result']['tools']
+        self.assertEqual([item['name'] for item in tools],['container_restart'])
+        self.assertFalse(tools[0]['annotations']['readOnlyHint'])
+        result=service.call('container_restart',{'profile':'local','container':'dcc-container-updater'})
+        self.assertIn('"ok": true',result['content'][0]['text'])
+        self.assertIn(['restart','dcc-container-updater'],FakeBackend.commands)
+        with self.assertRaises(PermissionError):service.call('container_start',{'profile':'local','container':'redis'})
+        self.state.save_profile('local',{'name':'Review Docker','kind':'local','permissions':['read']})
+        with self.assertRaises(PermissionError):service.call('container_restart',{'profile':'local','container':'redis'})
+
+    def test_mcp_create_container_validates_ports_volumes_and_keeps_secrets_out_of_results(self):
+        created=self.request('mcp/grants',{'profiles':['local'],'mode':'write','tools':['create_container'],
+                                            'current_password':'ReviewPassword-44-long'})
+        self.assertEqual(created.status_code,201,created.json)
+        service=MCPService(self.state,created.json['token'],FakeBackend)
+        args={'profile':'local','name':'mcp-demo','image':'example/demo:1','ports':[{'host_port':18788,'container_port':8080}],
+              'volumes':[{'name':'demo_data','container_path':'/data'}],'environment':{'APP_PASSWORD':'private-fixture-value'}}
+        result=service.call('create_container',args)
+        self.assertIn('"ok": true',result['content'][0]['text'])
+        self.assertNotIn('private-fixture-value',result['content'][0]['text'])
+        self.assertIn('127.0.0.1:18788:8080/tcp',FakeBackend.commands[-1])
+        self.assertIn('demo_data:/data',FakeBackend.commands[-1])
+        self.assertNotIn('private-fixture-value',str(self.state.rows('SELECT * FROM audit')))
+        with self.assertRaises(ValueError):
+            service.call('create_container',{**args,'name':'mcp-conflict','ports':[{'host_port':8788,'container_port':80}]})
+        with self.assertRaises(ValueError):
+            service.call('create_container',{**args,'name':'mcp-bind','ports':[{'host_port':18789,'container_port':80,'host_ip':'0.0.0.0'}]})
+
+    def test_mcp_container_removal_requires_separate_grant_and_preserves_volumes(self):
+        values={'profiles':['local'],'mode':'write','tools':['container_remove'],'current_password':'ReviewPassword-44-long'}
+        self.assertEqual(self.request('mcp/grants',values).status_code,400)
+        values['allow_destructive']=True
+        grant=self.request('mcp/grants',values)
+        self.assertEqual(grant.status_code,201,grant.json)
+        service=MCPService(self.state,grant.json['token'],FakeBackend)
+        self.assertTrue(json.loads(service.call('container_remove',{'profile':'local','container':'redis'})['content'][0]['text'])['ok'])
+        self.assertIn(['remove','redis'],FakeBackend.commands)
+        self.assertFalse(any('volume' in command and 'rm' in command for command in FakeBackend.commands))
 
     def test_mcp_stdio_framing_unknown_methods_and_no_credentials_in_output(self):
         grant=self.request('mcp/grants',{'profiles':['local']}).json
@@ -571,6 +693,25 @@ class WebTests(unittest.TestCase):
         self.assertEqual(response.json['cpus'],8)
         self.assertEqual(response.json['architecture'],'x86_64')
         self.assertNotIn('credentials',response.json)
+        self.assertEqual(response.json['address'],'localhost')
+        self.assertEqual(self.request('admin/domains',{'local':'192.168.0.222','public':'','current_password':'ReviewPassword-44-long'},method='PUT').status_code,200)
+        lan_client=self.app.test_client();base_url='http://192.168.0.222:8790'
+        login=lan_client.get('/login',base_url=base_url)
+        with lan_client.session_transaction(base_url=base_url) as session:csrf=session['csrf']
+        login=lan_client.post('/login',base_url=base_url,data={'csrf':csrf,'username':'review-admin','password':'ReviewPassword-44-long'})
+        self.assertEqual(login.status_code,302)
+        lan_response=lan_client.get('/api/infrastructure',base_url=base_url)
+        self.assertEqual(lan_response.status_code,200,lan_response.json)
+        self.assertEqual(lan_response.json['address'],'192.168.0.222:8790')
+        self.state.save_profile('remote-address',{'name':'Remote address test','kind':'ssh','host':'docker.example.test','port':22,'permissions':sorted(CAPABILITIES)})
+        remote=self.client.get('/api/infrastructure?profile=remote-address')
+        self.assertEqual(remote.status_code,200)
+        self.assertEqual(remote.json['address'],'docker.example.test')
+        self.assertNotIn('credentials',remote.json)
+        self.state.save_profile('remote-address-port',{'name':'Remote address port test','kind':'ssh','host':'docker.example.test','port':2222,'permissions':sorted(CAPABILITIES)})
+        remote_port=self.client.get('/api/infrastructure?profile=remote-address-port')
+        self.assertEqual(remote_port.status_code,200)
+        self.assertEqual(remote_port.json['address'],'docker.example.test:2222')
         self.request('logout')
         self.assertEqual(self.client.get('/api/infrastructure').status_code,401)
 

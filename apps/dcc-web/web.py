@@ -21,18 +21,58 @@ from markupsafe import Markup
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from catalogs import Catalogs, app_id, install_plan, validate_catalog
+from catalogs import Catalogs, InstalledCatalogScans, app_id, install_plan, validate_catalog
 from markdown_render import render_markdown
 from engine import DockerBackend, EngineError, Jobs
-from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES
+from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES, trusted_https_request
 from state import State
 from ports import enrich_containers,inventory
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.1.6"
+VERSION = "0.1.9"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
 DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
+
+
+def profile_display_address(profile, info, panel_host):
+    """Return the configured engine host, or the address used to open this panel for local profiles."""
+    kind=profile.get('kind','local')
+    address=''
+    port=None
+    if kind in {'ssh','balena'}:
+        address=profile.get('host','')
+        port=profile.get('port',22)
+        try:
+            port=int(port)
+        except (TypeError,ValueError):
+            port=None
+        if port==22:
+            port=None
+    elif kind in {'tcp','tunnel'}:
+        endpoint=urlsplit(profile.get('endpoint',''))
+        address=endpoint.hostname or ''
+        try:
+            port=endpoint.port
+        except ValueError:
+            port=None
+    elif kind in {'local','wsl'} and not profile.get('context'):
+        parsed=urlsplit('//'+panel_host)
+        address=parsed.hostname or ''
+        try:
+            port=parsed.port
+        except ValueError:
+            port=None
+        if port in (80,443):
+            port=None
+    elif profile.get('panel_host'):
+        address=profile['panel_host']
+    if not address:
+        address=(info.get('Swarm') or {}).get('NodeAddr','')
+    if address and port:
+        address=f'[{address}]' if ':' in address and not address.startswith('[') else address
+        address+=f':{port}'
+    return address
 
 
 def provision_random_admin(state):
@@ -62,9 +102,10 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     state.recovery = Recovery(state)
     app.secret_key = state.session_key
     catalogs = Catalogs(state, ROOT)
+    installed_scans = InstalledCatalogScans()
     jobs = Jobs()
     factory = backend_factory or DockerBackend
-    app.extensions.update(dcc_state=state, dcc_catalogs=catalogs, dcc_jobs=jobs)
+    app.extensions.update(dcc_state=state, dcc_catalogs=catalogs, dcc_catalog_scans=installed_scans, dcc_jobs=jobs)
     initialize_security(app, state)
     def ui_language():
         requested=request.args.get('lang')
@@ -83,7 +124,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     @app.after_request
     def remember_language(response):
         if request.args.get('lang') in {'PL','EN'}:
-            response.set_cookie('dcc_web_language',request.args['lang'],max_age=31536000,samesite='Strict',secure=app.config.get('SESSION_COOKIE_SECURE',False))
+            response.set_cookie('dcc_web_language',request.args['lang'],max_age=31536000,samesite='Strict',secure=app.config.get('SESSION_COOKIE_SECURE',False) or trusted_https_request(app))
         return response
     @app.before_request
     def validate_targets():
@@ -121,6 +162,8 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             try:
                 result = work(report) if progress else work()
                 state.audit(owner, action, p["id"], 200)
+                if action in {"install", "uninstall"}:
+                    installed_scans.invalidate(p["id"])
                 return result
             except Exception:
                 state.audit(owner, action, p["id"], 500)
@@ -266,7 +309,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         allowed = {"installation","configuration","profiles-security","security","catalogs","mcp","ai","themes-audio","feature-matrix","testing"}
         if name not in allowed:
             abort(404)
-        labels = {"installation":"Instalacja i uruchamianie","configuration":"Profile i konfiguracja","profiles-security":"Profile, klucze i 2FA","security":"Bezpieczeństwo","catalogs":"Sklep i katalogi","mcp":"AI / MCP Preview","ai":"Asystent AI","themes-audio":"Motywy i dźwięki","feature-matrix":"Macierz funkcji desktop / web","testing":"Testy i ograniczenia"}
+        labels = {"installation":"Instalacja i uruchamianie","configuration":"Profile i konfiguracja","profiles-security":"Profile, klucze i 2FA","security":"Bezpieczeństwo","catalogs":"Sklep i katalogi","mcp":"AI / MCP","ai":"Asystent AI","themes-audio":"Motywy i dźwięki","feature-matrix":"Macierz funkcji desktop / web","testing":"Testy i ograniczenia"}
         language = ui_language()
         docs = Path(__file__).parent/"docs"
         localized = docs/(name+".pl.md") if language == "PL" else docs/(name+".md")
@@ -494,7 +537,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def open_host_terminal():
         admin()
         browser_host=(urlsplit(request.host_url).hostname or "").lower()
-        protected=request.is_secure or (app.config.get('SESSION_COOKIE_SECURE') and str(app.config.get('PUBLIC_ORIGIN','')).startswith('https://'))
+        protected=trusted_https_request(app) or (app.config.get('SESSION_COOKIE_SECURE') and str(app.config.get('PUBLIC_ORIGIN','')).startswith('https://'))
         origin=urlsplit(request.headers.get('Origin',''))
         local_http=(
             request.scheme=='http'
@@ -554,13 +597,16 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
 
     @app.get("/api/infrastructure")
     def infrastructure():
-        info=backend().info()
-        return jsonify(available=True,name=info.get('Name',''),operating_system=info.get('OperatingSystem',''),os_type=info.get('OSType',''),architecture=info.get('Architecture',''),docker_version=info.get('ServerVersion',''),cpus=info.get('NCPU',0),memory_bytes=info.get('MemTotal',0),kernel_version=info.get('KernelVersion',''))
+        selected=profile()
+        info=factory(selected).info()
+        address=profile_display_address(selected,info,request.host)
+        return jsonify(available=True,name=info.get('Name',''),address=address,operating_system=info.get('OperatingSystem',''),os_type=info.get('OSType',''),architecture=info.get('Architecture',''),docker_version=info.get('ServerVersion',''),cpus=info.get('NCPU',0),memory_bytes=info.get('MemTotal',0),kernel_version=info.get('KernelVersion',''))
 
     @app.get("/api/overview")
     def overview():
         engine = backend()
         info, containers = engine.info(), engine.containers()
+        info['HostAddress']=info['address']=profile_display_address(engine.profile,info,request.host)
         return jsonify(info=redact(info), containers=enrich_containers(containers,engine.profile,urlsplit(request.host_url).hostname or 'localhost',catalogs.host_panel_ports()))
 
     @app.get("/api/containers")
@@ -670,13 +716,31 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     @app.get("/api/catalog")
     def catalog():
         p = profile()
-        try:
-            installed = factory(p).containers()
-            connected = True
-        except EngineError:
-            installed, connected = [], False
-        result = catalogs.view(request.args.get("lang","PL"),installed,request.args.get("q",""),request.args.get("category","all"),engine_kind="balena" if p["kind"]=="balena" else "docker")
-        return jsonify(**result,connected=connected,sources=catalogs.sources())
+        scan = installed_scans.profile_state(p["id"])
+        installed_map = scan["installed_map"]
+        result = catalogs.view(request.args.get("lang","PL"),query=request.args.get("q",""),category=request.args.get("category","all"),
+                               engine_kind="balena" if p["kind"]=="balena" else "docker",installed_map=installed_map)
+        return jsonify(**result,connected=True if installed_map is not None else (False if scan["error"] else None),
+                       installed_known=installed_map is not None,installed_pending=scan["pending"],installed_error=scan["error"],sources=catalogs.sources())
+
+    @app.post("/api/catalog/installed")
+    def scan_catalog_installed():
+        data = body()
+        p = profile(data.get("profile"))
+        def work():
+            containers = factory(p).containers()
+            result = catalogs.view("PL",containers=containers,engine_kind="balena" if p["kind"]=="balena" else "docker")["apps"]
+            return {item["id"]:{"installed":item["installed"],"installed_ids":item["installed_ids"]} for item in result}
+        value = installed_scans.begin(g.user["id"],p["id"],work,force=data.get("force") is True)
+        return jsonify(value),202
+
+    @app.get("/api/catalog/installed/<scan_id>")
+    def scan_catalog_status(scan_id):
+        value = installed_scans.snapshot(scan_id,g.user["id"])
+        if not value:
+            abort(404)
+        profile(value["profile"])
+        return jsonify(value)
 
     @app.route("/api/catalog/sources",methods=["GET","POST"])
     def sources():
@@ -749,18 +813,29 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def install():
         data = body()
         p = profile(data.get("profile"),"install")
-        app_entry = next((item for item in catalogs.all() if item["id"]==data.get("app")),None)
+        configuration=data.get("configuration",{})
+        if not isinstance(configuration,dict):
+            abort(400,"Invalid installation configuration")
+        app_id=data.get("app")
+        app_entry=next((item for item in catalogs.all() if item["id"]==app_id),None) if app_id else None
+        if app_id and app_entry is None:
+            abort(404,"App not found in the current catalog")
         if app_entry is None:
-            app_entry = {"name":"Manual", "image":data.get("configuration",{}).get("image", ""), "category":"Inne"}
-        engine = factory(p)
-        plan = install_plan(app_entry,data.get("configuration",{}),engine)
-        if set(plan["warnings"])-set(data.get("acknowledged",[])):
-            abort(409,"Acknowledge the Docker socket, privileges and persistent data warnings")
-        confirmed(data,"install",p["id"],data.get("app") or plan["name"])
+            app_entry={"name":"Manual","image":configuration.get("image", ""),"category":"Inne"}
+        confirmed(data,"install",p["id"],data.get("app") or configuration.get("name") or app_entry.get("default_name") or "dcc-app")
         from installation import execute_install
         language=ui_language()
-        trusted=next((v for v in catalogs.fallback if v.get('name')==app_entry.get('name') and v.get('image')==app_entry.get('image')),None)
-        return start_job(p,"install",lambda report:execute_install(engine,plan,app_entry,report,state.vault,trusted,language),progress=True)
+        acknowledged=data.get("acknowledged",[])
+        if not isinstance(acknowledged,list) or not all(isinstance(value,str) for value in acknowledged):
+            abort(400,"Invalid installation acknowledgements")
+        def work(report):
+            engine=factory(p)
+            plan=install_plan(app_entry,configuration,engine)
+            if set(plan["warnings"])-set(acknowledged):
+                raise ValueError("Acknowledge the Docker socket, privileges and persistent data warnings")
+            trusted=next((v for v in catalogs.fallback if v.get('name')==app_entry.get('name') and v.get('image')==app_entry.get('image')),None)
+            return execute_install(engine,plan,app_entry,report,state.vault,trusted,language)
+        return start_job(p,"install",work,progress=True)
 
     @app.post("/api/build")
     def build_image():
@@ -812,12 +887,16 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def uninstall():
         data = body()
         p = profile(data.get("profile"),"destructive")
-        engine = factory(p)
-        entry = next((v for v in catalogs.view(containers=engine.containers())["apps"] if v["id"]==data.get("app")),None)
-        if not entry or not entry["installed_ids"]:
-            abort(409,"No installed containers match this app")
-        confirmed(data,"uninstall",p["id"],entry["id"])
+        app_entry=next((v for v in catalogs.all() if v["id"]==data.get("app")),None)
+        if not app_entry:
+            abort(404,"App not found in the current catalog")
+        confirmed(data,"uninstall",p["id"],app_entry["id"])
         def work():
+            engine=factory(p)
+            containers=engine.containers()
+            entry=next((v for v in catalogs.view(containers=containers)["apps"] if v["id"]==app_entry["id"]),None)
+            if not entry or not entry["installed_ids"]:
+                raise ValueError("No installed containers match this app")
             for target in entry["installed_ids"]:
                 value=engine.inspect(target)
                 if value.get("State",{}).get("Running"):
@@ -996,7 +1075,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             value["audio"]={"enabled":bool(audio.get("enabled")),"style":audio.get("style","soft") if audio.get("style","soft") in {"soft","clear","warm"} else "soft",**{key:max(0,min(100,int(audio.get(key,50)))) for key in ("master","effects","notifications")}}
             state.execute("INSERT OR REPLACE INTO settings VALUES(?,?)",(g.user["id"],json.dumps(value)))
         response=jsonify(value)
-        if request.method=='PUT':response.set_cookie('dcc_web_language',value['language'],max_age=31536000,samesite='Strict',secure=app.config.get('SESSION_COOKIE_SECURE',False))
+        if request.method=='PUT':response.set_cookie('dcc_web_language',value['language'],max_age=31536000,samesite='Strict',secure=app.config.get('SESSION_COOKIE_SECURE',False) or trusted_https_request(app))
         return response
 
     @app.get("/api/audit")
@@ -1025,9 +1104,9 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         session.clear()
         return jsonify(ok=True)
 
-    # MCP is deliberately a Preview: tested read-only stdio; HTTP transport is not enabled.
+    # MCP is scoped to explicit stdio grants; HTTP transport is not enabled.
     from mcp_preview import register_mcp
-    register_mcp(app,state,profile)
+    register_mcp(app,state,profile,reauthenticate)
     from ai_assistant import register_ai
     register_ai(app,state,profile,factory,body)
     return app

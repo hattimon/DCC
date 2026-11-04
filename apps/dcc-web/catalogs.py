@@ -5,9 +5,11 @@ import ipaddress
 import json
 from pathlib import Path
 import re
+import secrets
 import shlex
 import socket
 import ssl
+import threading
 import time
 from urllib.parse import urlsplit, urljoin
 
@@ -158,7 +160,7 @@ class Catalogs:
                 self.state.execute("UPDATE sources SET error=? WHERE id=?", ("Source unavailable; using cached catalog", row["id"]))
         return self.sources()
 
-    def view(self, lang="PL", containers=(), query="", category="all", engine_kind="docker"):
+    def view(self, lang="PL", containers=(), query="", category="all", engine_kind="docker", installed_map=None):
         apps = self.all()
         groups = set()
         result = []
@@ -169,7 +171,10 @@ class Catalogs:
             groups.update(memberships)
             description = app.get("description_en") if lang=="EN" and app.get("description_en") else app.get("description", "")
             image_repository = image_repo(app["image"])
-            installed = any(c.get("Image")==app["image"] or (c.get("Names")==app.get("default_name") and image_repo(c.get("Image", ""))==image_repository) for c in containers)
+            matches = [c for c in containers if c.get("Image")==app["image"] or (c.get("Names")==app.get("default_name") and image_repo(c.get("Image", ""))==image_repository)]
+            known = installed_map is not None
+            cached = (installed_map or {}).get(app["id"], {})
+            installed = bool(cached.get("installed")) if known else bool(matches)
             notes = app.get("notes_en") if lang=="EN" and app.get("notes_en") else app.get("notes", "")
             if query.casefold() not in (app["name"]+" "+app["image"]+" "+description+" "+notes).casefold():
                 continue
@@ -177,10 +182,82 @@ class Catalogs:
                 continue
             if app.get("engines") and engine_kind not in app["engines"] and "any" not in app["engines"]:
                 continue
-            installed_ids = [c["ID"] for c in containers if c.get("Image")==app["image"] or (c.get("Names")==app.get("default_name") and image_repo(c.get("Image", ""))==image_repository)]
-            result.append(dict(app, category_labels=memberships, installed=installed, installed_ids=installed_ids, localized_description=description))
+            installed_ids = list(cached.get("installed_ids", [])) if known else [c["ID"] for c in matches]
+            result.append(dict(app, category_labels=memberships, installed=installed, installed_known=known, installed_ids=installed_ids, localized_description=description))
         groups.discard("DCC")
         return {"apps":result, "categories":["all","installed","DCC",*sorted(groups,key=catalog_category_sort_key)]}
+
+
+class InstalledCatalogScans:
+    """Run slow remote installed-app scans outside the store-page request."""
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.jobs = {}
+        self.active = {}
+        self.cache = {}
+        self.errors = {}
+
+    @staticmethod
+    def _public(value):
+        return {key: item for key, item in value.items() if key != "owners"}
+
+    def begin(self, owner, profile_id, work, force=False):
+        with self.lock:
+            active_id = self.active.get(profile_id)
+            active = self.jobs.get(active_id)
+            if active and active["status"] == "running":
+                active["owners"].add(owner)
+                return self._public(active)
+            if not force and profile_id in self.cache:
+                ident = secrets.token_hex(12)
+                value = {"id": ident, "profile": profile_id, "owners": {owner}, "status": "success",
+                         "started": time.time(), "finished": time.time(), "result": self.cache[profile_id]}
+                self.jobs[ident] = value
+                return self._public(value)
+            ident = secrets.token_hex(12)
+            value = {"id": ident, "profile": profile_id, "owners": {owner}, "status": "running", "started": time.time()}
+            self.jobs[ident] = value
+            self.active[profile_id] = ident
+
+        def run():
+            try:
+                result = work()
+                with self.lock:
+                    value["status"], value["result"], value["finished"] = "success", result, time.time()
+                    self.cache[profile_id] = result
+                    self.errors.pop(profile_id, None)
+            except Exception:
+                with self.lock:
+                    value["status"], value["error"], value["finished"] = "error", "Could not read installed applications from this host. Check its connection and profile permissions.", time.time()
+                    self.errors[profile_id] = value["error"]
+            finally:
+                with self.lock:
+                    if self.active.get(profile_id) == ident:
+                        self.active.pop(profile_id, None)
+                    completed = [key for key, job in self.jobs.items() if job["status"] != "running"]
+                    for key in completed[:-100]:
+                        self.jobs.pop(key, None)
+
+        threading.Thread(target=run, name="dcc-installed-app-scan", daemon=True).start()
+        return self._public(value)
+
+    def snapshot(self, ident, owner):
+        with self.lock:
+            value = self.jobs.get(ident)
+            if not value or owner not in value["owners"]:
+                return None
+            return self._public(value)
+
+    def profile_state(self, profile_id):
+        with self.lock:
+            active = self.active.get(profile_id)
+            job = self.jobs.get(active)
+            return {"installed_map": self.cache.get(profile_id), "pending": bool(job and job["status"] == "running"),
+                    "error": self.errors.get(profile_id, "")}
+
+    def invalidate(self, profile_id):
+        with self.lock:
+            self.cache.pop(profile_id, None)
 
 
 ALLOWED_FLAGS = {"-v","--volume","-p","--publish","-e","--env","--restart","--label","--cap-drop","--cap-add","--security-opt","--network","--user","--hostname","--workdir","--entrypoint","--device","--mount","--memory","--cpus","--gpus","--shm-size","--add-host","--pid","--tmpfs","--pids-limit"}

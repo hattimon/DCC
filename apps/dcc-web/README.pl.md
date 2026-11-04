@@ -1,6 +1,6 @@
-# DCC Web 0.1.6
+# DCC Web 0.1.9
 
-Wersja 0.1.6 umożliwia otwieranie terminala hosta, gdy panel HTTP działa na tym samym komputerze; zdalne SSH nadal jest szyfrowane i weryfikuje klucz hosta. Dodaje polską dokumentację formatowaną zgodnie z językiem panelu i domyślnie zwija sekcję kluczy SSH. Wersja 0.1.4 naprawiła duplikaty wersji w sklepie Web, także po aktualizacji obrazu z zachowanym cache. Starsze DCC Desktop po odświeżeniu katalogu znajdą DCC Web w **Administracji**, a Updater w **Aktualizacjach**. [Ograniczenia starszych plików wykonywalnych](docs/catalogs.md#older-desktop-clients) opisano w dokumentacji; aktualizacja Web nie wymaga nowego EXE/DEB.
+Wersja 0.1.8 dodaje opcjonalne lokalne HTTPS przez zarządzane rozszerzenie Caddy. Panel zachowuje dotychczasowy adres HTTP i dane; dla prywatnego IP/nazwy wybiera wolny port HTTPS z zakresu 9443–9499. Pobierz certyfikat lokalnego CA i zaufaj mu na urządzeniu klienckim. Publiczne HTTPS pozostaje osobną opcją wymagającą własnej domeny i portów 80/443. Wersja 0.1.9 naprawia otwieranie konfiguracji SMTP poczty odzyskiwania. Wersja 0.1.6 umożliwia otwieranie terminala hosta przez HTTP na tym samym komputerze, dodaje polską dokumentację i domyślnie zwija sekcję kluczy SSH. Wersja 0.1.4 naprawiła duplikaty sklepu. Starsze DCC Desktop po odświeżeniu katalogu znajdą Web w **Administracji**, a Updater w **Aktualizacjach**. Zmiana wersji Web nie wymaga nowego EXE/DEB.
 
 [Polski](README.pl.md) · [English](README.md) · [Repozytorium GitHub](https://github.com/hattimon/DCC)
 
@@ -24,7 +24,7 @@ Przy instalacji ze Sklepu DCC świeży kontener tworzy konto `admin` z silnym, l
 
 ### Instalacja na Windows, macOS lub Linux
 
-Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.6/DCC-Web-0.1.6-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.1.6`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
+Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.9/DCC-Web-0.1.9-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.1.9`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
@@ -42,7 +42,7 @@ Dostęp do `/var/run/docker.sock` daje panelowi administracyjną kontrolę nad h
 
 [Instalacja](docs/installation.md) · [Bezpieczeństwo](docs/security.md) · [Profile](docs/configuration.md) · [Sklep](docs/catalogs.md) · [Funkcje i ograniczenia](docs/feature-matrix.md)
 
-Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.1.6/apps/dcc-web).
+Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.1.9/apps/dcc-web).
 
 
 ## Klucze SSH po imporcie profili

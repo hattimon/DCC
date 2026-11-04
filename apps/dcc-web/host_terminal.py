@@ -29,7 +29,7 @@ class PTYConnection:
                 raise EngineError("Could not open the verified SSH terminal. Check profile credentials and known_hosts.") from None
         elif self.kind in {"local","wsl"}:
             if self.kind=="local" and os.environ.get("DCC_WEB_CONTAINER_NAME"):
-                raise ValueError("A Docker socket does not expose a host shell. Use an SSH profile for the actual Docker host.")
+                raise ValueError("The DCC Web container cannot open a host shell through the Docker socket. Create or select an SSH profile for this same Docker host, then enable host.exec for it.")
             environment={key:value for key,value in os.environ.items() if not key.startswith(("_PYI","DCC_WEB_")) and key not in {"PYTHONPATH","PYTHONHOME","_MEIPASS2","GH_TOKEN","GITHUB_TOKEN","OPENAI_API_KEY"}}
             if os.name=="nt":
                 from winpty import PtyProcess

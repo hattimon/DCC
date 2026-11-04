@@ -2,6 +2,7 @@ import{groupContainers,primaryNetwork}from'../static/container_data.js';
 import assert from 'node:assert/strict';
 import{html,t,setLanguage,getLanguage,literal}from'../static/i18n.js';
 import{sshFileKind}from'../static/ssh_files.js';
+import{sortContainers,nextSortState}from'../static/container_sort.js';
 assert.equal(sshFileKind('key.pem','-----BEGIN OPENSSH PRIVATE KEY-----'),'private key');
 assert.equal(sshFileKind('no_extension','-----BEGIN ENCRYPTED PRIVATE KEY-----'),'private key');
 assert.equal(sshFileKind('renamed.pub','-----BEGIN RSA PRIVATE KEY-----'),'private key');
@@ -40,3 +41,22 @@ assert.equal(t('Projekty'),'Projects');
 setLanguage('PL');
 assert.match(t('This profile does not permit the operation: containers.write'),/containers\.write/);
 console.log('Container grouping and operator captions passed');
+
+const sortable=[
+ {ID:'1',Names:'low'},
+ {ID:'2',Names:'high'},
+ {ID:'3',Names:'no-metrics'}
+];
+const stats=[
+ {ID:'1',CPUPerc:'1.2%',MemUsage:'96MiB / 1GiB'},
+ {ID:'2',CPUPerc:'8.4%',MemUsage:'1.5GiB / 4GiB'}
+];
+assert.deepEqual(sortContainers(sortable,stats,'cpu','desc').map(v=>v.Names),['high','low','no-metrics']);
+assert.deepEqual(sortContainers(sortable,stats,'cpu','asc').map(v=>v.Names),['low','high','no-metrics']);
+assert.deepEqual(sortContainers(sortable,stats,'ram','desc').map(v=>v.Names),['high','low','no-metrics']);
+assert.deepEqual(sortContainers(sortable,stats,'ram','asc').map(v=>v.Names),['low','high','no-metrics']);
+assert.deepEqual(sortContainers(sortable,stats,'none','asc').map(v=>v.Names),['low','high','no-metrics']);
+assert.deepEqual(nextSortState(null,'cpu'),{key:'cpu',direction:'desc'});
+assert.deepEqual(nextSortState({key:'cpu',direction:'desc'},'cpu'),{key:'cpu',direction:'asc'});
+assert.equal(nextSortState({key:'cpu',direction:'asc'},'cpu'),null);
+console.log('CPU/RAM sorting order and three-state controls passed');

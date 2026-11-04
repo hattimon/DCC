@@ -13,6 +13,33 @@ ROLES = {"viewer": {"read"}, "operator": {"read", "containers.write", "exec"}, "
 SECRET_WORDS = re.compile(r"password|passwd|passphrase|private.?key|token|secret|authorization|api.?key|credential|setup.?code|recovery.?code", re.I)
 
 
+def trusted_public_https_request(app):
+    """Recognize an explicitly configured public HTTPS endpoint."""
+    host=(urlsplit("//"+request.host).hostname or "").lower()
+    trusted={str(value).lower() for value in app.config.get("TRUSTED_HTTPS_HOSTS",[]) if value}
+    public_origin=app.config.get("PUBLIC_ORIGIN") or ""
+    parsed=urlsplit(public_origin)
+    if parsed.scheme.lower()=="https" and parsed.hostname:
+        trusted.add(parsed.hostname.lower())
+    return host in trusted
+
+
+def trusted_https_request(app):
+    """Recognize TLS from Flask, a configured public host, or authenticated Caddy."""
+    # Direct TLS termination is trustworthy even when the hostname is a private
+    # LAN address. Public HSTS is handled separately by trusted_public_https_request.
+    if request.is_secure:
+        return True
+    if trusted_public_https_request(app):
+        return True
+    # Waitress clears standard forwarded headers from untrusted network peers.
+    # The private, per-installation marker authenticates our TLS-only proxy
+    # independently of those headers; client-supplied X-Forwarded-Proto is not
+    # sufficient to mark an ordinary HTTP request as secure.
+    domains=app.extensions.get("dcc_domains")
+    return bool(domains and domains.trusts_proxy(request.headers.get("X-DCC-Web-Internal-TLS", "")))
+
+
 def redact(value):
     if isinstance(value, dict):
         return {key: "••••" if SECRET_WORDS.search(key) else redact(item) for key, item in value.items()}
@@ -34,7 +61,7 @@ def initialize_security(app, state):
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             origin = request.headers.get("Origin")
             expected_origin=app.config.get("PUBLIC_ORIGIN") or request.host_url.rstrip("/")
-            if host in app.config.get('TRUSTED_HTTPS_HOSTS',[]):
+            if trusted_https_request(app):
                 expected_origin='https://'+request.host
             if origin and origin != expected_origin:
                 abort(403, "Origin rejected")
@@ -60,7 +87,7 @@ def initialize_security(app, state):
         if request.path=='/terminal':
             # xterm creates CSS rules for terminal colours and cell geometry; scripts remain self-only.
             response.headers['Content-Security-Policy']=response.headers['Content-Security-Policy'].replace("style-src 'self';","style-src 'self' 'unsafe-inline';")
-        if app.config.get("SESSION_COOKIE_SECURE"):
+        if app.config.get("SESSION_COOKIE_SECURE") or trusted_public_https_request(app):
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if request.path.startswith("/api/") and request.method not in {"GET", "HEAD", "OPTIONS"}:
             state.audit(g.user["id"] if g.get("user") else "anonymous", request.method + " " + request.path, str(request.view_args or {}), response.status_code)

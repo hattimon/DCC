@@ -1,10 +1,10 @@
-# Instalacja DCC Web 0.1.6
+# Instalacja DCC Web 0.1.9
 
 DCC Web działa w Windows, macOS i Linux z rodziny Debian. Wymaga Docker Engine/Docker Desktop z Compose v2 albo Python 3.12 w instalacji natywnej.
 
 ## Instalator Docker Compose
 
-Pobierz i rozpakuj [archiwum źródłowe DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.6/DCC-Web-0.1.6-source.zip), otwórz terminal w katalogu DCC-Web-0.1.6 i uruchom:
+Pobierz i rozpakuj [archiwum źródłowe DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.1.9/DCC-Web-0.1.9-source.zip), otwórz terminal w katalogu DCC-Web-0.1.9 i uruchom:
 
 ```
 py -3.12 apps/dcc-web/install.py
@@ -35,3 +35,5 @@ Na macOS/Linux ścieżka interpretera to .venv-dcc-web/bin/python. Domyślne dan
 ## Dostęp zdalny
 
 Nie wystawiaj panelu Docker bezpośrednio do Internetu. Użyj zaufanego reverse proxy HTTPS lub VPN oraz silnego hasła. Profil sklepu musi mieć uprawnienie Instalowanie aplikacji.
+
+Lokalne HTTPS włączysz w **Ustawienia → Administracja i bezpieczeństwo → Domena lokalna i publiczna**. Podaj prywatny adres IP hosta (zalecane) albo nazwę z lokalnego DNS, zapisz ustawienia i wybierz **Dostęp HTTPS → Włącz lokalne HTTPS**. Zarządzane rozszerzenie Caddy zachowuje obecny adres HTTP i wolumen danych, wiąże port tylko z tym prywatnym/loopback adresem oraz wybiera wolny port z zakresu 9443–9499. Otwórz wyświetlony adres HTTPS, pobierz lokalny certyfikat CA i zainstaluj/zaufaj mu na urządzeniu klienckim. Publiczne HTTPS jest osobną opcją wymagającą domeny oraz osiągalnych portów 80/443.
