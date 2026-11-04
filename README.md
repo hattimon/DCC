@@ -15,13 +15,13 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 
 [![Windows EXE v1.3.12](https://img.shields.io/badge/Windows-EXE%20v1.3.12-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter-Setup-1.3.12.exe)
 [![Linux DEB v1.3.12](https://img.shields.io/badge/Linux-DEB%20v1.3.12-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter_1.3.12_amd64.deb)
-[![DCC Web v0.2.0](https://img.shields.io/badge/DCC%20Web-v0.2.0-20bfc8?logo=docker&logoColor=white)](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.0/DCC-Web-0.2.0-source.zip)
+[![DCC Web v0.2.1](https://img.shields.io/badge/DCC%20Web-v0.2.1-20bfc8?logo=docker&logoColor=white)](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.1/DCC-Web-0.2.1-source.zip)
 
 DCC Web: Windows, macOS, Linux · Docker Compose.
 
-[Install DCC Web (EN)](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.0/apps/dcc-web/docs/installation.md) · [Instalacja DCC Web (PL)](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.0/apps/dcc-web/docs/installation.pl.md)
+[Install DCC Web (EN)](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.1/apps/dcc-web/docs/installation.md) · [Instalacja DCC Web (PL)](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.1/apps/dcc-web/docs/installation.pl.md)
 
-Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.2.0](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.2.0) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
+Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.2.1](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.2.1) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
 
 ### Automatic DCC Web updates / Automatyczne aktualizacje DCC Web
 
@@ -198,6 +198,6 @@ Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom wła
 
 ## DCC Web
 
-DCC Web is the browser-based counterpart to DCC Desktop and runs as a separate service. See the [product overview](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.0/apps/dcc-web/README.md) and the [GitHub repository](https://github.com/hattimon/DCC).
+DCC Web is the browser-based counterpart to DCC Desktop and runs as a separate service. See the [product overview](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.1/apps/dcc-web/README.md) and the [GitHub repository](https://github.com/hattimon/DCC).
 
-DCC Web provides container management, profiles, logs, monitoring, Compose and the shared App Store, along with themes, local audio, English and Polish, clickable panel links, an AI configuration assistant and scoped MCP tools for authorized read and write operations. See the [installation guide](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.0/apps/dcc-web/docs/installation.md) and [feature matrix](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.0/apps/dcc-web/docs/feature-matrix.md) for setup and adapter limitations. Its Docker image is published in GHCR and listed in the App Store catalog.
+DCC Web provides container management, profiles with visible profile IDs, logs, monitoring, Compose and the shared App Store, along with themes, local audio, English and Polish, clickable panel links, an AI configuration assistant and scoped MCP tools for authorized read and write operations. See the [installation guide](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.1/apps/dcc-web/docs/installation.md) and [feature matrix](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.1/apps/dcc-web/docs/feature-matrix.md) for setup and adapter limitations. Its Docker image is published in GHCR and listed in the App Store catalog.

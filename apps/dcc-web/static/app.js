@@ -7,6 +7,12 @@ let renderVersion=0,rendering=false,interval;
 const root=document.querySelector('#content');
 
 let infrastructureVersion=0;
+function updateContainerIdentity(){
+ const inlineAddress=document.querySelector('[data-container-host-address]');
+ if(inlineAddress){inlineAddress.textContent=state.hostAddress?'| '+t('Host')+': '+state.hostAddress:'';inlineAddress.hidden=!state.hostAddress;inlineAddress.title=state.hostAddress;}
+ const profileId=document.querySelector('[data-container-profile-id]');
+ if(profileId){profileId.textContent='| '+t('ID profilu')+': '+state.profile;profileId.title=state.profile;}
+}
 async function loadInfrastructure(){
  const version=++infrastructureVersion,profile=state.profile,host=document.querySelector('#host-system'),engine=document.querySelector('#host-engine');
  host.textContent=t('Odczytywanie infrastruktury…');engine.textContent='';
@@ -14,10 +20,10 @@ async function loadInfrastructure(){
   const info=await api('infrastructure');if(version!==infrastructureVersion||profile!==state.profile)return;
   state.hostAddress=info.address||'';
   host.textContent=[info.name,state.hostAddress?(t('Host')+': '+state.hostAddress):'',info.operating_system||info.os_type,info.architecture].filter(Boolean).join(' · ');
-  const inlineAddress=document.querySelector('[data-container-host-address]');if(inlineAddress){inlineAddress.textContent=state.hostAddress?'| '+t('Host')+': '+state.hostAddress:'';inlineAddress.hidden=!state.hostAddress;inlineAddress.title=state.hostAddress;}
+  updateContainerIdentity();
   host.title=info.kernel_version||host.textContent;
   engine.textContent=[info.docker_version?'Docker '+info.docker_version:'',info.cpus?info.cpus+' CPU':'',info.memory_bytes?new Intl.NumberFormat(state.settings.language==='PL'?'pl':'en',{maximumFractionDigits:1}).format(info.memory_bytes/2**30)+' GiB RAM':''].filter(Boolean).join(' · ');
- }catch{if(version===infrastructureVersion){state.hostAddress='';host.textContent=t('Nie udało się odczytać infrastruktury hosta Docker.');host.title='';engine.textContent='';}}
+ }catch{if(version===infrastructureVersion){state.hostAddress='';updateContainerIdentity();host.textContent=t('Nie udało się odczytać infrastruktury hosta Docker.');host.title='';engine.textContent='';}}
 }
 function translateShell(version){
  const labels=[['.host-caption','Infrastruktura hosta Docker'],['.profile-picker>span','Aktywny profil'],['#logout','Wyloguj'],['.workspace-footer>span:first-child','Twoje profile. Twoje dane.']];
@@ -34,7 +40,7 @@ async function render(showLoading=true){
  catch(error){if(valid()){root.innerHTML=heading(navigation.find(v=>v[0]===view)?.[1]||'DCC Web','Sprawdź profil połączenia i uprawnienia.')+notice(error.message,'error')+html`<section class="panel panel-pad"><h2>Jak kontynuować</h2><p>Upewnij się, że Docker działa, a proces DCC Web ma do niego dostęp. Nowe profile mają tylko odczyt; operacje zapisu włącza administrator w profilu.</p><div class="toolbar"><a class="button" href="#profiles">Sprawdź profile</a><button id="retry">Spróbuj ponownie</button></div></section>`;root.querySelector('#retry').onclick=()=>render();document.querySelector('#connection-label').textContent=t('Wymagane sprawdzenie profilu');}}
  finally{if(valid())rendering=false;}
 }
-document.querySelector('#profile-select').onchange=e=>{state.profile=e.target.value;localStorage.setItem('dcc-profile',state.profile);state.selected.clear();loadInfrastructure();render();};document.querySelector('#refresh').onclick=()=>{loadInfrastructure();render(false);};document.querySelector('#logout').onclick=async()=>{try{await post('logout',{});location.assign('/login');}catch(e){notify(e.message,'error');}};document.querySelector('#menu-toggle').onclick=()=>document.body.classList.toggle('menu-open');document.querySelector('#backdrop').onclick=()=>document.body.classList.remove('menu-open');window.addEventListener('hashchange',()=>{sound('tab');render();});document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!document.querySelector('#modal').open&&state.view!=='settings')render(false);});
+document.querySelector('#profile-select').onchange=e=>{state.profile=e.target.value;state.hostAddress='';localStorage.setItem('dcc-profile',state.profile);state.selected.clear();updateContainerIdentity();loadInfrastructure();render();};document.querySelector('#refresh').onclick=()=>{loadInfrastructure();render(false);};document.querySelector('#logout').onclick=async()=>{try{await post('logout',{});location.assign('/login');}catch(e){notify(e.message,'error');}};document.querySelector('#menu-toggle').onclick=()=>document.body.classList.toggle('menu-open');document.querySelector('#backdrop').onclick=()=>document.body.classList.remove('menu-open');window.addEventListener('hashchange',()=>{sound('tab');render();});document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!document.querySelector('#modal').open&&state.view!=='settings')render(false);});
 bootstrap().then(()=>render()).catch(error=>{root.innerHTML=notice(error.message,'error');});
 
 document.querySelectorAll('#language-switch [data-language]').forEach(button=>button.onclick=async()=>{if(button.disabled||button.dataset.language===state.settings.language)return;const buttons=[...document.querySelectorAll('#language-switch [data-language]')];buttons.forEach(item=>item.disabled=true);try{applySettings(await api('settings',{method:'PUT',data:{language:button.dataset.language}}));await bootstrap();await render();}catch(error){notify(error.message,'error');}finally{buttons.forEach(item=>item.disabled=false);}});

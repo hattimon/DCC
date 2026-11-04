@@ -1,4 +1,6 @@
-# DCC Web 0.2.0
+# DCC Web 0.2.1
+
+This release displays each profile ID in the Profiles list, the active profile ID in Overview → Host details, and the selected profile ID beside the host address on the Containers page.
 
 This release adds MCP downloads, operating-system-specific token setup guides and the active SSH address in the terminal header. The previous SMTP settings fix continues to omit the password from API responses.
 

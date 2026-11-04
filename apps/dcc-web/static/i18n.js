@@ -119,6 +119,7 @@ Domena publiczna|Public domain
 Twoja domena publiczna|Your public domain
 Publiczny DNS musi wskazywać hosta. Rozszerzenie Caddy może automatycznie uzyskać certyfikat HTTPS na portach 80/443. Wymaga publicznej osiągalności hosta. Przy CGNAT użyj własnego tunelu lub VPN i reverse proxy. Włącz silne hasło i 2FA przed publikacją.|Public DNS must point to this host. The Caddy extension can obtain HTTPS certificates automatically on ports 80/443. The host must be publicly reachable. With CGNAT, configure your own tunnel or VPN and reverse proxy. Enable a strong password and 2FA before publishing.
 Zapisz domeny|Save domains
+ID profilu|Profile ID
 Adres hosta|Host address
 Dostęp HTTPS|HTTPS access
 Dostęp do panelu i HTTPS (TLS)|Panel access and HTTPS (TLS)
