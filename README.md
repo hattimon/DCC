@@ -23,6 +23,14 @@ DCC Web: Windows, macOS, Linux · Docker Compose.
 
 Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.2.0](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.2.0) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
 
+### Automatic DCC Web updates / Automatyczne aktualizacje DCC Web
+
+Install **DCC Container Updater** from **App Store → DCC** in DCC Desktop or DCC Web. For supported Docker installations, enable automatic updates for your DCC Web container in the Updater panel.
+
+Zainstaluj **DCC Container Updater** przez **Sklep aplikacji → DCC** w DCC Desktop lub DCC Web. W obsługiwanej instalacji kontenerowej włącz automatyczne aktualizacje kontenera DCC Web w panelu Updatera.
+
+[DCC Container Updater](apps/container-updater/README.md) · [Installation guide / Instrukcja instalacji](apps/container-updater/README.md#install)
+
 ### DCC Desktop — overview / widok aplikacji
 
 ![Docker Control Center v1.3.5 - English overview](images/release-1.3.5/09-v1.3.5-overview-en.png)
