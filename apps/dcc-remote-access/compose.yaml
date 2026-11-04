@@ -1,0 +1,30 @@
+services:
+  tunnel:
+    image: docker.io/openziti/zrok2:2.0.9@sha256:00c5b65bbb5b7c045c1d23d35ab392f2edd43633ee8513c7a858899993f41d8f
+    container_name: dcc-remote-access-${DCC_REMOTE_OWNER:?set the DCC instance identifier}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["${DCC_REMOTE_SUPERVISOR:?load supervise.sh into DCC_REMOTE_SUPERVISOR}"]
+    user: "2171:2171"
+    environment:
+      HOME: /tmp
+      ZROK2_API_ENDPOINT: https://api-v2.zrok.io
+      GODEBUG: http2client=0,http2server=0
+    labels:
+      io.dcc.remote-access: "${DCC_REMOTE_OWNER}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=32m,uid=2171,gid=2171,mode=0700"]
+    logging:
+      driver: none
+    pids_limit: 64
+    mem_limit: 256m
+    restart: "no"
+    networks: [panel, egress]
+networks:
+  panel:
+    external: true
+    name: dcc-remote-access-${DCC_REMOTE_OWNER}-panel
+  egress:
+    external: true
+    name: dcc-remote-access-${DCC_REMOTE_OWNER}-egress

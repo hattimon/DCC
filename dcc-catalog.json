@@ -338,6 +338,19 @@
       "image_tag_from_release": "strip-prefix:dcc-web-v"
     },
     {
+      "name": "DCC Remote Access",
+      "image": "docker.io/openziti/zrok2:2.0.9@sha256:00c5b65bbb5b7c045c1d23d35ab392f2edd43633ee8513c7a858899993f41d8f",
+      "category": "DCC",
+      "category_en": "DCC",
+      "description": "Bezpieczny dostęp przez Internet do lokalnego panelu DCC Web z wykorzystaniem zrok. Bez publicznego IP i przekierowywania portów.",
+      "description_en": "Secure HTTPS remote access to DCC Web using zrok without public IP or port forwarding.",
+      "default_name": "dcc-remote-access",
+      "engines": ["dcc-web-managed"],
+      "archs": ["amd64", "arm64"],
+      "icon_text": "RA",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-remote-access-v0.1.0/apps/dcc-remote-access"
+    },
+    {
       "name": "Beszel Hub",
       "image": "henrygd/beszel:latest",
       "category": "Monitoring 📊",

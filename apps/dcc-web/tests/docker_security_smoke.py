@@ -159,7 +159,7 @@ def main():
         docker('exec','--user','10001:10001',name,'python','-c',
             'from state import State;from pathlib import Path;from profile_ssh import connection_options;s=State("/data");p=s.profile('+repr(ident)+',private=True);assert p["credentials"]["passphrase"]=="fixture-key-pass";assert connection_options(p)["pkey"];assert not Path("/data/ssh/fixture.key").exists();assert all(r["public"].startswith("fernet:") for r in s.rows("SELECT public FROM profiles"));print("Encrypted migration and in-memory SSH key OK")')
         for category in ('all','DCC','Administracja','WWW'):
-            values=api('catalog?q=DCC%20Web&category='+category)['apps']
+            values=[app for app in api('catalog?q=DCC%20Web&category='+category)['apps'] if app['name']=='DCC Web']
             assert len(values)==1,'Duplicate catalog entry'
         grant=api('mcp/grants',{'name':'Synthetic MCP acceptance','client':'OpenAI Codex',
             'profiles':[ident],'tools':['list_containers'],'unlimited':True})

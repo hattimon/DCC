@@ -1,3 +1,4 @@
 
 # Preserve the Linux container entrypoint when building on Windows.
 apps/dcc-web/container-entrypoint.sh text eol=lf
+apps/dcc-remote-access/supervise.sh text eol=lf

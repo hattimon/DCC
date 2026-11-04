@@ -15,8 +15,10 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--port',type=int,default=8790)
     parser.add_argument('--data',required=True)
+    parser.add_argument('--remote-access-fixture', action='store_true')
     args=parser.parse_args()
     app=create_app({'TESTING':True,'DATA_DIR':args.data},backend_factory=FakeBackend)
+    app.extensions['dcc_remote_access'].available = args.remote_access_fixture
     state=app.extensions['dcc_state']
     state.execute('INSERT OR IGNORE INTO users VALUES(?,?,?,?)',('fixture-admin','review-admin',generate_password_hash('Review-only-password-4488'),'admin'))
     state.save_profile('local',{'name':'Local Docker · TEST FIXTURE','kind':'local','permissions':sorted(CAPABILITIES)})

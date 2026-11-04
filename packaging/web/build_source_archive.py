@@ -18,6 +18,9 @@ def source_files() -> list[Path]:
     files = [ROOT / "LICENSE", ROOT / "dcc_catalog.py", ROOT / "dcc-catalog.json"]
     files.extend((ROOT / "catalog" / "media").rglob("*"))
     files.append(ROOT / "apps" / "container-updater" / "updater.py")
+    supervisor = ROOT / "apps" / "dcc-remote-access" / "supervise.sh"
+    if supervisor.is_file():
+        files.append(supervisor)
     files.extend((ROOT / "apps" / "dcc-web").rglob("*"))
     result = []
     for path in files:

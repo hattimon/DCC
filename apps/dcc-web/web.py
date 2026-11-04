@@ -27,6 +27,7 @@ from engine import DockerBackend, EngineError, Jobs
 from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES, trusted_https_request
 from state import State
 from ports import container_revision,enrich_containers,inventory
+from remote_access import ACTIONS as REMOTE_ACTIONS, PORT as REMOTE_PORT, register_remote_access
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
@@ -34,6 +35,7 @@ VERSION = "0.2.2"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
 DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "refresh_changes_only":False, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 MCP_GRANT_ACTIONS={"mcp.grant.pause","mcp.grant.resume","mcp.grant.revoke","mcp.grant.delete-history"}
+REMOTE_CONFIRMATIONS = {"remote-access." + action for action in REMOTE_ACTIONS}
 
 
 def profile_display_address(profile, info, panel_host):
@@ -207,7 +209,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             username, password = request.form.get("username",""), request.form.get("password", "")
             if len(username)>64 or len(password)>256:
                 abort(400,"Invalid credential length")
-            address = hashlib.sha256(str(request.remote_addr).encode()).hexdigest()
+            address = "remote-access-login" if g.get("dcc_remote") else hashlib.sha256(str(request.remote_addr).encode()).hexdigest()
             recent = state.rows("SELECT COUNT(*) AS total FROM attempts WHERE address=? AND at>?", (address,time.time()-600))[0]["total"]
             if recent >= 8:
                 abort(429, "Too many attempts. Try again in ten minutes.")
@@ -222,7 +224,10 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
                             abort(409, "Initial setup has already completed")
                         db.execute("INSERT INTO users VALUES(?,?,?,?)", (secrets.token_hex(12),username,generate_password_hash(password),"admin"))
             users = state.rows("SELECT * FROM users WHERE name=?", (username,))
-            if not error and users and check_password_hash(users[0]["password"],password) and (not state.mfa.enabled(users[0]['id']) or state.mfa.verify(users[0]['id'],request.form.get('otp'))):
+            user = users[0] if users else None
+            mfa = user and state.mfa.enabled(user["id"])
+            remote_admin_without_mfa = user and g.get("dcc_remote") and user["role"] == "admin" and not mfa
+            if not error and user and not remote_admin_without_mfa and check_password_hash(user["password"],password) and (not mfa or state.mfa.verify(user["id"],request.form.get("otp"))):
                 session.clear()
                 session["sid"], session["csrf"] = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
                 session.permanent = True
@@ -333,7 +338,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def confirmation():
         data = body()
         action, target = str(data.get("action","")), str(data.get("target",""))
-        if action in WORKSPACE_ACTIONS or action in MCP_GRANT_ACTIONS:
+        if action in WORKSPACE_ACTIONS or action in MCP_GRANT_ACTIONS or action in REMOTE_CONFIRMATIONS:
             admin()
             profile_id = "workspace"
         else:
@@ -727,8 +732,10 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         p = profile()
         scan = installed_scans.profile_state(p["id"])
         installed_map = scan["installed_map"]
+        remote = app.extensions["dcc_remote_access"]
         result = catalogs.view(request.args.get("lang","PL"),query=request.args.get("q",""),category=request.args.get("category","all"),
-                               engine_kind="balena" if p["kind"]=="balena" else "docker",installed_map=installed_map)
+                               engine_kind="balena" if p["kind"]=="balena" else "docker",installed_map=installed_map,
+                               managed_remote_name=remote.name if remote.available and p["id"]=="local" and p["kind"]=="local" else None)
         return jsonify(**result,connected=True if installed_map is not None else (False if scan["error"] else None),
                        installed_known=installed_map is not None,installed_pending=scan["pending"],installed_error=scan["error"],sources=catalogs.sources())
 
@@ -738,7 +745,9 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         p = profile(data.get("profile"))
         def work():
             containers = factory(p).containers()
-            result = catalogs.view("PL",containers=containers,engine_kind="balena" if p["kind"]=="balena" else "docker")["apps"]
+            remote = app.extensions["dcc_remote_access"]
+            result = catalogs.view("PL",containers=containers,engine_kind="balena" if p["kind"]=="balena" else "docker",
+                                   managed_remote_name=remote.name if remote.available and p["id"]=="local" and p["kind"]=="local" else None)["apps"]
             return {item["id"]:{"installed":item["installed"],"installed_ids":item["installed_ids"]} for item in result}
         value = installed_scans.begin(g.user["id"],p["id"],work,force=data.get("force") is True)
         return jsonify(value),202
@@ -805,6 +814,8 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def preview_install():
         data = body()
         p = profile(data.get("profile"),"install")
+        if catalogs.managed_remote and data.get("app") == catalogs.managed_remote["id"]:
+            abort(400, "Install DCC Remote Access through the managed settings.")
         apps = catalogs.all()
         app_entry = next((item for item in apps if item["id"]==data.get("app")),None)
         if app_entry is None:
@@ -1121,6 +1132,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     register_mcp(app,state,profile,reauthenticate,confirmed)
     from ai_assistant import register_ai
     register_ai(app,state,profile,factory,body)
+    register_remote_access(app, state, body, profile, confirmed, reauthenticate, start_job, installed_scans.invalidate)
     return app
 
 
@@ -1156,7 +1168,8 @@ def main():
     if args.host not in {"127.0.0.1","localhost","::1"} and not args.allow_lan:
         parser.error("LAN exposure requires --allow-lan and an HTTPS reverse proxy")
     allowed = {"127.0.0.1","localhost","::1",args.host,*os.environ.get("DCC_WEB_HOSTS","").split(",")}
-    app = create_app({"DATA_DIR":args.data,"ALLOWED_HOSTS":allowed})
+    blocked_digests = frozenset(value.strip() for value in os.environ.get("DCC_REMOTE_BLOCKED_DIGESTS", "").split(","))
+    app = create_app({"DATA_DIR":args.data,"ALLOWED_HOSTS":allowed,"DCC_REMOTE_BLOCKED_DIGESTS":blocked_digests})
     if args.allow_lan:
         credentials = provision_random_admin(app.extensions["dcc_state"])
         if credentials:
@@ -1171,7 +1184,17 @@ def main():
                 pass
             time.sleep(3600)
     threading.Thread(target=refresh_sources,name="dcc-catalog-refresh",daemon=True).start()
-    from waitress import serve
+    from waitress import create_server, serve
+    if args.port != REMOTE_PORT and Path("/.dockerenv").is_file() and Path("/var/run/docker.sock").is_socket():
+        remote = app.extensions["dcc_remote_access"]
+        try:
+            ingress = create_server(remote.as_ingress, map={}, host="0.0.0.0", port=REMOTE_PORT,
+                                    threads=8, channel_timeout=60, ident="DCC-Web")
+        except OSError:
+            print("DCC Remote Access ingress could not start.", flush=True)
+        else:
+            remote.available = True
+            threading.Thread(target=ingress.run, name="dcc-remote-ingress", daemon=True).start()
     print(f"DCC Web {VERSION}: http://{args.host}:{args.port} (initial setup at /login)",flush=True)
     serve(app,host=args.host,port=args.port,threads=8,channel_timeout=60,ident="DCC-Web")
 

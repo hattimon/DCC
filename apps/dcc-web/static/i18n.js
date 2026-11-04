@@ -663,6 +663,43 @@ Nazwa dostępu|Grant name
 Klient|Client
 Ważność w dniach|Validity in days
 Bez limitu czasowego|No expiry
+Zdalny dostęp przez Internet|Remote Internet Access
+Zarządzaj zdalnym dostępem|Manage remote access
+Wymaga konfiguracji|Configuration required
+Zablokowany ze względów bezpieczeństwa|Blocked by security policy
+Wyłączony|Disabled
+Łączenie|Connecting
+Ponowne łączenie|Reconnecting
+Skonfiguruj|Configure
+Włącz dostęp|Enable access
+Wyłącz dostęp|Disable access
+Uruchom ponownie|Restart
+Stan tunelu|Tunnel status
+Zarezerwowana nazwa|Reserved name
+Ostatnie połączenie|Last connected
+Polityka bezpieczeństwa|Security policy
+Przypięty obraz zrok|Pinned zrok image
+Brak nowszej wersji|Up to date
+Kopiuj adres|Copy address
+Otwórz panel|Open panel
+Sprawdź aktualizacje|Check for updates
+Token konta zrok|zrok account token
+Nazwa publiczna (pusta oznacza nazwę automatyczną)|Public name (leave empty to generate one)
+Zainstaluj izolowany kontener zrok. Dostęp publiczny pozostanie wyłączony.|Install the isolated zrok container. Public access will stay disabled.
+Zarejestruj środowisko zrok i zarezerwuj nazwę publiczną. Dostęp publiczny pozostanie wyłączony.|Enroll a zrok environment and reserve a public name. Public access will stay disabled.
+Panel administracyjny będzie dostępny przez Internet przez bramę zrok. Logowanie DCC i MFA administratora nadal obowiązują.|The administration panel will be reachable over the Internet through the zrok gateway. DCC sign-in and administrator MFA still apply.
+Zamknij tunel publiczny. Zarezerwowana nazwa pozostanie dostępna do ponownego użycia.|Close the public tunnel. The reserved name will remain available for reuse.
+Uruchom ponownie tunel po ponownym sprawdzeniu wymagań bezpieczeństwa.|Restart the tunnel after checking the security policy again.
+Zatrzymaj tunel i usuń jego kontener. Wybierz, czy zachować rezerwację i środowisko zrok.|Stop the tunnel and remove its container. Choose whether to keep the zrok environment and reservation.
+Utwórz konto, otwórz konsolę zrok i skopiuj token konta z kreatora.|Create an account, open the zrok console and copy the account token from the wizard.
+Zachowaj środowisko i rezerwację zrok|Keep the zrok environment and reservation
+Środowisko i nazwę usunięto już w konsoli zrok.|The environment and name have already been removed in the zrok console.
+Udostępnij panel przez HTTPS za pośrednictwem zrok.|Share the panel over HTTPS through zrok.
+Instalacja jest dostępna w kontenerowym DCC Web na lokalnym silniku Docker.|Installation is available in containerized DCC Web on its local Docker engine.
+Zarządzaj zdalnym dostępem z lokalnego panelu.|Manage remote access from the local panel.
+Włącz 2FA na swoim koncie administratora, aby uruchomić tunel.|Enable 2FA on your administrator account to start the tunnel.
+Aktualizacja|Update
+Niezainstalowany|Not installed
 Narzędzia tylko do odczytu|Read-only tools
 Utwórz dostęp|Create grant
 Token — pokazany tylko raz|Token — shown once
@@ -828,6 +865,13 @@ const errorPL={
 'A fresh explicit confirmation is required':'Wymagane jest nowe, jawne potwierdzenie.',
 'Administrator permission required':'Wymagane są uprawnienia administratora.',
 'Profile access denied':'Brak dostępu do profilu.',
+'Open the local panel over HTTPS for this operation.':'Otwórz lokalny panel przez HTTPS, aby wykonać tę operację.',
+'Enable 2FA for your administrator account before enabling remote access.':'Włącz 2FA administratora przed włączeniem zdalnego dostępu.',
+'This zrok image is blocked by the security policy.':'Polityka bezpieczeństwa blokuje ten obraz zrok.',
+'The public HTTPS endpoint has not passed verification.':'Publiczny adres HTTPS nie przeszedł weryfikacji.',
+'The zrok process stopped. Check the reservation and account.':'Proces zrok zatrzymał się. Sprawdź rezerwację i konto.',
+'The name could not be reserved. It may already be in use.':'Nie udało się zarezerwować nazwy. Może być już zajęta.',
+'zrok rejected the account token or the hosted service is unavailable.':'zrok odrzucił token konta lub usługa jest niedostępna.',
 'Login required':'Wymagane jest logowanie.',
 'Invalid CSRF token':'Nieprawidłowy token CSRF. Odśwież stronę.',
 'Docker is unavailable or the operation timed out. Check the selected profile.':'Docker jest niedostępny lub przekroczono limit czasu. Sprawdź wybrany profil.',

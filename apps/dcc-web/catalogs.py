@@ -17,6 +17,7 @@ from dcc_catalog import category_group, localized_categories, catalog_category_s
 from ports import published_ports
 
 OFFICIAL = "https://github.com/hattimon/DCC"
+MANAGED_REMOTE = "dcc-web-managed"
 
 
 def validate_catalog(payload):
@@ -85,7 +86,10 @@ def image_repo(image):
 class Catalogs:
     def __init__(self, state, root):
         self.state, self.root = state, Path(root)
-        self.fallback = validate_catalog(json.loads((self.root / "dcc-catalog.json").read_text(encoding="utf-8")))
+        bundled = validate_catalog(json.loads((self.root / "dcc-catalog.json").read_text(encoding="utf-8")))
+        self.fallback = [app for app in bundled if app.get("engines") != [MANAGED_REMOTE]]
+        managed = next((app for app in bundled if app.get("engines") == [MANAGED_REMOTE]), None)
+        self.managed_remote = dict(managed, id=app_id(managed)) if managed else None
         state.execute("INSERT OR IGNORE INTO sources VALUES(?,?,?,?,?,?,?)", ("official", OFFICIAL, 1, 1, json.dumps(self.fallback), 0, ""))
 
     def sources(self):
@@ -114,6 +118,8 @@ class Catalogs:
             for app in json.loads(row["cache"] or "[]"):
                 key = catalog_application_key(app["name"], app["image"], app.get("default_name") or app.get("container_name"))
                 old = merged.get(key, {})
+                if app.get("engines") == [MANAGED_REMOTE]:
+                    continue
                 if old and catalog_image_is_older(app['image'], old['image']):
                     old, app = app, old
                 new = dict(old, **app)
@@ -160,18 +166,27 @@ class Catalogs:
                 self.state.execute("UPDATE sources SET error=? WHERE id=?", ("Source unavailable; using cached catalog", row["id"]))
         return self.sources()
 
-    def view(self, lang="PL", containers=(), query="", category="all", engine_kind="docker", installed_map=None):
+    def view(self, lang="PL", containers=(), query="", category="all", engine_kind="docker", installed_map=None,
+             managed_remote_name=None):
         apps = self.all()
+        if managed_remote_name and self.managed_remote:
+            apps.append(self.managed_remote)
         groups = set()
         result = []
         for app in apps:
+            managed = app.get("engines") == [MANAGED_REMOTE]
             memberships = list(dict.fromkeys(category_group(value) for value in localized_categories(app.get("category", "Inne"), app.get("category_en", ""), app.get("categories"), app.get("categories_en"), lang)))
             if "balena" in (app.get("engines") or []) and "Balena OS" not in memberships:
                 memberships.append("Balena OS")
             groups.update(memberships)
             description = app.get("description_en") if lang=="EN" and app.get("description_en") else app.get("description", "")
             image_repository = image_repo(app["image"])
-            matches = [c for c in containers if c.get("Image")==app["image"] or (c.get("Names")==app.get("default_name") and image_repo(c.get("Image", ""))==image_repository)]
+            if managed:
+                label = "io.dcc.remote-access=" + managed_remote_name.removeprefix("dcc-remote-access-")
+                matches = [c for c in containers if c.get("Names") == managed_remote_name
+                           and label in str(c.get("Labels", "")).split(",")]
+            else:
+                matches = [c for c in containers if c.get("Image")==app["image"] or (c.get("Names")==app.get("default_name") and image_repo(c.get("Image", ""))==image_repository)]
             known = installed_map is not None
             cached = (installed_map or {}).get(app["id"], {})
             installed = bool(cached.get("installed")) if known else bool(matches)
@@ -180,7 +195,7 @@ class Catalogs:
                 continue
             if category=="installed" and not installed or category not in {"all","installed"} and category not in memberships:
                 continue
-            if app.get("engines") and engine_kind not in app["engines"] and "any" not in app["engines"]:
+            if not managed and app.get("engines") and engine_kind not in app["engines"] and "any" not in app["engines"]:
                 continue
             installed_ids = list(cached.get("installed_ids", [])) if known else [c["ID"] for c in matches]
             result.append(dict(app, category_labels=memberships, installed=installed, installed_known=known, installed_ids=installed_ids, localized_description=description))

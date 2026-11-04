@@ -2,6 +2,7 @@ import{html,t,getLanguage}from'../i18n.js';
 import{api,state,post}from'../api.js';
 import{esc,field,textarea,button,openDialog,notice,notify,copyText}from'../ui.js';
 import{accountFields,download,guarded,workspaceConsent}from'./profile_tools.js';
+import{mountRemoteAccess}from'./remote_access.js';
 
 export async function accountSecurity(root,ctx){
  const [mfa,email]=await Promise.all([api('account/2fa'),api('account/recovery-email')]);if(!ctx.valid())return;
@@ -40,6 +41,16 @@ export async function accountSecurity(root,ctx){
  }));
  root.querySelector('#admin-domains')?.addEventListener('click',guarded(()=>domainDialog()));
  root.querySelector('#admin-https')?.addEventListener('click',guarded(async()=>httpsDialog(await api('admin/domains'))));
+ const access=account.querySelector('[data-security-group=access]');
+ if(access){
+  const remote=document.createElement('section');remote.id='remote-access';remote.className='stack';
+  access.querySelector('.security-group-body').append(remote);
+  access.addEventListener('toggle',()=>{if(access.open&&!remote.dataset.loaded){remote.dataset.loaded='true';mountRemoteAccess(root,ctx);}});
+  if(location.hash==='#settings/remote-access'){
+   tabs.querySelector('[data-settings-tab=security]').click();
+   access.open=true;
+  }
+ }
 }
 
 async function domainDialog(){

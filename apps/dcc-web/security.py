@@ -15,6 +15,8 @@ SECRET_WORDS = re.compile(r"password|passwd|passphrase|private.?key|token|secret
 
 def trusted_public_https_request(app):
     """Recognize an explicitly configured public HTTPS endpoint."""
+    if g.get("dcc_remote"):
+        return True
     host=(urlsplit("//"+request.host).hostname or "").lower()
     trusted={str(value).lower() for value in app.config.get("TRUSTED_HTTPS_HOSTS",[]) if value}
     public_origin=app.config.get("PUBLIC_ORIGIN") or ""
@@ -54,8 +56,15 @@ def redact(value):
 def initialize_security(app, state):
     @app.before_request
     def guard():
+        remote = app.extensions.get("dcc_remote_access")
+        if request.environ.get("dcc.remote_ingress"):
+            if not remote:
+                abort(400, "Untrusted remote ingress")
+            probe = remote.guard()
+            if probe is not None:
+                return probe
         host = (urlsplit("//"+request.host).hostname or "").lower()
-        if host not in app.config["ALLOWED_HOSTS"]:
+        if not g.get("dcc_remote") and host not in app.config["ALLOWED_HOSTS"]:
             abort(400, "Untrusted Host header")
         session.setdefault("csrf", secrets.token_urlsafe(32))
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
@@ -63,7 +72,7 @@ def initialize_security(app, state):
             expected_origin=app.config.get("PUBLIC_ORIGIN") or request.host_url.rstrip("/")
             if trusted_https_request(app):
                 expected_origin='https://'+request.host
-            if origin and origin != expected_origin:
+            if (origin or g.get("dcc_remote")) and origin != expected_origin:
                 abort(403, "Origin rejected")
             supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf", "")
             if not secrets.compare_digest(str(supplied), session["csrf"]):
@@ -71,8 +80,12 @@ def initialize_security(app, state):
         sid = session.get("sid", "")
         rows = state.rows("SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires>?", (hashlib.sha256(sid.encode()).hexdigest(), time.time())) if sid else []
         g.user = rows[0] if rows else None
-        if g.user and getattr(state, 'mfa', None) and state.mfa.enabled(g.user['id']) and not session.get('mfa_verified'):
-            g.user = None
+        if g.user and getattr(state, "mfa", None):
+            mfa = state.mfa.enabled(g.user["id"])
+            needs_verification = mfa and not session.get("mfa_verified")
+            remote_admin_without_mfa = g.get("dcc_remote") and g.user["role"] == "admin" and not mfa
+            if needs_verification or remote_admin_without_mfa:
+                g.user = None
         if request.path.startswith("/api/") and request.path != "/api/health" and not g.user:
             abort(401, "Login required")
 

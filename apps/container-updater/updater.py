@@ -584,6 +584,8 @@ class UpdateService:
         attrs = container.attrs
         config = attrs.get("Config") or {}
         labels = config.get("Labels") or {}
+        if labels.get("io.dcc.remote-access"):
+            return "DCC Remote Access: aktualizuj wyłącznie przez zweryfikowane wydanie modułu i ustawienia DCC Web."
         if any(key.startswith("com.docker.swarm.") for key in labels):
             return "Kontener jest zarządzany przez Docker Swarm."
         host = attrs.get("HostConfig") or {}
