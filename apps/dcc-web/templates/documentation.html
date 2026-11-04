@@ -21,7 +21,7 @@
       {% endfor %}
     </aside>
     <main class="docs-main">
-      <div class="docs-actions"><span>{{ tr('Dokumentacja DCC Web') }}</span><div class="docs-actions-links"><div class="docs-language" aria-label="{{ tr('Język dokumentacji') }}"><a href="/docs/{{ doc_name }}?lang=EN"{% if language == 'EN' %} aria-current="true"{% endif %}>EN</a><a href="/docs/{{ doc_name }}?lang=PL"{% if language == 'PL' %} aria-current="true"{% endif %}>PL</a></div><a href="https://github.com/hattimon/DCC/tree/dcc-web-v0.1.9/apps/dcc-web/docs" target="_blank" rel="noopener noreferrer">{{ tr('Źródła na GitHubie') }} ↗</a></div></div>
+      <div class="docs-actions"><span>{{ tr('Dokumentacja DCC Web') }}</span><div class="docs-actions-links"><div class="docs-language" aria-label="{{ tr('Język dokumentacji') }}"><a href="/docs/{{ doc_name }}?lang=EN"{% if language == 'EN' %} aria-current="true"{% endif %}>EN</a><a href="/docs/{{ doc_name }}?lang=PL"{% if language == 'PL' %} aria-current="true"{% endif %}>PL</a></div><a href="https://github.com/hattimon/DCC/tree/dcc-web-v0.2.0/apps/dcc-web/docs" target="_blank" rel="noopener noreferrer">{{ tr('Źródła na GitHubie') }} ↗</a></div></div>
       <article class="markdown-content">{{ rendered_content }}</article>
       <footer class="docs-footer"><a href="/about?lang={{ language }}">◇ DCC Web</a><a href="https://github.com/hattimon/DCC" target="_blank" rel="noopener noreferrer">{{ tr('Repozytorium DCC na GitHubie') }} ↗</a><span>{{ version }}</span></footer>
     </main>

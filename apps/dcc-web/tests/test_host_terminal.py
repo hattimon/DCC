@@ -132,7 +132,7 @@ class TerminalTransportTests(unittest.TestCase):
             with self.subTest(base=base):
                 response=self.open(base)
                 self.assertEqual(response.status_code,201,response.json)
-                self.assertEqual(response.json['address'],'192.168.11.20:22')
+                self.assertEqual(response.json['address'],'192.168.11.20')
                 terminal=self.manager.sessions[response.json['id']]
                 self.assertEqual(terminal.profile,'ssh')
                 self.assertEqual(terminal.connection.profile['host'],'192.168.11.20')

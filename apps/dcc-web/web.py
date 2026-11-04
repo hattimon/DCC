@@ -30,7 +30,7 @@ from ports import enrich_containers,inventory
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.1.9"
+VERSION = "0.2.0"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
 DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 
@@ -559,12 +559,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         limit=int(json.loads(preferences[0]['data']).get('terminal_limit',16)) if preferences else 16
         value=terminals.open(p,g.user["id"],hashlib.sha256(session["sid"].encode()).hexdigest(),cols,rows,limit=limit)
         state.audit(g.user["id"],"host.terminal.open",p["id"],200)
-        address = ""
-        if p["kind"] in {"ssh", "balena"}:
-            host = p["host"]
-            if ":" in host and not host.startswith("["):
-                host = f"[{host}]"
-            address = f"{host}:{p.get('port', 22)}"
+        address = profile_display_address(p, {}, request.host) if p['kind'] in {'ssh', 'balena'} else ''
         return jsonify(id=value.id,profile=p["id"],address=address),201
 
     @app.get("/api/host-terminal/<terminal_id>")

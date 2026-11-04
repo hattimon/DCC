@@ -1,6 +1,6 @@
-# DCC Web 0.1.9
+# DCC Web 0.2.0
 
-This release fixes the recovery SMTP settings endpoint so the administrator dialog opens and can configure mail. The password remains excluded from API responses.
+This release adds MCP downloads, operating-system-specific token setup guides and the active SSH address in the terminal header. The previous SMTP settings fix continues to omit the password from API responses.
 
 IP-based HTTPS selects the configured certificate even without client SNI. The authenticated Caddy marker keeps HTTPS login, CSRF Origin checks and Secure cookies working behind Waitress. Administration settings use collapsed, described sections with direct access to IP/domain and HTTPS/certificate controls. Real Docker verification covers login and proxy recreation with the saved port and CA.
 

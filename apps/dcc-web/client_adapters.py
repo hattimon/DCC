@@ -49,7 +49,7 @@ def codex_marketplace_archive(command, args):
     manifest = {
         "name": "dcc-web",
         "version": "0.1.0",
-        "description": "Read-only Docker access through DCC Web MCP.",
+        "description": "Scoped Docker access through DCC Web MCP.",
         "mcpServers": "./.mcp.json",
         "interface": {"displayName": "DCC Web MCP"},
     }
