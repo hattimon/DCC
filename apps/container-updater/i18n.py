@@ -399,6 +399,8 @@ DIAGNOSTICS = {
     "Kontener jest zarządzany przez Docker Swarm.": "Docker Swarm manages this container.",
     "Kontener ma włączone automatyczne usuwanie; nie można bezpiecznie zachować kopii.": "Auto-remove is enabled; a rollback container cannot be retained safely.",
     "Kontener używa niestandardowej lub wielokrotnej sieci Docker.": "The container uses a custom or multiple Docker networks.",
+    "Wyłącz dostęp zdalny w panelu DCC Web przed aktualizacją.": "Turn off Remote Access in the DCC Web panel before updating.",
+    "Nie można potwierdzić zarządzanej sieci DCC Remote Access.": "The managed DCC Remote Access network could not be verified.",
     "Nie można potwierdzić zarządzanej sieci HTTPS DCC Web. Sprawdź kontener Caddy i dodatkowe połączenia sieciowe. Ewentualnie usuń rozszerzenie HTTPS w ustawieniach DCC Web, zaktualizuj panel i ponownie włącz HTTPS. Samo zatrzymanie Caddy nie usuwa połączenia sieciowego.": "The managed DCC Web HTTPS network could not be verified. Check the Caddy container and additional network attachments. Alternatively, remove the HTTPS extension in DCC Web settings, update the panel, then enable HTTPS again. Stopping Caddy alone does not remove the network attachment.",
     "Kontener współdzieli przestrzeń sieciową innego kontenera.": "The container shares another container's network namespace.",
     "Kontener nie przechowuje nazwy obrazu, której można użyć do pobrania aktualizacji.": "The container has no image reference that can be used to pull an update.",

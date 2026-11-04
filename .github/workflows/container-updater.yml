@@ -41,6 +41,14 @@ jobs:
         working-directory: apps/container-updater
         run: python tests/docker_web_https_smoke.py
 
+      - name: Verify Web update and rollback with managed Remote Access
+        working-directory: apps/container-updater
+        run: |
+          python tests/docker_web_https_smoke.py \
+            --old-image ghcr.io/hattimon/dcc-web:0.2.4 \
+            --target-image ghcr.io/hattimon/dcc-web:0.2.5 \
+            --expected-version 0.2.5 --with-remote-access
+
       - name: Publish only a new application version
         id: publish-check
         shell: bash

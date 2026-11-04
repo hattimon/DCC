@@ -171,6 +171,35 @@ class ContainerSafetyTests(unittest.TestCase):
         self.assertIsNone(UpdateService._unsupported_reason(web, [web, proxy, updater]))
         self.assertIsNone(UpdateService.automatic_dependency_blocker(web, [web, proxy, updater]))
 
+    def test_dcc_web_update_accepts_only_verified_stopped_remote_access_peer(self):
+        web, proxy, _https = self._dcc_web_https_pair()
+        owner = "0123456789abcdef"
+        sidecar_name = "dcc-remote-access-" + owner
+        ingress, egress = sidecar_name + "-panel", sidecar_name + "-egress"
+        web.attrs["NetworkSettings"]["Networks"][ingress] = {"Aliases": ["dcc-remote-panel"]}
+        sidecar = SimpleNamespace(id="sidecar-id", name=sidecar_name, attrs={
+            "Config": {
+                "Image": "docker.io/openziti/zrok2:2.0.9@sha256:" + "a" * 64,
+                "Labels": {"io.dcc.remote-access": owner},
+            },
+            "HostConfig": {"NetworkMode": egress},
+            "NetworkSettings": {"Networks": {ingress: {}, egress: {}}},
+            "State": {"Status": "exited"},
+        })
+        inventory = [web, proxy, sidecar]
+        self.assertIsNone(UpdateService._unsupported_reason(web, inventory))
+        self.assertIn("DCC Remote Access", UpdateService._unsupported_reason(sidecar, inventory))
+
+        sidecar.attrs["State"]["Status"] = "running"
+        self.assertIn("Wyłącz dostęp zdalny", UpdateService._unsupported_reason(web, inventory))
+        sidecar.attrs["State"]["Status"] = "exited"
+        web.attrs["NetworkSettings"]["Networks"]["unrelated-net"] = {}
+        self.assertIsNotNone(UpdateService._unsupported_reason(web, inventory))
+        del web.attrs["NetworkSettings"]["Networks"]["unrelated-net"]
+        self.assertIsNotNone(UpdateService._unsupported_reason(web, [web, proxy]))
+        sidecar.attrs["Config"]["Labels"]["io.dcc.remote-access"] = "f" * 16
+        self.assertIsNotNone(UpdateService._unsupported_reason(web, inventory))
+
     def test_custom_peer_or_static_network_config_keeps_dcc_web_update_blocked(self):
         web, proxy, network = self._dcc_web_https_pair()
         peer = SimpleNamespace(

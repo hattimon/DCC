@@ -255,7 +255,7 @@ class WebSecurityTests(unittest.TestCase):
             client = SimpleNamespace(containers=SimpleNamespace(get=lambda name: SimpleNamespace(name=name, attrs={'Config': {'Image': 'ghcr.io/example/app:1'}})))
             _is_self = staticmethod(lambda container: container.name == 'panel')
             _is_compose = staticmethod(lambda container: container.name == 'compose')
-            _unsupported_reason = staticmethod(lambda _container: None)
+            _unsupported_reason = staticmethod(lambda _container, _inventory: None)
         app = create_app(self.temp.name, service_factory=Service, print_credentials=False)
         client = app.test_client()
         with client.session_transaction() as state:

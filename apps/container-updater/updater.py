@@ -28,6 +28,11 @@ SELF_UPDATE_HELPER_NAME = "dcc-updater-self-update-helper"
 DCC_WEB_IMAGE = "ghcr.io/hattimon/dcc-web"
 DCC_WEB_PROXY_LABEL = "io.dcc.web.proxy"
 DCC_WEB_PROXY_ALIAS = "dcc-web-upstream"
+DCC_REMOTE_LABEL = "io.dcc.remote-access"
+DCC_REMOTE_ALIAS = "dcc-remote-panel"
+DCC_REMOTE_REPOSITORY = "docker.io/openziti/zrok2"
+DCC_REMOTE_STOP_REQUIRED = "Wyłącz dostęp zdalny w panelu DCC Web przed aktualizacją."
+DCC_REMOTE_NETWORK_UNVERIFIED = "Nie można potwierdzić zarządzanej sieci DCC Remote Access."
 SUPPORTED_NETWORK_MODES = {"default", "bridge", "host", "none"}
 COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
 COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
@@ -533,16 +538,11 @@ class UpdateService:
         if str(host.get("NetworkMode") or "default") not in {"default", "bridge"}:
             return None
         networks = (attrs.get("NetworkSettings") or {}).get("Networks") or {}
-        custom_names = sorted(name for name in networks if name not in {"bridge", "host", "none"})
-        if len(custom_names) != 1:
+        proxy_networks = [name for name in networks if re.fullmatch(r"dcc-web-https-[a-f0-9]{10}-network", name)]
+        if len(proxy_networks) != 1:
             return None
-        network_name = str(custom_names[0])
-        suffix = "-network"
-        if not network_name.startswith("dcc-web-https-") or not network_name.endswith(suffix):
-            return None
-        proxy_name = network_name[:-len(suffix)]
-        if not re.fullmatch(r"dcc-web-https-[a-f0-9]{10}", proxy_name):
-            return None
+        network_name = proxy_networks[0]
+        proxy_name = network_name.removesuffix("-network")
         endpoint = networks.get(network_name) or {}
         endpoint_aliases = endpoint.get("Aliases") or []
         if endpoint.get("IPAMConfig") or DCC_WEB_PROXY_ALIAS not in endpoint_aliases:
@@ -580,11 +580,94 @@ class UpdateService:
         return network_name, proxy_name, aliases
 
     @staticmethod
+    def _dcc_web_remote_attachment(
+        container: Any, all_containers: list[Any],
+    ) -> tuple[str, Any, tuple[str, ...]] | None:
+        networks = (container.attrs.get("NetworkSettings") or {}).get("Networks") or {}
+        matches = [name for name in networks if re.fullmatch(r"dcc-remote-access-[a-f0-9]{16}-panel", name)]
+        if len(matches) != 1:
+            return None
+        ingress = matches[0]
+        sidecar_name = ingress.removesuffix("-panel")
+        egress = sidecar_name + "-egress"
+        owner = sidecar_name.removeprefix("dcc-remote-access-")
+        endpoint = networks[ingress] or {}
+        aliases = tuple(endpoint.get("Aliases") or ())
+        container_name = str(container.name).lstrip("/")
+        if (DCC_REMOTE_ALIAS not in aliases or set(aliases) - {container_name, DCC_REMOTE_ALIAS}
+                or any(endpoint.get(key) for key in ("IPAMConfig", "Links", "DriverOpts", "GwPriority"))):
+            return None
+
+        others = [peer for peer in all_containers if peer.id != container.id]
+        sidecars = [peer for peer in others if str(peer.name).lstrip("/") == sidecar_name]
+        if len(sidecars) != 1:
+            return None
+        sidecar = sidecars[0]
+        config = sidecar.attrs.get("Config") or {}
+        image = str(config.get("Image") or "")
+        sidecar_networks = (sidecar.attrs.get("NetworkSettings") or {}).get("Networks") or {}
+        if ((config.get("Labels") or {}).get(DCC_REMOTE_LABEL) != owner
+                or normalized_repository(image) != normalized_repository(DCC_REMOTE_REPOSITORY)
+                or not re.search(r"@sha256:[a-f0-9]{64}$", image)
+                or (sidecar.attrs.get("HostConfig") or {}).get("NetworkMode") != egress
+                or set(sidecar_networks) != {ingress, egress}):
+            return None
+        for peer in others:
+            if peer.id == sidecar.id:
+                continue
+            peer_networks = (peer.attrs.get("NetworkSettings") or {}).get("Networks") or {}
+            if ingress in peer_networks or egress in peer_networks:
+                return None
+        return ingress, sidecar, aliases
+
+    @staticmethod
+    def _dcc_web_attachments(container: Any, all_containers: list[Any] | None):
+        attrs = container.attrs
+        config = attrs.get("Config") or {}
+        host = attrs.get("HostConfig") or {}
+        if (not all_containers
+                or normalized_repository(str(config.get("Image") or "")) != normalized_repository(DCC_WEB_IMAGE)
+                or str(host.get("NetworkMode") or "default") not in {"default", "bridge"}):
+            return {}, None
+        attachments = {}
+        proxy = UpdateService._dcc_web_proxy_attachment(container, all_containers)
+        if proxy:
+            attachments[proxy[0]] = proxy[2]
+        remote = UpdateService._dcc_web_remote_attachment(container, all_containers)
+        if remote:
+            attachments[remote[0]] = remote[2]
+        return attachments, remote
+
+    def _verify_remote_networks(self, container: Any, sidecar: Any, ingress_network: Any) -> None:
+        sidecar.reload()
+        if (sidecar.attrs.get("State") or {}).get("Status") not in {"created", "exited"}:
+            raise RuntimeError(DCC_REMOTE_STOP_REQUIRED)
+        owner = sidecar.name.removeprefix("dcc-remote-access-")
+        ingress, egress = sidecar.name + "-panel", sidecar.name + "-egress"
+        sidecar_networks = (sidecar.attrs.get("NetworkSettings") or {}).get("Networks") or {}
+        web_networks = (container.attrs.get("NetworkSettings") or {}).get("Networks") or {}
+        if (set(sidecar_networks) != {ingress, egress}
+                or (web_networks.get(ingress) or {}).get("NetworkID") != ingress_network.id):
+            raise RuntimeError(DCC_REMOTE_NETWORK_UNVERIFIED)
+        for name, network, internal, allowed_peers in (
+            (ingress, ingress_network, True, {container.id, sidecar.id}),
+            (egress, self.client.networks.get(egress), False, {sidecar.id}),
+        ):
+            attrs = network.attrs
+            # Docker can defer assigning a network ID on a never-started sidecar.
+            endpoint_id = (sidecar_networks[name] or {}).get("NetworkID")
+            if ((attrs.get("Labels") or {}).get(DCC_REMOTE_LABEL) != owner
+                    or attrs.get("Driver") != "bridge" or attrs.get("Internal") is not internal
+                    or (endpoint_id and endpoint_id != network.id)
+                    or set(attrs.get("Containers") or {}) - allowed_peers):
+                raise RuntimeError(DCC_REMOTE_NETWORK_UNVERIFIED)
+
+    @staticmethod
     def _unsupported_reason(container: Any, all_containers: list[Any] | None = None) -> str | None:
         attrs = container.attrs
         config = attrs.get("Config") or {}
         labels = config.get("Labels") or {}
-        if labels.get("io.dcc.remote-access"):
+        if labels.get(DCC_REMOTE_LABEL):
             return "DCC Remote Access: aktualizuj wyłącznie przez zweryfikowane wydanie modułu i ustawienia DCC Web."
         if any(key.startswith("com.docker.swarm.") for key in labels):
             return "Kontener jest zarządzany przez Docker Swarm."
@@ -599,8 +682,12 @@ class UpdateService:
             return "Niestandardowa sieć Docker wymaga odtworzenia endpointów; pominięto ją dla bezpieczeństwa."
         networks = (attrs.get("NetworkSettings") or {}).get("Networks") or {}
         names = set(networks)
-        if not is_compose and (len(names) > 1 or any(name not in {"bridge", "host", "none"} for name in names)):
-            if UpdateService._dcc_web_proxy_attachment(container, all_containers):
+        custom = names - {"bridge", "host", "none"}
+        if not is_compose and (len(names) > 1 or custom):
+            attachments, remote = UpdateService._dcc_web_attachments(container, all_containers)
+            if custom and set(attachments) == custom and names <= custom | {"bridge"}:
+                if remote and (remote[1].attrs.get("State") or {}).get("Status") not in {"created", "exited"}:
+                    return DCC_REMOTE_STOP_REQUIRED
                 return None
             if normalized_repository(str(config.get("Image") or "")) == normalized_repository(DCC_WEB_IMAGE):
                 return (
@@ -1743,11 +1830,10 @@ class UpdateService:
             raise RuntimeError("Usługi Compose należy aktualizować przez kontrolowany tryb Compose.")
         image = str(((container.attrs.get("Config") or {}).get("Image")) or "")
         all_containers = None
-        proxy_attachment = None
+        attachments, remote = {}, None
         if normalized_repository(image) == normalized_repository(DCC_WEB_IMAGE):
             all_containers = self.client.containers.list(all=True, ignore_removed=True)
-            proxy_attachment = self._dcc_web_proxy_attachment(container, all_containers)
-        proxy_network = self.client.networks.get(proxy_attachment[0]) if proxy_attachment else None
+            attachments, remote = self._dcc_web_attachments(container, all_containers)
         reason = self._unsupported_reason(container, all_containers)
         if reason:
             raise RuntimeError(reason)
@@ -1757,6 +1843,12 @@ class UpdateService:
         # Pull first: a registry or network failure leaves the running service untouched.
         if not _image_already_pulled:
             self._pull_image_with_retry(target_image)
+        managed_networks = {
+            name: (self.client.networks.get(name), list(aliases)) for name, aliases in attachments.items()
+        }
+        if remote:
+            ingress, sidecar, _aliases = remote
+            self._verify_remote_networks(container, sidecar, managed_networks[ingress][0])
         original_name = str(getattr(container, "name", "")).lstrip("/")
         was_running = str((container.attrs.get("State") or {}).get("Status")) == "running"
         if all_containers is None:
@@ -1768,35 +1860,23 @@ class UpdateService:
         while backup_name in existing_names:
             suffix += 1
             backup_name = f"{base_backup_name}-{suffix}"
+        disconnected = []
+        replacement = None
+        stopped = renamed = False
         try:
             if was_running:
                 container.stop(timeout=15)
+                stopped = True
             container.rename(backup_name)
-            if proxy_network is not None:
-                proxy_network.disconnect(container)
-        except Exception:
-            try:
-                if proxy_network is not None:
-                    proxy_network.connect(container, aliases=list(proxy_attachment[2]))
-            except Exception:
-                pass
-            try:
-                container.rename(original_name)
-            except Exception:
-                pass
-            if was_running:
-                try:
-                    container.start()
-                except Exception:
-                    pass
-            raise
+            renamed = True
+            for network, aliases in managed_networks.values():
+                network.disconnect(container)
+                disconnected.append((network, aliases))
 
-        replacement = None
-        try:
             created = self.client.api.create_container_from_config(raw_config, name=original_name)
             replacement = self.client.containers.get(created["Id"])
-            if proxy_network is not None:
-                proxy_network.connect(replacement, aliases=list(proxy_attachment[2]))
+            for network, aliases in disconnected:
+                network.connect(replacement, aliases=aliases)
             if _expected_image_id and str(replacement.attrs.get("Image") or "") != _expected_image_id:
                 raise RuntimeError("Nowy kontener nie używa przypiętego obrazu aktualizacji; wycofano podmianę.")
             if was_running:
@@ -1808,6 +1888,8 @@ class UpdateService:
             except Exception as exc:
                 return f"Zaktualizowano do {target_image}; stary kontener pozostał jako kopia {backup_name} ({type(exc).__name__})."
         except Exception as exc:
+            if not stopped and not renamed:
+                raise
             port_conflict = self._is_docker_port_conflict(exc)
             if replacement is not None:
                 try:
@@ -1819,16 +1901,17 @@ class UpdateService:
                 except Exception:
                     pass
             rollback_errors = []
-            if proxy_network is not None:
+            for network, aliases in disconnected:
                 try:
-                    proxy_network.connect(container, aliases=list(proxy_attachment[2]))
+                    network.connect(container, aliases=aliases)
                 except Exception as rollback_exc:
                     rollback_errors.append(rollback_exc)
-            try:
-                container.rename(original_name)
-            except Exception as rollback_exc:
-                rollback_errors.append(rollback_exc)
-            if was_running:
+            if renamed:
+                try:
+                    container.rename(original_name)
+                except Exception as rollback_exc:
+                    rollback_errors.append(rollback_exc)
+            if stopped:
                 try:
                     container.start()
                 except Exception as rollback_exc:

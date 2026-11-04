@@ -926,12 +926,13 @@ def create_app(
                 container = service.client.containers.get(name)
                 if service._is_self(container) or service._is_compose(container):
                     raise ValueError("Wybierz samodzielne kontenery. Compose wymaga ręcznej aktualizacji, a panel ma osobny przełącznik.")
-                blocker = service._unsupported_reason(container)
+                dependency_check = getattr(service, "automatic_dependency_blocker", None)
+                inventory = service.client.containers.list(all=True, ignore_removed=True) if callable(dependency_check) else None
+                blocker = service._unsupported_reason(container, inventory)
                 if blocker:
                     raise ValueError(blocker)
-                dependency_check = getattr(service, "automatic_dependency_blocker", None)
                 if callable(dependency_check):
-                    blocker = dependency_check(container, service.client.containers.list(all=True, ignore_removed=True))
+                    blocker = dependency_check(container, inventory)
                     if blocker:
                         raise ValueError(blocker)
                 image = str((container.attrs.get("Config") or {}).get("Image") or "")
@@ -1071,12 +1072,13 @@ def create_app(
                 return jsonify({
                     "error": "Automatyczna aktualizacja Compose jest wyłączona. Usługi Compose aktualizuj ręcznie po sprawdzeniu zależności i konfiguracji."
                 }), 400
-            reason = service._unsupported_reason(container)
+            list_containers = getattr(service.client.containers, "list", None)
+            inventory = list_containers(all=True) if callable(list_containers) else None
+            reason = service._unsupported_reason(container, inventory)
             if reason:
                 return jsonify({"error": reason}), 400
-            list_containers = getattr(service.client.containers, "list", None)
-            if callable(list_containers):
-                reason = service.automatic_dependency_blocker(container, list_containers(all=True))
+            if inventory is not None:
+                reason = service.automatic_dependency_blocker(container, inventory)
                 if reason:
                     return jsonify({"error": reason}), 400
             image = str((container.attrs.get("Config") or {}).get("Image") or "")

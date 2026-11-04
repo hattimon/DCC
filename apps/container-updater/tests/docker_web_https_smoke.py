@@ -48,8 +48,10 @@ def main():
     parser.add_argument('--expected-version', default='0.1.8')
     parser.add_argument('--local-target', action='store_true', help='Use an already-built release candidate')
     parser.add_argument('--expect-remote-access', action='store_true')
+    parser.add_argument('--with-remote-access', action='store_true', help='Attach a stopped managed zrok sidecar')
     parser.add_argument('--verify-catalog', action='store_true', help='Require the official catalog to offer the target')
     args = parser.parse_args()
+    args.expect_remote_access = args.expect_remote_access or args.with_remote_access
     client = docker.from_env()
     suffix = secrets.token_hex(5)
     name = 'dcc-web-update-qa-' + suffix
@@ -58,6 +60,7 @@ def main():
     labels = {'dcc.qa': 'updater-https', 'io.dcc.web.proxy': name}
     volumes = []
     proxy = network = None
+    remote_name = None
     runner = client.containers.get(os.environ['HOSTNAME']) if os.getenv('DCC_QA_IN_CONTAINER') else None
     old_image, target = args.old_image, args.target_image
     service = UpdateService(client, wait_seconds=90)
@@ -142,6 +145,27 @@ def main():
             return headers, body
 
         wait_for(login_page, 'Old Web HTTPS does not respond')
+        if args.with_remote_access:
+            code = """import sys
+sys.path.insert(0, "/opt/dcc")
+from contextlib import closing
+from flask import Flask
+from state import State
+from remote_access import RemoteAccess, local_container
+remote = RemoteAccess(Flask(__name__), State("/data"))
+"""
+            command = ['/usr/local/bin/dcc-web-entrypoint', 'python', '-c']
+            result = web.exec_run([*command, code + 'print(remote.name)'])
+            match = re.search(rb'(?m)^dcc-remote-access-[a-f0-9]{16}$', result.output)
+            assert result.exit_code == 0 and match, result.output.decode(errors='replace')[-1200:]
+            remote_name = match[0].decode()
+            remote_panel = remote_name + '-panel'
+            result = web.exec_run([*command, code + """
+with closing(remote.client_factory()) as client:
+    remote.install(client, local_container(client))
+"""])
+            assert result.exit_code == 0, result.output.decode(errors='replace')[-1200:]
+            remote_id = client.containers.get(remote_name).id
         web.reload()
         inventory = client.containers.list(all=True, ignore_removed=True)
         assert service._unsupported_reason(web, inventory) is None
@@ -165,6 +189,8 @@ def main():
                 raise AssertionError('Rollback was not exercised')
         web = client.containers.get(name)
         assert web.id == old_id
+        if remote_name:
+            assert 'dcc-remote-panel' in web.attrs['NetworkSettings']['Networks'][remote_panel]['Aliases']
         service._wait_until_healthy(web)
         wait_for(login_page, 'HTTPS did not recover after rollback')
         service.update_one(web, target, _image_already_pulled=True)
@@ -174,6 +200,10 @@ def main():
         assert web.attrs['NetworkSettings']['Ports']['8789/tcp'][0]['HostPort'] == str(web_port)
         assert web.attrs['HostConfig']['ReadonlyRootfs'] is True
         assert 'dcc-web-upstream' in web.attrs['NetworkSettings']['Networks'][network_name]['Aliases']
+        if remote_name:
+            assert 'dcc-remote-panel' in web.attrs['NetworkSettings']['Networks'][remote_panel]['Aliases']
+            sidecar = client.containers.get(remote_name)
+            assert sidecar.id == remote_id and sidecar.attrs['State']['Status'] == 'created'
         headers, page = wait_for(login_page, 'New Web HTTPS does not respond')
         assert 'Secure' in headers['Set-Cookie']
         csrf = re.search(rb'name="csrf" value="([^"]+)"', page)[1].decode()
@@ -189,7 +219,8 @@ def main():
         if args.expect_remote_access:
             status, _, body = request('/api/admin/remote-access', headers={'Cookie':cookie})
             remote = json.loads(body)
-            assert status == 200 and remote['available'] and remote['state'] == 'not-installed', remote
+            expected_state = 'configure' if remote_name else 'not-installed'
+            assert status == 200 and remote['available'] and remote['state'] == expected_state, remote
             status, _, body = request('/static/views/remote_access.js')
             assert status == 200 and 'Zdalny dostęp przez Internet'.encode() in body
             if args.verify_catalog:
@@ -222,7 +253,8 @@ def main():
         print(json.dumps({'old_image':old_image,'new_image':target,'rollback':True,'https_login':True,
             'same_caddy_container':True,'same_ca_and_port':True,'web_volume_preserved':True,
             'same_http_port':True,'managed_alias_preserved':True,'automatic_update_eligible':True,
-            'remote_access_verified':args.expect_remote_access,'official_catalog_verified':args.verify_catalog}))
+            'remote_access_verified':args.expect_remote_access,'remote_network_preserved':bool(remote_name),
+            'official_catalog_verified':args.verify_catalog}))
     finally:
         if runner and network:
             try: network.disconnect(runner)
@@ -230,6 +262,16 @@ def main():
         for container in client.containers.list(all=True, filters={'label':'dcc.qa=updater-https'}):
             if (container.attrs.get('Config',{}).get('Labels') or {}).get('io.dcc.web.proxy') == name:
                 container.remove(force=True, v=False)
+        if remote_name:
+            try:
+                client.containers.get(remote_name).remove(force=True, v=False)
+            except docker.errors.NotFound:
+                pass
+            for suffix in ('-panel', '-egress'):
+                try:
+                    client.networks.get(remote_name + suffix).remove()
+                except docker.errors.NotFound:
+                    pass
         if network: network.remove()
         for volume in reversed(volumes): volume.remove()
         client.close()

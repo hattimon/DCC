@@ -1,3 +1,9 @@
+# DCC Container Updater 1.1.3
+
+Update DCC Web with both managed Caddy HTTPS and a stopped Remote Access tunnel. Replacement and rollback preserve both Docker networks and their aliases. Turn off the tunnel from DCC Web before updating.
+
+Aktualizacja DCC Web obsługuje zarządzane HTTPS Caddy oraz zatrzymany tunel Remote Access. Podmiana i wycofanie zachowują obie sieci Docker i ich aliasy. Przed aktualizacją wyłącz tunel w DCC Web.
+
 # DCC Container Updater 1.1.2
 
 Safely update the official DCC Web container when its optional managed HTTPS Caddy proxy uses a dedicated Docker network. The updater recognizes only the DCC-created Web/Caddy pair, preserves the `dcc-web-upstream` alias during replacement and reconnects the previous container on rollback. Unrecognized custom networks and additional network peers remain blocked.
