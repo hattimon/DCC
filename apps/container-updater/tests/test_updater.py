@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 import base64
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -11,7 +12,8 @@ from urllib.error import URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from updater import UpdateService, compare_versions, friendly_registry_error, image_reference, load_catalog, normalized_repository, version_tuple
+from updater import (DCC_REMOTE_STOP_REQUIRED, DCC_REMOTE_UPDATE_LABEL, UpdateService,
+                     compare_versions, friendly_registry_error, image_reference, load_catalog, normalized_repository, version_tuple)
 
 
 class ImageReferenceTests(unittest.TestCase):
@@ -986,7 +988,7 @@ class ContainerConfigurationTests(unittest.TestCase):
 
 
 class DccWebHttpsUpdateTests(unittest.TestCase):
-    def _run_update(self, fail_replacement_start=False):
+    def _run_update(self, fail_replacement_start=False, active_tunnel=False):
         web, proxy, network_name = ContainerSafetyTests()._dcc_web_https_pair()
         events = []
 
@@ -1026,6 +1028,9 @@ class DccWebHttpsUpdateTests(unittest.TestCase):
             def pull(self, image):
                 events.append(("pull", image))
 
+            def get(self, _image):
+                return SimpleNamespace(id="sha256:new", attrs={"Config": {"Labels": {DCC_REMOTE_UPDATE_LABEL: "1"}}})
+
         def start_replacement():
             events.append(("start-replacement",))
             if fail_replacement_start:
@@ -1042,7 +1047,17 @@ class DccWebHttpsUpdateTests(unittest.TestCase):
             networks=SimpleNamespace(get=lambda name: self.assertEqual(name, network_name) or FakeNetwork()),
         )
         service = UpdateService(client, wait_seconds=1)
-        with patch.object(service, "_wait_until_healthy"):
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(service, "_wait_until_healthy", side_effect=lambda item: events.append(("healthy", item.id))))
+            if active_tunnel:
+                stack.enter_context(patch.object(service, "_unsupported_reason", return_value=DCC_REMOTE_STOP_REQUIRED))
+                stack.enter_context(patch.object(service, "_dcc_web_attachments", return_value=(
+                    {network_name: ("dcc-web", "dcc-web-upstream")}, (network_name, Mock(), ()),
+                )))
+                stack.enter_context(patch.object(service, "_verify_remote_networks"))
+                stack.enter_context(patch.object(service, "_remote_update_control", side_effect=(
+                    lambda item, operation, *args: events.append((operation, item.id, args)) or True
+                )))
             if fail_replacement_start:
                 with self.assertRaisesRegex(RuntimeError, "przywrócono poprzedni kontener"):
                     service.update_one(web, "ghcr.io/hattimon/dcc-web:0.1.6")
@@ -1065,6 +1080,19 @@ class DccWebHttpsUpdateTests(unittest.TestCase):
         self.assertIn(("connect", "dcc-backup-0123456789", ["dcc-web", "dcc-web-upstream"]), events)
         self.assertIn(("rename-old", "dcc-web"), events)
         self.assertIn(("start-old",), events)
+
+    def test_approved_tunnel_resumes_after_replacement_or_rollback_is_healthy(self):
+        for rollback in (False, True):
+            with self.subTest(rollback=rollback):
+                result = self._run_update(fail_replacement_start=rollback, active_tunnel=True)
+                events = result[0] if rollback else result[1]
+                pause = next(event for event in events if event[0] == "pause")
+                resume = next(event for event in events if event[0] == "resume")
+                self.assertEqual(pause[2][0], resume[2][0])
+                self.assertEqual(pause[2][1], "sha256:new")
+                self.assertEqual(resume[1], pause[1] if rollback else "replacement-id")
+                self.assertLess(events.index(pause), next(i for i, event in enumerate(events) if event[0] == "stop-old"))
+                self.assertLess(events.index(("healthy", resume[1])), events.index(resume))
 
 class UpdateRollbackTests(unittest.TestCase):
     def test_transient_pull_retries_before_touching_the_running_container(self):

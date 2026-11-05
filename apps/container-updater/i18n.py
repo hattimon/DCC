@@ -399,8 +399,22 @@ DIAGNOSTICS = {
     "Kontener jest zarządzany przez Docker Swarm.": "Docker Swarm manages this container.",
     "Kontener ma włączone automatyczne usuwanie; nie można bezpiecznie zachować kopii.": "Auto-remove is enabled; a rollback container cannot be retained safely.",
     "Kontener używa niestandardowej lub wielokrotnej sieci Docker.": "The container uses a custom or multiple Docker networks.",
-    "Wyłącz dostęp zdalny w panelu DCC Web przed aktualizacją.": "Turn off Remote Access in the DCC Web panel before updating.",
+    (
+        "Wyłącz dostęp zdalny na czas aktualizacji. Otwórz DCC Web przez lokalny adres HTTPS. "
+        "Wybierz Ustawienia → Administracja i bezpieczeństwo → Dostęp do panelu i HTTPS (TLS) "
+        "→ Zdalny dostęp przez Internet → Wyłącz dostęp i potwierdź. "
+        "W Updaterze kliknij Sprawdź przy DCC Web, zaznacz kontener i kliknij Aktualizuj zaznaczone. "
+        "Po aktualizacji wróć do tej sekcji w lokalnym panelu i kliknij Włącz dostęp."
+    ): (
+        "Turn off Remote Access for the duration of the update. Open DCC Web using its local HTTPS address. "
+        "Go to Settings → Administration and security → Panel access and HTTPS (TLS) "
+        "→ Remote Internet Access → Disable access and confirm. "
+        "In Updater, click Check next to DCC Web, select the container, and click Update selected. "
+        "After the update, return to this section in the local panel and click Enable access."
+    ),
     "Nie można potwierdzić zarządzanej sieci DCC Remote Access.": "The managed DCC Remote Access network could not be verified.",
+    "DCC Web wznawia tunel zrok. Sprawdź jego stan w lokalnym panelu.": "DCC Web is resuming the zrok tunnel. Check its status in the local panel.",
+    "Włącz tunel zrok w lokalnym panelu DCC Web.": "Enable the zrok tunnel in the local DCC Web panel.",
     "Nie można potwierdzić zarządzanej sieci HTTPS DCC Web. Sprawdź kontener Caddy i dodatkowe połączenia sieciowe. Ewentualnie usuń rozszerzenie HTTPS w ustawieniach DCC Web, zaktualizuj panel i ponownie włącz HTTPS. Samo zatrzymanie Caddy nie usuwa połączenia sieciowego.": "The managed DCC Web HTTPS network could not be verified. Check the Caddy container and additional network attachments. Alternatively, remove the HTTPS extension in DCC Web settings, update the panel, then enable HTTPS again. Stopping Caddy alone does not remove the network attachment.",
     "Kontener współdzieli przestrzeń sieciową innego kontenera.": "The container shares another container's network namespace.",
     "Kontener nie przechowuje nazwy obrazu, której można użyć do pobrania aktualizacji.": "The container has no image reference that can be used to pull an update.",

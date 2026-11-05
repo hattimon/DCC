@@ -7,6 +7,7 @@ import base64
 import json
 import os
 import re
+import secrets
 import subprocess
 import tempfile
 import time
@@ -31,7 +32,16 @@ DCC_WEB_PROXY_ALIAS = "dcc-web-upstream"
 DCC_REMOTE_LABEL = "io.dcc.remote-access"
 DCC_REMOTE_ALIAS = "dcc-remote-panel"
 DCC_REMOTE_REPOSITORY = "docker.io/openziti/zrok2"
-DCC_REMOTE_STOP_REQUIRED = "Wyłącz dostęp zdalny w panelu DCC Web przed aktualizacją."
+DCC_REMOTE_UPDATE_LABEL = "io.dcc.web.remote-maintenance"
+DCC_REMOTE_RESUMING = " DCC Web wznawia tunel zrok. Sprawdź jego stan w lokalnym panelu."
+DCC_REMOTE_RESUME_FAILED = " Włącz tunel zrok w lokalnym panelu DCC Web."
+DCC_REMOTE_STOP_REQUIRED = (
+    "Wyłącz dostęp zdalny na czas aktualizacji. Otwórz DCC Web przez lokalny adres HTTPS. "
+    "Wybierz Ustawienia → Administracja i bezpieczeństwo → Dostęp do panelu i HTTPS (TLS) "
+    "→ Zdalny dostęp przez Internet → Wyłącz dostęp i potwierdź. "
+    "W Updaterze kliknij Sprawdź przy DCC Web, zaznacz kontener i kliknij Aktualizuj zaznaczone. "
+    "Po aktualizacji wróć do tej sekcji w lokalnym panelu i kliknij Włącz dostęp."
+)
 DCC_REMOTE_NETWORK_UNVERIFIED = "Nie można potwierdzić zarządzanej sieci DCC Remote Access."
 SUPPORTED_NETWORK_MODES = {"default", "bridge", "host", "none"}
 COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
@@ -638,9 +648,9 @@ class UpdateService:
             attachments[remote[0]] = remote[2]
         return attachments, remote
 
-    def _verify_remote_networks(self, container: Any, sidecar: Any, ingress_network: Any) -> None:
+    def _verify_remote_networks(self, container: Any, sidecar: Any, ingress_network: Any, *, require_stopped: bool = True) -> None:
         sidecar.reload()
-        if (sidecar.attrs.get("State") or {}).get("Status") not in {"created", "exited"}:
+        if require_stopped and (sidecar.attrs.get("State") or {}).get("Status") not in {"created", "exited"}:
             raise RuntimeError(DCC_REMOTE_STOP_REQUIRED)
         owner = sidecar.name.removeprefix("dcc-remote-access-")
         ingress, egress = sidecar.name + "-panel", sidecar.name + "-egress"
@@ -698,6 +708,25 @@ class UpdateService:
                 )
             return "Kontener używa niestandardowej lub wielokrotnej sieci Docker."
         return None
+
+    @staticmethod
+    def _remote_update_control(container: Any, *args: str) -> bool:
+        labels = (container.attrs.get("Config") or {}).get("Labels") or {}
+        if labels.get(DCC_REMOTE_UPDATE_LABEL) != "1":
+            return False
+        try:
+            result = container.exec_run(
+                ["python", "/opt/dcc/apps/dcc-web/remote_maintenance.py", *args], user="10001:10001",
+            )
+            return result.exit_code == 0
+        except Exception:
+            return False
+
+    def update_blocker(self, container: Any, all_containers: list[Any] | None = None) -> str | None:
+        reason = self._unsupported_reason(container, all_containers)
+        if reason == DCC_REMOTE_STOP_REQUIRED and self._remote_update_control(container, "status"):
+            return None
+        return reason
 
     @staticmethod
     def _path_is_under(path: Path, roots: tuple[str, ...]) -> bool:
@@ -1349,7 +1378,7 @@ class UpdateService:
         if self._is_self(container):
             result.update(supported=False, auto_update_supported=False, message="To jest panel aktualizujący; pominięto aktualizację samego panelu.")
             return result
-        runtime_blocker = self._unsupported_reason(container, all_containers)
+        runtime_blocker = self.update_blocker(container, all_containers)
         if not current:
             result.update(
                 supported=False,
@@ -1835,7 +1864,12 @@ class UpdateService:
             all_containers = self.client.containers.list(all=True, ignore_removed=True)
             attachments, remote = self._dcc_web_attachments(container, all_containers)
         reason = self._unsupported_reason(container, all_containers)
-        if reason:
+        pause_tunnel = bool(
+            remote and reason == DCC_REMOTE_STOP_REQUIRED
+            and normalized_repository(target_image) == normalized_repository(DCC_WEB_IMAGE)
+            and self._remote_update_control(container, "status")
+        )
+        if reason and not pause_tunnel:
             raise RuntimeError(reason)
 
         # Validate and build the replacement config while the original is still running.
@@ -1843,12 +1877,20 @@ class UpdateService:
         # Pull first: a registry or network failure leaves the running service untouched.
         if not _image_already_pulled:
             self._pull_image_with_retry(target_image)
+        nonce = None
+        if pause_tunnel:
+            target = self.client.images.get(target_image)
+            labels = (target.attrs.get("Config") or {}).get("Labels") or {}
+            if labels.get(DCC_REMOTE_UPDATE_LABEL) != "1" or target.id == container.attrs.get("Image"):
+                raise RuntimeError(DCC_REMOTE_STOP_REQUIRED)
+            _expected_image_id = target.id
+            nonce = secrets.token_hex(32)
         managed_networks = {
             name: (self.client.networks.get(name), list(aliases)) for name, aliases in attachments.items()
         }
         if remote:
             ingress, sidecar, _aliases = remote
-            self._verify_remote_networks(container, sidecar, managed_networks[ingress][0])
+            self._verify_remote_networks(container, sidecar, managed_networks[ingress][0], require_stopped=not nonce)
         original_name = str(getattr(container, "name", "")).lstrip("/")
         was_running = str((container.attrs.get("State") or {}).get("Status")) == "running"
         if all_containers is None:
@@ -1864,6 +1906,10 @@ class UpdateService:
         replacement = None
         stopped = renamed = False
         try:
+            if nonce:
+                if not self._remote_update_control(container, "pause", nonce, _expected_image_id):
+                    raise RuntimeError(DCC_REMOTE_STOP_REQUIRED)
+                self._verify_remote_networks(container, sidecar, managed_networks[ingress][0])
             if was_running:
                 container.stop(timeout=15)
                 stopped = True
@@ -1882,13 +1928,19 @@ class UpdateService:
             if was_running:
                 replacement.start()
                 self._wait_until_healthy(replacement)
+            tunnel_result = ""
+            if nonce:
+                tunnel_result = (DCC_REMOTE_RESUMING if self._remote_update_control(replacement, "resume", nonce)
+                                 else DCC_REMOTE_RESUME_FAILED)
             try:
                 container.remove(v=False)
-                return f"Zaktualizowano do {target_image}; wolumeny i konfiguracja zostały zachowane."
+                return f"Zaktualizowano do {target_image}; wolumeny i konfiguracja zostały zachowane.{tunnel_result}"
             except Exception as exc:
-                return f"Zaktualizowano do {target_image}; stary kontener pozostał jako kopia {backup_name} ({type(exc).__name__})."
+                return f"Zaktualizowano do {target_image}; stary kontener pozostał jako kopia {backup_name} ({type(exc).__name__}).{tunnel_result}"
         except Exception as exc:
             if not stopped and not renamed:
+                if nonce:
+                    self._remote_update_control(container, "resume", nonce)
                 raise
             port_conflict = self._is_docker_port_conflict(exc)
             if replacement is not None:
@@ -1914,6 +1966,8 @@ class UpdateService:
             if stopped:
                 try:
                     container.start()
+                    if nonce:
+                        self._wait_until_healthy(container)
                 except Exception as rollback_exc:
                     rollback_errors.append(rollback_exc)
             if rollback_errors:
@@ -1922,11 +1976,16 @@ class UpdateService:
                 raise RuntimeError(
                     f"{reason} ({type(exc).__name__}); przywrócenie starego kontenera wymaga interwencji ({type(rollback_exc).__name__})."
                 ) from exc
+            tunnel_result = ""
+            if nonce:
+                tunnel_result = (DCC_REMOTE_RESUMING if self._remote_update_control(container, "resume", nonce)
+                                 else DCC_REMOTE_RESUME_FAILED)
             if port_conflict:
                 raise RuntimeError(
                     "Docker wykrył zajęty port podczas uruchamiania nowego kontenera; przywrócono poprzedni kontener."
+                    + tunnel_result
                 ) from exc
-            raise RuntimeError(f"Aktualizacja nie powiodła się; przywrócono poprzedni kontener ({type(exc).__name__}).") from exc
+            raise RuntimeError(f"Aktualizacja nie powiodła się; przywrócono poprzedni kontener ({type(exc).__name__}).{tunnel_result}") from exc
 
     def update_selected(
         self,

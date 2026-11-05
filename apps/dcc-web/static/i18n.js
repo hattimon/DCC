@@ -699,6 +699,13 @@ Zachowaj środowisko i rezerwację zrok|Keep the zrok environment and reservatio
 Udostępnij panel przez HTTPS za pośrednictwem zrok.|Share the panel over HTTPS through zrok.
 Instalacja jest dostępna w kontenerowym DCC Web na lokalnym silniku Docker.|Installation is available in containerized DCC Web on its local Docker engine.
 Zarządzaj zdalnym dostępem z lokalnego panelu.|Manage remote access from the local panel.
+Ręczna aktualizacja DCC Web z tunelem zrok|Manually updating DCC Web with a zrok tunnel
+Wznawiaj tunel po aktualizacjach DCC Web przez Updater|Resume the tunnel after DCC Web updates through Updater
+Updater zatrzyma tunel na czas podmiany i wznowi go po sprawdzeniu panelu. Zwykły restart panelu nadal wymaga ręcznego włączenia tunelu.|Updater will pause the tunnel during replacement and resume it after checking the panel. A regular panel restart still requires you to enable the tunnel manually.
+Wznowienie tunelu po aktualizacji przez Updater jest dozwolone.|Tunnel resumption after an update through Updater is authorized.
+Otwórz DCC Web przez lokalny adres HTTPS. W tej sekcji kliknij „Wyłącz dostęp” i potwierdź.|Open DCC Web using its local HTTPS address. In this section, click “Disable access” and confirm.
+W DCC Container Updater kliknij „Sprawdź” przy DCC Web, zaznacz kontener i kliknij „Aktualizuj zaznaczone”.|In DCC Container Updater, click “Check” next to DCC Web, select the container, and click “Update selected”.
+Po aktualizacji wróć tu przez lokalny adres HTTPS. Kliknij „Włącz dostęp” i potwierdź hasłem oraz kodem 2FA. Zarezerwowana domena zostanie zachowana.|After the update, return here using the local HTTPS address. Click “Enable access” and confirm with your password and a 2FA code. Your reserved domain will be kept.
 Włącz 2FA na swoim koncie administratora, aby uruchomić tunel.|Enable 2FA on your administrator account to start the tunnel.
 Aktualizacja|Update
 Niezainstalowany|Not installed

@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import unittest
 from test_web import WebTests as WebFixture
 from remote_access import (DIGEST, ENVIRONMENT, IMAGE, LABEL, PANEL_NETWORK_POOL,
-                           PANEL_NETWORK_PREFIX, RemoteError, SETTINGS, WAIT, name_origin)
+                           PANEL_NETWORK_PREFIX, RemoteError, SETTINGS, UPDATE_CONTROL_LABEL, WAIT, name_origin)
 
 
 class RemoteAccessTests(unittest.TestCase):
@@ -39,6 +39,41 @@ class RemoteAccessTests(unittest.TestCase):
     def enable_fixture_mfa(self):
         self.state.execute("INSERT INTO mfa VALUES(?,?,?,?,?,?,?)",
                            (self.user, b"test-only", 1, -1, "[]", 0, ""))
+
+    def test_update_resume_requires_consent_and_accepts_only_the_expected_image_once(self):
+        self.enable_fixture_mfa()
+        self.route["verified"] = True
+        self.remote.route = self.route
+        sidecar = Mock(attrs={"State": {"Running": True}})
+        target = "sha256:" + "a" * 64
+        client = Mock()
+        client.images.get.return_value.attrs = {
+            "RepoTags": ["ghcr.io/hattimon/dcc-web:0.2.9"],
+            "Config": {"Labels": {UPDATE_CONTROL_LABEL: "1"}},
+        }
+        original = SimpleNamespace(id="original", attrs={"Image": "sha256:old"})
+        replacement = SimpleNamespace(id="replacement", attrs={"Image": target})
+        with patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "validate_container"), patch.object(self.remote, "enable") as enable, \
+                patch("remote_access.threading.Thread") as worker:
+            self.assertFalse(self.remote.pause_for_update(client, original, "proof", target))
+            sidecar.stop.assert_not_called()
+            self.route["resume_after_update"] = True
+            self.assertTrue(self.remote.pause_for_update(client, original, "proof", target))
+            sidecar.stop.assert_called_once_with(timeout=12)
+            self.assertIsNone(self.remote.route)
+            foreign = SimpleNamespace(id="foreign", attrs={"Image": "sha256:foreign"})
+            self.assertFalse(self.remote.resume_after_update(client, foreign, "proof"))
+            self.assertFalse(self.remote.resume_after_update(client, replacement, "wrong"))
+            self.assertTrue(self.remote.resume_after_update(client, replacement, "proof"))
+            worker.call_args.kwargs["target"]()
+            enable.assert_called_once_with(sidecar, self.user, self.remote.epoch, resume_after_update=True)
+            self.assertFalse(self.remote.resume_after_update(client, original, "proof"))
+            self.remote.route = self.route
+            self.assertTrue(self.remote.pause_for_update(client, original, "other-proof", target))
+            with patch("remote_access.time.time", return_value=time.time() + 601):
+                self.assertFalse(self.remote.resume_after_update(client, replacement, "other-proof"))
+            self.assertFalse(self.remote.resume_after_update(client, replacement, "other-proof"))
 
     def test_panel_network_subnet_avoids_docker_ranges_and_configured_hosts(self):
         candidates = tuple(PANEL_NETWORK_POOL.subnets(new_prefix=PANEL_NETWORK_PREFIX))

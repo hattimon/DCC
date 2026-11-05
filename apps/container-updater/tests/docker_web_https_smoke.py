@@ -26,6 +26,42 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from updater import UpdateService, load_catalog
 
 
+# The real controller, socket, database and sidecar run in Docker. Substitute
+# zrok's account and hosted HTTPS calls so the fixture needs no public domain.
+SYNTHETIC_PROVIDER = """
+from contextlib import closing
+import remote_maintenance
+import web
+
+start_control = remote_maintenance.start_control
+def start_fixture(remote):
+    remote.restore = lambda sidecar, config: sidecar.start()
+    remote.reservation = lambda sidecar, name: {
+        'reserved': True, 'namespaceToken': 'public', 'namespaceName': 'shares.zrok.io'
+    }
+    remote.command = lambda *args, **kwargs: b''
+    def verify(route):
+        route['verified'] = True
+        remote.tunnel = 'active'
+    remote.monitor = verify
+    handle = remote.maintenance
+    def maintenance(args):
+        if args != ['seed']:
+            return handle(args)
+        owner = 'fixture-tunnel-owner'
+        remote.state.execute('INSERT INTO users VALUES(?,?,?,?)', (owner, owner, 'unused', 'admin'))
+        remote.state.execute('INSERT INTO mfa VALUES(?,?,?,?,?,?,?)', (owner, b'fixture', 1, -1, '[]', 0, ''))
+        remote.save({'name': 'qa-fixture', 'origin': 'https://qa-fixture.shares.zrok.io', 'identity': 'fixture'})
+        with closing(remote.client_factory()) as client:
+            remote.enable(remote.container(client), owner, remote.epoch, resume_after_update=True)
+        return True
+    remote.maintenance = maintenance
+    start_control(remote)
+remote_maintenance.start_control = start_fixture
+web.main()
+"""
+
+
 def wait_for(check, description):
     for _ in range(120):
         try:
@@ -41,6 +77,11 @@ def archive_file(container, path):
         return archive.extractfile(archive.getmembers()[0]).read()
 
 
+def assert_tunnel_ready(service, panel):
+    assert service._remote_update_control(panel, 'status')
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--old-image', default='ghcr.io/hattimon/dcc-web:0.1.7')
@@ -49,8 +90,12 @@ def main():
     parser.add_argument('--local-target', action='store_true', help='Use an already-built release candidate')
     parser.add_argument('--expect-remote-access', action='store_true')
     parser.add_argument('--with-remote-access', action='store_true', help='Attach a stopped managed zrok sidecar')
+    parser.add_argument('--with-tunnel-resume', action='store_true', help='Exercise active tunnel handoff with a synthetic provider and local target image')
     parser.add_argument('--verify-catalog', action='store_true', help='Require the official catalog to offer the target')
     args = parser.parse_args()
+    if args.with_tunnel_resume and not args.local_target:
+        parser.error('--with-tunnel-resume requires a local target')
+    args.with_remote_access = args.with_remote_access or args.with_tunnel_resume
     args.expect_remote_access = args.expect_remote_access or args.with_remote_access
     client = docker.from_env()
     suffix = secrets.token_hex(5)
@@ -63,14 +108,26 @@ def main():
     remote_name = None
     runner = client.containers.get(os.environ['HOSTNAME']) if os.getenv('DCC_QA_IN_CONTAINER') else None
     old_image, target = args.old_image, args.target_image
+    qa_images = []
     service = UpdateService(client, wait_seconds=90)
     try:
-        for image in (old_image, 'caddy:2'):
+        for image in ('caddy:2',) if args.with_tunnel_resume else (old_image, 'caddy:2'):
             client.images.pull(image)
         if args.local_target:
             client.images.get(target)
         else:
             client.images.pull(target)
+        command = None
+        if args.with_tunnel_resume:
+            old_image = 'ghcr.io/hattimon/dcc-web:qa-old-' + suffix
+            dockerfile = io.BytesIO(f'FROM {target}\nLABEL dcc.qa.variant=old\n'.encode())
+            client.images.build(fileobj=dockerfile, tag=old_image, rm=True)
+            qa_images.append(old_image)
+            new_image = 'ghcr.io/hattimon/dcc-web:qa-new-' + suffix
+            client.images.get(target).tag(new_image)
+            qa_images.append(new_image)
+            target = new_image
+            command = ['python', '-c', SYNTHETIC_PROVIDER, '--host', '0.0.0.0', '--allow-lan', '--data', '/data']
         for ending in ('data', 'certs', 'config'):
             volumes.append(client.volumes.create(name=name+'-'+ending, labels=labels))
         web_mounts = {volumes[0].name: {'bind': '/data', 'mode': 'rw'}}
@@ -80,6 +137,7 @@ def main():
             port_probe.bind(('127.0.0.1', 0))
             web_port = port_probe.getsockname()[1]
         web = client.containers.run(old_image, name=name, detach=True, labels=labels,
+            command=command,
             environment={'DCC_WEB_CONTAINER_NAME': name},
             volumes=web_mounts, ports={'8789/tcp': ('127.0.0.1', web_port)},
             read_only=True, tmpfs={'/tmp': 'size=64m,mode=1777'},
@@ -166,9 +224,12 @@ with closing(remote.client_factory()) as client:
 """])
             assert result.exit_code == 0, result.output.decode(errors='replace')[-1200:]
             remote_id = client.containers.get(remote_name).id
+            if args.with_tunnel_resume:
+                assert service._remote_update_control(web, 'seed')
+                wait_for(lambda: assert_tunnel_ready(service, web), 'Synthetic tunnel was not authorized')
         web.reload()
         inventory = client.containers.list(all=True, ignore_removed=True)
-        assert service._unsupported_reason(web, inventory) is None
+        assert service.update_blocker(web, inventory) is None
         assert service.automatic_dependency_blocker(web, inventory) is None
         if args.verify_catalog:
             apps = load_catalog()
@@ -180,7 +241,14 @@ with closing(remote.client_factory()) as client:
                 assert len(entries) == 1 and entries[0]['category'] == 'DCC', entries
         # Inject an unhealthy replacement once and verify the real Docker
         # rollback restores the old container and the HTTPS DNS alias.
-        with patch.object(service, '_wait_until_healthy', side_effect=RuntimeError('synthetic health failure')):
+        wait_for_health = service._wait_until_healthy
+
+        def reject_replacement(item):
+            if item.id == old_id:
+                return wait_for_health(item)
+            raise RuntimeError('synthetic health failure')
+
+        with patch.object(service, '_wait_until_healthy', side_effect=reject_replacement):
             try:
                 service.update_one(web, target, _image_already_pulled=True)
             except RuntimeError as error:
@@ -193,6 +261,8 @@ with closing(remote.client_factory()) as client:
             assert 'dcc-remote-panel' in web.attrs['NetworkSettings']['Networks'][remote_panel]['Aliases']
         service._wait_until_healthy(web)
         wait_for(login_page, 'HTTPS did not recover after rollback')
+        if args.with_tunnel_resume:
+            wait_for(lambda: assert_tunnel_ready(service, web), 'Tunnel did not resume after rollback')
         service.update_one(web, target, _image_already_pulled=True)
         web = client.containers.get(name)
         assert web.id != old_id and web.attrs['Config']['Image'] == target
@@ -203,7 +273,11 @@ with closing(remote.client_factory()) as client:
         if remote_name:
             assert 'dcc-remote-panel' in web.attrs['NetworkSettings']['Networks'][remote_panel]['Aliases']
             sidecar = client.containers.get(remote_name)
-            assert sidecar.id == remote_id and sidecar.attrs['State']['Status'] == 'created'
+            assert sidecar.id == remote_id
+            if args.with_tunnel_resume:
+                wait_for(lambda: assert_tunnel_ready(service, web), 'Tunnel did not resume after successful replacement')
+            else:
+                assert sidecar.attrs['State']['Status'] == 'created'
         headers, page = wait_for(login_page, 'New Web HTTPS does not respond')
         assert 'Secure' in headers['Set-Cookie']
         csrf = re.search(rb'name="csrf" value="([^"]+)"', page)[1].decode()
@@ -219,7 +293,7 @@ with closing(remote.client_factory()) as client:
         if args.expect_remote_access:
             status, _, body = request('/api/admin/remote-access', headers={'Cookie':cookie})
             remote = json.loads(body)
-            expected_state = 'configure' if remote_name else 'not-installed'
+            expected_state = 'active' if args.with_tunnel_resume else 'configure' if remote_name else 'not-installed'
             assert status == 200 and remote['available'] and remote['state'] == expected_state, remote
             status, _, body = request('/static/views/remote_access.js')
             assert status == 200 and 'Zdalny dostęp przez Internet'.encode() in body
@@ -254,6 +328,7 @@ with closing(remote.client_factory()) as client:
             'same_caddy_container':True,'same_ca_and_port':True,'web_volume_preserved':True,
             'same_http_port':True,'managed_alias_preserved':True,'automatic_update_eligible':True,
             'remote_access_verified':args.expect_remote_access,'remote_network_preserved':bool(remote_name),
+            'synthetic_tunnel_resumed':args.with_tunnel_resume,
             'official_catalog_verified':args.verify_catalog}))
     finally:
         if runner and network:
@@ -274,6 +349,7 @@ with closing(remote.client_factory()) as client:
                     pass
         if network: network.remove()
         for volume in reversed(volumes): volume.remove()
+        for image in reversed(qa_images): client.images.remove(image, force=True)
         client.close()
 
 

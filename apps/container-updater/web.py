@@ -928,7 +928,7 @@ def create_app(
                     raise ValueError("Wybierz samodzielne kontenery. Compose wymaga ręcznej aktualizacji, a panel ma osobny przełącznik.")
                 dependency_check = getattr(service, "automatic_dependency_blocker", None)
                 inventory = service.client.containers.list(all=True, ignore_removed=True) if callable(dependency_check) else None
-                blocker = service._unsupported_reason(container, inventory)
+                blocker = getattr(service, "update_blocker", service._unsupported_reason)(container, inventory)
                 if blocker:
                     raise ValueError(blocker)
                 if callable(dependency_check):
@@ -1074,7 +1074,7 @@ def create_app(
                 }), 400
             list_containers = getattr(service.client.containers, "list", None)
             inventory = list_containers(all=True) if callable(list_containers) else None
-            reason = service._unsupported_reason(container, inventory)
+            reason = getattr(service, "update_blocker", service._unsupported_reason)(container, inventory)
             if reason:
                 return jsonify({"error": reason}), 400
             if inventory is not None:

@@ -260,8 +260,9 @@
         }
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "v1.3.12",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/v1.3.12"
+      "latest_release": "updater-v1.1.3",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/updater-v1.1.3",
+      "release_tag_pattern": "updater-v[0-9]+\\.[0-9]+\\.[0-9]+"
     },
     {
       "name": "DCC Web",

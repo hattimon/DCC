@@ -72,7 +72,11 @@ def local_container(client):
         except Exception:
             continue
         attrs = container.attrs
-        if hostname and attrs.get('Config',{}).get('Hostname') == hostname and any(m.get('Destination')=='/data' for m in attrs.get('Mounts',[])):
+        # The Updater preserves Hostname. The stopped backup can still be
+        # looked up by that ID while its replacement is starting.
+        if (hostname and attrs.get('State', {}).get('Running')
+                and attrs.get('Config', {}).get('Hostname') == hostname
+                and any(m.get('Destination') == '/data' for m in attrs.get('Mounts', []))):
             return container
     raise ValueError('Cannot safely identify this DCC Web container')
 

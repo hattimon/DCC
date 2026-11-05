@@ -1,4 +1,6 @@
-# DCC Web 0.2.7
+# DCC Web 0.2.8
+
+When enabling zrok from the local panel, administrators can allow DCC Container Updater 1.1.4 or newer to pause and resume the tunnel during compatible Web updates. Both Web images must support the handoff. The first upgrade from an older Web version uses the manual steps shown next to the blocker. [Release notes](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.2.8)
 
 [English](README.md) · [Polski](README.pl.md) · [GitHub repository](https://github.com/hattimon/DCC)
 
@@ -34,7 +36,7 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 
 ## Install on Windows, macOS or Linux
 
-Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.7/DCC-Web-0.2.7-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.2.7` directory:
+Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.8/DCC-Web-0.2.8-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.2.8` directory:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py

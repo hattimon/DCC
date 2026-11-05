@@ -331,7 +331,7 @@ class MCPService:
             choices=self.profile_choices(grant)
             selector_help=("Select a granted connection profile by its exact name or host/IP address; the profile ID also works when names or addresses are ambiguous. Granted profiles: "+", ".join(choices)+". ") if choices else "Select a granted connection profile by name, host/IP address, or profile ID. "
             result = {"protocolVersion": version, "capabilities": {"tools": {"listChanged": False}},
-                      "serverInfo": {"name": "dcc-web", "version": "0.2.7"},
+                      "serverInfo": {"name": "dcc-web", "version": "0.2.8"},
                       "instructions": selector_help+("Read-only tools are enabled." if mode == "read" else "Only explicitly granted tools and profiles are enabled. Every operation is checked against the current profile permissions. Container removal does not delete volumes.") + " Use stdio transport; HTTP transport is not exposed."}
             self.negotiated = True
         elif method == "ping":

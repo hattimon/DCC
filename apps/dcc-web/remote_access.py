@@ -25,6 +25,9 @@ DIGEST = "sha256:00c5b65bbb5b7c045c1d23d35ab392f2edd43633ee8513c7a858899993f41d8
 IMAGE = f"docker.io/openziti/zrok2:{ZROK_VERSION}@{DIGEST}"
 LABEL = "io.dcc.remote-access"
 SETTINGS = "__dcc_remote_access__"
+UPDATE_TICKET = "__dcc_remote_update__"
+UPDATE_CONTROL_LABEL = "io.dcc.web.remote-maintenance"
+UPDATE_TICKET_SECONDS = 600
 PORT = 8791
 PANEL_NETWORK_POOL = ipaddress.ip_network("198.18.0.0/15")
 PANEL_NETWORK_PREFIX = 28
@@ -453,25 +456,33 @@ class RemoteAccess:
         finally:
             self.stop(container)
 
-    def enable(self, container, owner, epoch):
+    def enable(self, container, owner, epoch, *, resume_after_update=False):
         self.policy(owner)
         config = self.saved()
         if not config.get("origin") or not config.get("identity"):
             raise RemoteError("Configure a zrok environment and reserve a name first.")
         try:
             self.restore(container, config)
-            reservation = self.reservation(container, config["name"])
-            if not reservation or not reservation.get("reserved") or name_origin(config["name"], reservation) != config["origin"]:
-                raise RemoteError("The saved public reservation is unavailable.")
-            if reservation.get("shareToken"):
-                raise RemoteError("The reserved name still has a share. Release it in the zrok console before enabling again.")
+            attempts = 4 if resume_after_update else 1
+            for attempt in range(attempts):
+                reservation = self.reservation(container, config["name"])
+                if not reservation or not reservation.get("reserved") or name_origin(config["name"], reservation) != config["origin"]:
+                    raise RemoteError("The saved public reservation is unavailable.")
+                if not reservation.get("shareToken"):
+                    break
+                if attempt == attempts - 1:
+                    raise RemoteError("The reserved name still has a share. Release it in the zrok console before enabling again.")
+                if epoch != self.epoch:
+                    raise RemoteError("Public access was disabled during startup.")
+                time.sleep(3)
             container.reload()
             peer = container.attrs["NetworkSettings"]["Networks"][self.ingress]["IPAddress"]
             if not peer:
                 raise RemoteError("The tunnel did not receive a private network address.")
             host = urlsplit(config["origin"]).hostname
             route = {"peer": peer, "host": host, "origin": config["origin"], "nonce": secrets.token_urlsafe(32),
-                     "lease": secrets.token_urlsafe(32), "owner": owner, "verified": False}
+                     "lease": secrets.token_urlsafe(32), "owner": owner, "verified": False,
+                     "resume_after_update": resume_after_update}
             with self.intent:
                 if epoch != self.epoch:
                     raise RemoteError("Public access was disabled during startup.")
@@ -483,6 +494,87 @@ class RemoteAccess:
             self.stop(container)
             raise
         threading.Thread(target=self.monitor, args=(route,), name="dcc-remote-tunnel", daemon=True).start()
+
+    def update_pause_allowed(self):
+        route = self.route
+        return bool(self.available and route and route["verified"] and route.get("resume_after_update")
+                    and not self.network_error and not self.blocked() and self.owner_can_enable(route["owner"]))
+
+    def maintenance(self, args):
+        if args == ["status"]:
+            return self.update_pause_allowed()
+        if len(args) not in {2, 3} or not re.fullmatch(r"[0-9a-f]{64}", args[1]):
+            return False
+        action, nonce = args[:2]
+        proof = hashlib.sha256(nonce.encode()).hexdigest()
+        with self.lock, closing(self.client_factory()) as client:
+            panel = local_container(client)
+            if action == "pause" and len(args) == 3 and re.fullmatch(r"sha256:[0-9a-f]{64}", args[2]):
+                return self.pause_for_update(client, panel, proof, args[2])
+            if action == "resume" and len(args) == 2:
+                return self.resume_after_update(client, panel, proof)
+        return False
+
+    def pause_for_update(self, client, panel, proof, target_image):
+        image = client.images.get(target_image)
+        if (image.attrs.get("Config", {}).get("Labels") or {}).get(UPDATE_CONTROL_LABEL) != "1":
+            return False
+        if not any(ref.startswith(("ghcr.io/hattimon/dcc-web:", "ghcr.io/hattimon/dcc-web@"))
+                   for ref in (image.attrs.get("RepoTags") or []) + (image.attrs.get("RepoDigests") or [])):
+            return False
+        sidecar = self.container(client)
+        if not sidecar:
+            return False
+        sidecar.reload()
+        self.validate_container(sidecar)
+        with self.intent:
+            if not self.update_pause_allowed() or not sidecar.attrs["State"]["Running"]:
+                return False
+            owner = self.route["owner"]
+            ticket = dict(proof=proof, owner=owner, panel=panel.id, target=target_image,
+                          expires=time.time() + UPDATE_TICKET_SECONDS)
+            self.state.execute("INSERT OR REPLACE INTO settings VALUES(?,?)",
+                               (UPDATE_TICKET, self.state.encode_profile(ticket)))
+            self.epoch += 1
+            self.route = None
+        self.stop(sidecar)
+        self.state.audit(owner, "remote-access.update-pause", self.name, 200)
+        return True
+
+    def resume_after_update(self, client, panel, proof):
+        rows = self.state.rows("SELECT data FROM settings WHERE user_id=?", (UPDATE_TICKET,))
+        if not rows or self.route or self.network_error:
+            return False
+        saved = rows[0]["data"]
+        ticket = self.state.decode_profile(saved)
+        if time.time() >= ticket["expires"]:
+            self.state.execute("DELETE FROM settings WHERE user_id=? AND data=?", (UPDATE_TICKET, saved))
+            return False
+        if (not secrets.compare_digest(proof, ticket["proof"])
+                or (panel.id != ticket["panel"] and panel.attrs.get("Image") != ticket["target"])):
+            return False
+        self.policy(ticket["owner"])
+        sidecar = self.container(client)
+        if not sidecar or not self.state.execute("DELETE FROM settings WHERE user_id=? AND data=?", (UPDATE_TICKET, saved)):
+            return False
+        owner, epoch = ticket["owner"], self.epoch
+        self.tunnel, self.error = "connecting", ""
+
+        def restore():
+            with self.lock:
+                if self.epoch != epoch or self.route:
+                    return
+                try:
+                    self.enable(sidecar, owner, epoch, resume_after_update=True)
+                    self.state.audit(owner, "remote-access.update-resume", self.name, 200)
+                except Exception:
+                    if self.epoch == epoch:
+                        self.tunnel = "error"
+                        self.error = "Could not resume the tunnel after updating. Enable access from the local panel."
+                    self.state.audit(owner, "remote-access.update-resume", self.name, 503)
+
+        threading.Thread(target=restore, name="dcc-remote-update-resume", daemon=True).start()
+        return True
 
     def monitor(self, route):
         failures = 0
@@ -574,7 +666,8 @@ class RemoteAccess:
                   "name": config.get("name"), "pending_name": config.get("pending_name"),
                   "origin": config.get("origin"), "enrolled": bool(config.get("identity")),
                   "last_connection": self.last_connection, "error": self.error, "update": self.update,
-                  "security": "blocked" if self.blocked() else "pinned"}
+                  "security": "blocked" if self.blocked() else "pinned",
+                  "update_resume_allowed": self.update_pause_allowed()}
         if self.network_error:
             status.update(state="error", tunnel="disabled", error=self.network_error)
             return status
@@ -610,6 +703,8 @@ class RemoteAccess:
                 self.epoch += 1
                 self.route = None
         with self.lock, closing(self.client_factory()) as client:
+            if action != "install":
+                self.state.execute("DELETE FROM settings WHERE user_id=?", (UPDATE_TICKET,))
             container = self.container(client)
             if action == "install":
                 self.install(client, local_container(client))
@@ -628,7 +723,7 @@ class RemoteAccess:
             elif action in {"enable", "restart"}:
                 if action == "enable" and self.route:
                     return {"accepted": True}
-                self.enable(container, owner, epoch)
+                self.enable(container, owner, epoch, resume_after_update=data.get("resume_after_update") is True)
             self.state.audit(owner, "remote-access." + action, self.name, 200)
             return {"accepted": True}
 

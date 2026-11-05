@@ -35,7 +35,7 @@ from remote_access import (
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.2.7"
+VERSION = "0.2.8"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
 DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "refresh_changes_only":False, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 MCP_GRANT_ACTIONS={"mcp.grant.pause","mcp.grant.resume","mcp.grant.revoke","mcp.grant.delete-history"}
@@ -1210,6 +1210,11 @@ def main():
         else:
             remote.available = True
             threading.Thread(target=ingress.run, name="dcc-remote-ingress", daemon=True).start()
+            try:
+                from remote_maintenance import start_control
+                start_control(remote)
+            except OSError as error:
+                print(f"DCC Remote Access update control unavailable ({type(error).__name__}).", flush=True)
     print(f"DCC Web {VERSION}: http://{args.host}:{args.port} (initial setup at /login)",flush=True)
     serve(app,host=args.host,port=args.port,threads=8,channel_timeout=60,ident="DCC-Web")
 

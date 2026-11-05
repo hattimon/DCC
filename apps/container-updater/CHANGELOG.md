@@ -1,3 +1,11 @@
+# DCC Container Updater 1.1.4
+
+Updater pauses and resumes the active zrok tunnel during compatible DCC Web updates after local administrator opt-in. It waits for the replacement or restored panel to become healthy before requesting tunnel resumption. The blocker now shows the manual procedure for older Web versions and installations without consent.
+
+Updater zatrzymuje i wznawia aktywny tunel zrok podczas zgodnych aktualizacji DCC Web po zgodzie administratora w lokalnym panelu. Czeka na gotowość nowego lub przywróconego panelu przed wznowieniem. Komunikat blokady opisuje teraz procedurę ręczną dla starszych wersji Web i instalacji bez zgody.
+
+Linux amd64 / arm64 · `ghcr.io/hattimon/dcc-container-updater:1.1.4` · `latest`
+
 # DCC Container Updater 1.1.3
 
 Update DCC Web with both managed Caddy HTTPS and a stopped Remote Access tunnel. Replacement and rollback preserve both Docker networks and their aliases. Turn off the tunnel from DCC Web before updating.

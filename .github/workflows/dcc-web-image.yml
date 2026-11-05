@@ -44,6 +44,9 @@ jobs:
           python apps/container-updater/tests/docker_web_https_smoke.py \
             --old-image ghcr.io/hattimon/dcc-web:0.2.2 --target-image dcc-web:release-candidate \
             --expected-version "$(cat apps/dcc-web/VERSION)" --local-target --expect-remote-access
+          python apps/container-updater/tests/docker_web_https_smoke.py \
+            --target-image dcc-web:release-candidate --expected-version "$(cat apps/dcc-web/VERSION)" \
+            --local-target --with-tunnel-resume
 
   publish:
     needs: verify

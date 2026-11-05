@@ -1,5 +1,6 @@
 FROM docker:29-cli AS cli
 FROM python:3.12-slim-bookworm
+LABEL io.dcc.web.remote-maintenance="1"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/home/dcc DCC_WEB_DATA=/data DCC_WEB_CONTAINER_NAME=dcc-web
 RUN apt-get update && apt-get install -y --no-install-recommends openssh-client ca-certificates util-linux && rm -rf /var/lib/apt/lists/* && useradd --create-home --uid 10001 dcc && mkdir /data && chown dcc:dcc /data
 COPY --from=cli /usr/local/bin/docker /usr/local/bin/docker
