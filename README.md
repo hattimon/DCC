@@ -206,6 +206,6 @@ DCC Web 0.2.4 adds grant-scoped agent instructions and project ZIPs for seven MC
 
 DCC Web 0.2.6 accepts hosted zrok reservations on `shares.zrok.io` and can resume a pending reservation using the saved environment. After updating through DCC Container Updater, open **Settings → Administration and security → Panel access and HTTPS (TLS) → Remote Internet Access** to finish setup.
 
-DCC Web 0.2.7 defaults BalenaOS profiles to SSH port 22222 and migrates existing profiles that still use the former default port 22. SSH connection failures now report actionable causes such as DNS, timeout, refused connection, authentication, host-key verification or unreadable saved credentials.
+DCC Web 0.2.7 defaults BalenaOS profiles to SSH port 22222 and migrates existing profiles that still use the former default port 22. SSH connection failures now report actionable causes such as DNS, timeout, refused connection, authentication, host-key verification or unreadable saved credentials. It also migrates legacy DCC Remote Access panel networks into a collision-checked subnet pool so the isolated network cannot capture routes to remote profiles; re-enable the tunnel after updating.
 
 DCC Web 0.2.5 fixes the **Profile not found** error when checking the result of Remote Access configuration, activation or restart. Public access starts disabled. [Remote Access (EN)](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.7/apps/dcc-remote-access/README.md) · [Zdalny dostęp (PL)](https://github.com/hattimon/DCC/blob/dcc-web-v0.2.7/apps/dcc-remote-access/README.pl.md)

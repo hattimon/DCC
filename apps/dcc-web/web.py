@@ -1198,6 +1198,11 @@ def main():
     if args.port != REMOTE_PORT and Path("/.dockerenv").is_file() and Path("/var/run/docker.sock").is_socket():
         remote = app.extensions["dcc_remote_access"]
         try:
+            remote.repair_panel_network()
+        except Exception as error:
+            remote.network_error = "The isolated panel network could not be repaired. Remote Access remains unavailable until it is fixed."
+            print(f"DCC Remote Access panel network repair failed ({type(error).__name__}); ingress remains unavailable.", flush=True)
+        try:
             ingress = create_server(remote.as_ingress, map={}, host="0.0.0.0", port=REMOTE_PORT,
                                     threads=8, channel_timeout=60, ident="DCC-Web")
         except OSError:

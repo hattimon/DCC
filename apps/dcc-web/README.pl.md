@@ -1,6 +1,6 @@
 # DCC Web 0.2.7
 
-Wersja 0.2.7 ustawia dla profili BalenaOS standardowy port SSH 22222 i migruje profile ze starym domyślnym portem 22. Błędy SSH wskazują teraz typowe przyczyny, np. brak łączności, błąd uwierzytelniania lub weryfikacji klucza hosta. [Konfiguracja profili](docs/configuration.pl.md)
+Wersja 0.2.7 ustawia dla profili BalenaOS standardowy port SSH 22222 i migruje profile ze starym domyślnym portem 22. Błędy SSH wskazują teraz typowe przyczyny, np. brak łączności, błąd uwierzytelniania lub weryfikacji klucza hosta. Przenosi też starszą sieć panelu DCC Remote Access do sprawdzonej puli podsieci, aby izolowana sieć nie przejmowała tras do zdalnych profili. Podczas migracji sidecar tunelu zostaje zatrzymany i po aktualizacji trzeba go ponownie włączyć. [Konfiguracja profili](docs/configuration.pl.md)
 
 Wersja 0.2.6 obsługuje rezerwacje w domenie `shares.zrok.io` i pozwala dokończyć oczekującą rezerwację z zapisanym środowiskiem.
 

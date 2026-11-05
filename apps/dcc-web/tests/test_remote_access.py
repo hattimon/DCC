@@ -1,13 +1,16 @@
 """Remote ingress and controller regressions without hosted zrok credentials."""
 import hashlib
+import ipaddress
 import json
 import secrets
 import time
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import unittest
 from test_web import WebTests as WebFixture
-from remote_access import DIGEST, RemoteError, SETTINGS, name_origin
+from remote_access import (DIGEST, ENVIRONMENT, IMAGE, LABEL, PANEL_NETWORK_POOL,
+                           PANEL_NETWORK_PREFIX, RemoteError, SETTINGS, WAIT, name_origin)
 
 
 class RemoteAccessTests(unittest.TestCase):
@@ -36,6 +39,153 @@ class RemoteAccessTests(unittest.TestCase):
     def enable_fixture_mfa(self):
         self.state.execute("INSERT INTO mfa VALUES(?,?,?,?,?,?,?)",
                            (self.user, b"test-only", 1, -1, "[]", 0, ""))
+
+    def test_panel_network_subnet_avoids_docker_ranges_and_configured_hosts(self):
+        candidates = tuple(PANEL_NETWORK_POOL.subnets(new_prefix=PANEL_NETWORK_PREFIX))
+        first = candidates[int(self.remote.owner[:8], 16) % len(candidates)]
+        host = str(first.network_address + 2)
+        self.state.save_profile("remote-lan", {
+            "name": "Remote LAN", "kind": "ssh", "host": host, "port": 22,
+            "permissions": ["read"],
+        })
+        existing = SimpleNamespace(name="occupied-range", attrs={"IPAM": {"Config": [
+            {"Subnet": "198.18.0.0/24"},
+        ]}})
+        client = Mock()
+        client.networks.list.return_value = [existing]
+
+        subnet = ipaddress.ip_network(self.remote.panel_network_subnet(client))
+
+        self.assertTrue(subnet.subnet_of(PANEL_NETWORK_POOL))
+        self.assertFalse(subnet.overlaps(ipaddress.ip_network("198.18.0.0/24")))
+        self.assertNotIn(ipaddress.ip_address(host), subnet)
+
+    def test_legacy_ingress_network_migrates_even_before_remote_profiles_exist(self):
+        panel = SimpleNamespace(id="panel-container")
+        container = Mock()
+        container.id = "remote-sidecar"
+        container.attrs = {"Config": {"Labels": {LABEL: self.remote.owner}},
+                           "State": {"Running": True}}
+        owner_id = self.remote.owner
+
+        class FakeNetwork:
+            def __init__(self, name, subnet, containers=None):
+                self.name = name
+                self.id = "network-" + name
+                self.attrs = {
+                    "Labels": {LABEL: owner_id}, "Driver": "bridge", "Internal": True,
+                    "IPAM": {"Config": [{"Subnet": subnet}]},
+                    "Containers": dict(containers or {}),
+                }
+
+            def reload(self):
+                return None
+
+            def disconnect(self, value, force=False):
+                self.attrs["Containers"].pop(value.id, None)
+
+            def connect(self, value, aliases=None):
+                self.attrs["Containers"][value.id] = {"Aliases": aliases or []}
+
+            def remove(self):
+                networks.pop(self.name, None)
+
+        old = FakeNetwork(self.remote.ingress, "192.168.0.0/20", {
+            panel.id: {"Aliases": ["dcc-remote-panel"]}, container.id: {"Aliases": []},
+        })
+        networks = {old.name: old}
+        created = []
+        client = Mock()
+        client.containers.get.return_value = container
+
+        def get_network(name):
+            if name not in networks:
+                from docker.errors import NotFound
+                raise NotFound("missing network")
+            return networks[name]
+
+        def list_networks():
+            return list(networks.values())
+
+        def create_network(name, **kwargs):
+            pools = kwargs["ipam"].get("Config")
+            subnet = pools[0]["Subnet"]
+            value = FakeNetwork(name, subnet)
+            networks[name] = value
+            created.append(value)
+            return value
+
+        client.networks.get.side_effect = get_network
+        client.networks.list.side_effect = list_networks
+        client.networks.create.side_effect = create_network
+        with patch.object(self.remote, "validate_container"), \
+                patch("remote_access.local_container", return_value=panel):
+            repaired = self.remote.repair_panel_network(client)
+
+        self.assertTrue(repaired)
+        self.assertTrue(container.stop.called)
+        self.assertEqual(len(created), 1)
+        subnet = ipaddress.ip_network(created[0].attrs["IPAM"]["Config"][0]["Subnet"])
+        self.assertFalse(subnet.overlaps(ipaddress.ip_network("192.168.0.0/20")))
+        self.assertIn(panel.id, created[0].attrs["Containers"])
+        self.assertIn(container.id, created[0].attrs["Containers"])
+        self.assertEqual(created[0].attrs["Containers"][panel.id]["Aliases"], ["dcc-remote-panel"])
+        self.assertEqual(self.remote.network_error, "")
+
+    def test_interrupted_network_migration_recreates_missing_ingress(self):
+        panel = SimpleNamespace(id="panel-container")
+        container = Mock()
+        container.id = "remote-sidecar"
+        container.attrs = {
+            "Config": {
+                "Labels": {LABEL: self.remote.owner}, "Image": IMAGE, "User": "2171:2171",
+                "Entrypoint": ["/bin/sh", "-c"], "Cmd": [WAIT],
+                "Env": [f"{key}={value}" for key, value in ENVIRONMENT.items()],
+            },
+            "HostConfig": {
+                "ReadonlyRootfs": True, "CapDrop": ["ALL"], "CapAdd": [], "PortBindings": {},
+                "Devices": [], "DeviceRequests": [], "LogConfig": {"Type": "none"},
+                "RestartPolicy": {"Name": "no"}, "SecurityOpt": ["no-new-privileges:true"],
+            },
+            "NetworkSettings": {"Networks": {self.remote.egress: {}}},
+            "Mounts": [], "State": {"Running": False},
+        }
+
+        class FakeNetwork:
+            def __init__(self, name, subnet):
+                self.name = name
+                self.attrs = {
+                    "Labels": {LABEL: self_owner}, "Driver": "bridge", "Internal": True,
+                    "IPAM": {"Config": [{"Subnet": subnet}]}, "Containers": {},
+                }
+
+            def connect(self, value, aliases=None):
+                self.attrs["Containers"][value.id] = {"Aliases": aliases or []}
+
+        self_owner = self.remote.owner
+        created = []
+        client = Mock()
+        client.containers.get.return_value = container
+        from docker.errors import NotFound
+        client.networks.get.side_effect = NotFound("missing ingress")
+        client.networks.list.return_value = []
+
+        def create_network(name, **kwargs):
+            subnet = kwargs["ipam"].get("Config")[0]["Subnet"]
+            value = FakeNetwork(name, subnet)
+            created.append(value)
+            return value
+
+        client.networks.create.side_effect = create_network
+
+        repaired = self.remote.repair_panel_network(client, panel=panel)
+
+        self.assertTrue(repaired)
+        self.assertEqual(len(created), 1)
+        subnet = ipaddress.ip_network(created[0].attrs["IPAM"]["Config"][0]["Subnet"])
+        self.assertTrue(subnet.subnet_of(PANEL_NETWORK_POOL))
+        self.assertIn(panel.id, created[0].attrs["Containers"])
+        self.assertIn(container.id, created[0].attrs["Containers"])
 
     def test_ingress_requires_exact_host_peer_mfa_and_verified_https(self):
         self.assertEqual(self.tunnel("/api/health").status_code, 400)

@@ -16,7 +16,7 @@ from docker.errors import DockerException, ImageNotFound, NotFound
 from flask import abort, g, jsonify, request
 
 from catalogs import fetch_public
-from host_setup import local_container
+from host_setup import SETTINGS_ID as DOMAINS_SETTINGS_ID, local_container
 from security import admin, trusted_https_request
 
 VERSION = "0.1.0"
@@ -26,6 +26,8 @@ IMAGE = f"docker.io/openziti/zrok2:{ZROK_VERSION}@{DIGEST}"
 LABEL = "io.dcc.remote-access"
 SETTINGS = "__dcc_remote_access__"
 PORT = 8791
+PANEL_NETWORK_POOL = ipaddress.ip_network("198.18.0.0/15")
+PANEL_NETWORK_PREFIX = 28
 NAME = re.compile(r"[a-z0-9](?:[a-z0-9-]{1,61})[a-z0-9]")
 TOKEN = re.compile(r"[A-Za-z0-9]{8,128}")
 HOSTED_ZONES = ("share.zrok.io", "shares.zrok.io")
@@ -88,6 +90,7 @@ class RemoteAccess:
         self.tunnel = "disabled"
         self.last_connection = None
         self.error = ""
+        self.network_error = ""
         self.update = None
 
     def saved(self):
@@ -158,10 +161,14 @@ class RemoteAccess:
             raise RemoteError("The managed container name is in use.")
         return container
 
-    def validate_container(self, container):
+    def validate_container(self, container, allow_missing_ingress=False):
         attrs = container.attrs
         host = attrs["HostConfig"]
         env = dict(value.split("=", 1) for value in attrs["Config"].get("Env", []) if "=" in value)
+        attached = frozenset(attrs["NetworkSettings"]["Networks"])
+        allowed_networks = {frozenset({self.ingress, self.egress})}
+        if allow_missing_ingress:
+            allowed_networks.add(frozenset({self.egress}))
         if (attrs["Config"]["Image"] != IMAGE or attrs["Config"]["User"] != "2171:2171"
                 or attrs["Config"]["Entrypoint"] != ["/bin/sh", "-c"] or attrs["Config"]["Cmd"] != [WAIT]
                 or any(env.get(key) != value for key, value in ENVIRONMENT.items())
@@ -171,22 +178,176 @@ class RemoteAccess:
                 or host.get("LogConfig", {}).get("Type") != "none"
                 or host.get("RestartPolicy", {}).get("Name") not in {"no", ""}
                 or host.get("SecurityOpt") not in (["no-new-privileges:true"], ["no-new-privileges"])
-                or set(attrs["NetworkSettings"]["Networks"]) != {self.ingress, self.egress}):
+                or attached not in allowed_networks):
             raise RemoteError("The installed tunnel does not match the isolated configuration.")
+
+    def _profile_addresses(self):
+        values = set()
+        profiles = self.state.profiles()
+        for profile in profiles:
+            for value in (profile.get("host"), profile.get("endpoint")):
+                if not isinstance(value, str) or not value.strip():
+                    continue
+                try:
+                    parsed = urlsplit(value if "://" in value else "//" + value)
+                    address = ipaddress.ip_address(parsed.hostname or "")
+                except ValueError:
+                    continue
+                if address.version == 4:
+                    values.add(address)
+        try:
+            rows = self.state.rows("SELECT data FROM settings WHERE user_id=?", (DOMAINS_SETTINGS_ID,))
+            if rows:
+                local = self.state.decode_profile(rows[0]["data"]).get("local", "")
+                address = ipaddress.ip_address(str(local).strip("[]"))
+                if address.version == 4:
+                    values.add(address)
+        except (KeyError, TypeError, ValueError):
+            pass
+        return values
+
+    def panel_network_subnet(self, client, exclude_name=None):
+        """Pick an isolated subnet outside common LANs and every configured Docker network."""
+        occupied = []
+        for network in client.networks.list():
+            if getattr(network, "name", None) == exclude_name:
+                continue
+            attrs = network.attrs or {}
+            for config in (attrs.get("IPAM") or {}).get("Config") or []:
+                try:
+                    occupied.append(ipaddress.ip_network(config["Subnet"], strict=False))
+                except (KeyError, TypeError, ValueError):
+                    continue
+        hosts = self._profile_addresses()
+        candidates = tuple(PANEL_NETWORK_POOL.subnets(new_prefix=PANEL_NETWORK_PREFIX))
+        start = int(self.owner[:8], 16) % len(candidates)
+        for offset in range(len(candidates)):
+            candidate = candidates[(start + offset) % len(candidates)]
+            if any(candidate.overlaps(value) for value in occupied):
+                continue
+            if any(address in candidate for address in hosts):
+                continue
+            return str(candidate)
+        raise RemoteError("No non-overlapping subnet is available for the isolated Remote Access network.")
+
+    def _create_network(self, client, name, internal, subnet=None):
+        options = {}
+        if internal:
+            subnet = subnet or self.panel_network_subnet(client, exclude_name=name)
+            options["ipam"] = docker.types.IPAMConfig(
+                pool_configs=[docker.types.IPAMPool(subnet=subnet)]
+            )
+        return client.networks.create(name, driver="bridge", internal=internal,
+                                      labels={LABEL: self.owner}, **options)
 
     def network(self, client, name, internal):
         try:
             net = client.networks.get(name)
         except NotFound:
-            net = client.networks.create(name, driver="bridge", internal=internal, labels={LABEL: self.owner})
+            net = self._create_network(client, name, internal)
         if (net.attrs.get("Labels", {}).get(LABEL) != self.owner or net.attrs.get("Driver") != "bridge"
                 or bool(net.attrs.get("Internal")) != internal):
             raise RemoteError("The managed network name is in use.")
         return net
 
+    def repair_panel_network(self, client=None, panel=None):
+        """Move a conflicting isolated ingress network off remote-profile LAN routes."""
+        if client is None:
+            with closing(self.client_factory()) as active_client:
+                return self.repair_panel_network(active_client, panel=panel)
+        try:
+            network = client.networks.get(self.ingress)
+        except NotFound:
+            network = None
+        container = self.container(client)
+        if network is None and container is None:
+            return False
+        panel = panel or local_container(client)
+        if container:
+            container.reload()
+            # A previous process may have stopped after detaching the sidecar
+            # but before reconnecting it. Allow that safe, egress-only state so
+            # the idempotent repair below can finish on the next startup.
+            self.validate_container(container, allow_missing_ingress=True)
+        if network is None:
+            network = self.network(client, self.ingress, True)
+            network.connect(panel, aliases=["dcc-remote-panel"])
+            if container:
+                network.connect(container)
+            self.network_error = ""
+            return True
+
+        network.reload()
+        attrs = network.attrs
+        if (attrs.get("Labels", {}).get(LABEL) != self.owner or attrs.get("Driver") != "bridge"
+                or not attrs.get("Internal")):
+            raise RemoteError("The managed panel network cannot be safely repaired.")
+        configs = (attrs.get("IPAM") or {}).get("Config") or []
+        subnets = []
+        for config in configs:
+            try:
+                subnets.append(ipaddress.ip_network(config["Subnet"], strict=False))
+            except (KeyError, TypeError, ValueError):
+                continue
+        conflicts = any(address in subnet for address in self._profile_addresses() for subnet in subnets)
+        # Older Docker installations chose the subnet automatically, which can
+        # claim a home-LAN route even when no remote profile is saved yet. New
+        # managed networks always live in our collision-checked pool.
+        conflicts = (conflicts or len(subnets) != 1
+                     or not subnets[0].subnet_of(PANEL_NETWORK_POOL))
+        members = attrs.get("Containers") or {}
+        expected = {panel.id}
+        if container:
+            expected.add(container.id)
+        unexpected = set(members) - expected
+        if unexpected:
+            raise RemoteError("The managed panel network contains an unexpected container and was left unchanged.")
+        attached = set(members)
+        needs_connect = panel.id not in attached or (container and container.id not in attached)
+        if not conflicts and not needs_connect:
+            self.network_error = ""
+            return False
+
+        if container:
+            container.reload()
+            if container.attrs.get("State", {}).get("Running"):
+                container.stop(timeout=12)
+        old_subnet = str(subnets[0]) if subnets else None
+        try:
+            for value in (panel, container):
+                if value and value.id in attached:
+                    network.disconnect(value, force=True)
+            if conflicts:
+                network.remove()
+                network = self.network(client, self.ingress, True)
+            network.connect(panel, aliases=["dcc-remote-panel"])
+            if container:
+                network.connect(container)
+        except Exception:
+            # Restore the old network if migration fails, so the panel stays reachable.
+            try:
+                try:
+                    restored = client.networks.get(self.ingress)
+                except NotFound:
+                    restored = self._create_network(client, self.ingress, True, subnet=old_subnet)
+                restored.reload()
+                restored_members = restored.attrs.get("Containers") or {}
+                if panel.id not in restored_members:
+                    restored.connect(panel, aliases=["dcc-remote-panel"])
+                if container and container.id not in restored_members:
+                    restored.connect(container)
+            except Exception:
+                pass
+            self.network_error = "The isolated panel network could not be repaired. Remote Access remains unavailable until it is fixed."
+            raise
+        self.network_error = ""
+        return True
+
     def install(self, client, panel):
+        self.repair_panel_network(client, panel=panel)
         container = self.container(client)
         if container:
+            container.reload()
             self.validate_container(container)
             return
         try:
@@ -414,6 +575,9 @@ class RemoteAccess:
                   "origin": config.get("origin"), "enrolled": bool(config.get("identity")),
                   "last_connection": self.last_connection, "error": self.error, "update": self.update,
                   "security": "blocked" if self.blocked() else "pinned"}
+        if self.network_error:
+            status.update(state="error", tunnel="disabled", error=self.network_error)
+            return status
         if not self.available:
             return status
         try:

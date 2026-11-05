@@ -2,6 +2,8 @@
 INSIDE = r"""
 from contextlib import closing
 import docker
+import ipaddress
+import os
 import sys
 import time
 import requests
@@ -80,6 +82,23 @@ with closing(docker.DockerClient(base_url='unix:///var/run/docker.sock',timeout=
     assert not client.networks.get(remote.egress).attrs['Internal']
     action('install')
     assert client.containers.get(remote.name).id == first_id
+    # Exercise a real Docker network migration using only a synthetic RFC2544
+    # address; never route a user's actual LAN or saved profile through the test.
+    old_network = client.networks.get(remote.ingress)
+    old_subnet = ipaddress.ip_network(old_network.attrs['IPAM']['Config'][0]['Subnet'])
+    fixture_host = str(old_subnet.network_address + 2)
+    state.save_profile('fixture-remote-lan', {
+        'name':'Synthetic Remote LAN', 'kind':'ssh', 'host':fixture_host,
+        'username':'fixture', 'port':22, 'permissions':['read'],
+    })
+    assert remote.repair_panel_network(client, panel=client.containers.get(os.environ['DCC_WEB_CONTAINER_NAME']))
+    new_network = client.networks.get(remote.ingress)
+    new_subnet = ipaddress.ip_network(new_network.attrs['IPAM']['Config'][0]['Subnet'])
+    assert new_subnet != old_subnet and ipaddress.ip_address(fixture_host) not in new_subnet
+    sidecar = client.containers.get(remote.name)
+    assert sidecar.id == first_id
+    assert set(sidecar.attrs['NetworkSettings']['Networks']) == {remote.ingress, remote.egress}
+    remote.validate_container(sidecar)
     sidecar.start()
     result = sidecar.exec_run(['sh','-c','id -u; test ! -e /var/run/docker.sock; test ! -e /data; test ! -e /mnt/dcc-ssh'])
     assert result.exit_code == 0 and result.output.strip() == b'2171'
