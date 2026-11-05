@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from flask import Flask, Response, abort, g, jsonify, redirect, render_template, request, send_file, session
+from cryptography.fernet import InvalidToken
 from markupsafe import Markup
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -34,7 +35,7 @@ from remote_access import (
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.2.6"
+VERSION = "0.2.7"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
 DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "refresh_changes_only":False, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 MCP_GRANT_ACTIONS={"mcp.grant.pause","mcp.grant.resume","mcp.grant.revoke","mcp.grant.delete-history"}
@@ -186,8 +187,10 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             code, message = 400, str(error)[:250]
         elif isinstance(error, EngineError):
             code, message = 503, str(error)
+        elif isinstance(error, InvalidToken):
+            code, message = 500, "Saved profile credentials could not be decrypted. Restore the matching DCC Web data volume and master key together; do not delete either."
         elif isinstance(error, paramiko.SSHException):
-            code, message = 503, 'SSH connection failed. Check the key, passphrase or SSH agent and trusted known_hosts in Profiles.'
+            code, message = 503, 'SSH connection failed. Check the username, key, passphrase or SSH agent and trusted known_hosts in Profiles.'
         else:
             code, message = 500, "The request could not be completed"
         if request.path.startswith("/api/"):

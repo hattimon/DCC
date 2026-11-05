@@ -9,7 +9,7 @@ import secrets
 import sqlite3
 import time
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 
 def _dpapi(data, decrypt=False):
@@ -74,10 +74,32 @@ class State:
                 if not str(row['public']).startswith('fernet:'):
                     value = self.decode_profile(row['public'])
                     db.execute('UPDATE profiles SET public=? WHERE id=?', (self.encode_profile(value), row['id']))
+        self._migrate_balena_default_ssh_port()
         with self.connect() as db:
             db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
         from profile_ssh import ProfileSSH
         self.ssh = ProfileSSH(self)
+
+    def _migrate_balena_default_ssh_port(self):
+        """Correct Balena profiles created with the former generic SSH port default."""
+        migration_id = '__dcc_web_migration_balena_ssh_port_22222_v1__'
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT 1 FROM settings WHERE user_id=?', (migration_id,)).fetchone():
+                return
+            for row in db.execute('SELECT id,public FROM profiles').fetchall():
+                try:
+                    value = self.decode_profile(row['public'])
+                except (InvalidToken, ValueError, TypeError):
+                    continue
+                try:
+                    port = int(value.get('port') or 22)
+                except (TypeError, ValueError):
+                    continue
+                if value.get('kind') == 'balena' and port == 22:
+                    value['port'] = 22222
+                    db.execute('UPDATE profiles SET public=? WHERE id=?', (self.encode_profile(value), row['id']))
+            db.execute('INSERT INTO settings VALUES(?,?)', (migration_id, json.dumps({'done': True})))
 
     def encode_profile(self, value):
         return 'fernet:' + self.vault.encrypt(json.dumps(value).encode()).decode()

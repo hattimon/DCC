@@ -1,4 +1,4 @@
-# DCC Web 0.2.6
+# DCC Web 0.2.7
 
 [English](README.md) · [Polski](README.pl.md) · [GitHub repository](https://github.com/hattimon/DCC)
 
@@ -11,6 +11,8 @@ Web 0.2.4 also exports agent instructions and project ZIPs for all seven MCP cli
 Web 0.2.5 fixes a **Profile not found** error when checking the result of Remote Access configuration, activation or restart.
 
 Web 0.2.6 accepts hosted zrok reservations on `shares.zrok.io` and lets you resume a pending reservation with the saved environment.
+
+Web 0.2.7 uses BalenaOS's SSH port 22222 by default and migrates existing Balena profiles that still use the old default port 22. SSH errors now identify common causes such as host reachability, authentication and trusted host keys. [Profile setup](docs/configuration.md)
 
 Web 0.2.2 adds pausable MCP grants, profile selection by name or host address, manual container refresh, and configurable change-aware polling. Web 0.2.1 displays profile IDs below profile names, in Overview → Host details, and beside the selected host address on the Containers page. Older Desktop clients can use **Administration** after refreshing the official catalog; Container Updater remains under **Updates**. Web 0.1.8 adds optional, managed local HTTPS while retaining the current HTTP endpoint and persistent data. Web 0.2.0 fixes the recovery SMTP settings dialog so administrators can configure mail. The 0.1.4 release fixed duplicate versions in the Web store, including stale caches retained from earlier images. See [catalog compatibility](docs/catalogs.md#older-desktop-clients) for the limitation of already published Desktop binaries with a bundled older Web entry.
 
@@ -32,7 +34,7 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 
 ## Install on Windows, macOS or Linux
 
-Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.6/DCC-Web-0.2.6-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.2.6` directory:
+Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.7/DCC-Web-0.2.7-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.2.7` directory:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py

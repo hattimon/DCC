@@ -11,6 +11,10 @@ State is kept in the directory selected by `--data` / `DCC_WEB_DATA`. SQLite sto
 | wsl | `wsl.exe --distribution NAME --exec docker` on Windows |
 | tunnel | Existing explicit tunnel terminating on localhost; no arbitrary tunnel command execution |
 
+BalenaOS host SSH listens on TCP port `22222` ([Balena SSH documentation](https://docs.balena.io/learn/manage/ssh-access)). New Balena profiles use that default. On first startup, this release migrates existing Balena profiles saved with the former default port `22`; other configured ports are preserved. To intentionally use port 22, change it back after the migration.
+
+SSH connection errors distinguish host-name resolution, timeouts, refused connections, authentication, host-key verification and inaccessible key files. These checks run from the DCC Web server/container, so connectivity from the desktop computer alone does not confirm that the Web server can reach the host.
+
 SSH/WSL operations run in their target environment. Compose files and bind mount paths must exist there. Compose YAML import currently writes to the backend and requires a local/TLS profile; discovered remote projects remain manageable when their Compose CLI is available. Source builds require a separately reviewed GitHub repository and explicit confirmation. GitHub/source builds are not automatic catalog side effects.
 
 ### Terminal for the Docker host

@@ -2,18 +2,68 @@
 import json
 import os
 import re
+import socket
 import shlex
 import subprocess
 import threading
 import time
 
 import paramiko
+from paramiko.ssh_exception import NoValidConnectionsError
 from profile_ssh import configure_client, connection_options
 from ports import container_revision
 
 
 class EngineError(RuntimeError):
     pass
+
+
+def _ssh_error_message(error, stage):
+    """Translate common SSH failures into safe guidance without exposing secrets."""
+    if isinstance(error, paramiko.BadHostKeyException):
+        return "SSH host key verification failed. Verify the host fingerprint and trusted known_hosts file in Profiles."
+    if isinstance(error, paramiko.AuthenticationException):
+        return "SSH authentication failed. Check the username, password, private key or key passphrase in Profiles."
+    if isinstance(error, socket.gaierror):
+        return "The SSH host name could not be resolved. Check the profile host name and DNS from the DCC Web server."
+    if isinstance(error, ConnectionRefusedError):
+        return "The SSH connection was refused. Check that SSH is running on the target and that the profile port is correct."
+    if isinstance(error, (socket.timeout, TimeoutError)):
+        return "The SSH connection timed out. Check the host, port, firewall and network route from the DCC Web server."
+    if isinstance(error, NoValidConnectionsError):
+        causes = tuple(getattr(error, "errors", {}).values())
+        if any(isinstance(value, ConnectionRefusedError) for value in causes):
+            return "The SSH connection was refused. Check that SSH is running on the target and that the profile port is correct."
+        if any(isinstance(value, socket.gaierror) for value in causes):
+            return "The SSH host name could not be resolved. Check the profile host name and DNS from the DCC Web server."
+        if any(isinstance(value, (socket.timeout, TimeoutError)) for value in causes):
+            return "The SSH connection timed out. Check the host, port, firewall and network route from the DCC Web server."
+        return "The SSH host is unreachable from the DCC Web server. Check the host, port, firewall and network route."
+    if isinstance(error, (paramiko.SSHException, EOFError)):
+        if stage == "files":
+            return "An SSH key or trusted-host file could not be read. Check the files and permissions in Profiles."
+        if stage == "command":
+            return "SSH connected, but the remote Docker command failed to start. Check remote shell access and Docker or Balena CLI availability."
+        return "The SSH handshake failed. Check the authentication settings and trusted known_hosts file in Profiles."
+    if isinstance(error, OSError):
+        if stage == "files":
+            return "An SSH key or trusted-host file could not be read. Check that the file exists and is accessible to DCC Web."
+        if stage == "command":
+            return "The SSH connection ended while running the remote Docker command. Check the remote host and its Docker service."
+        return "The SSH connection failed. Check the host, port, firewall and network route from the DCC Web server."
+    return "The SSH connection failed. Check the selected profile and its authentication settings."
+
+
+def _connect_ssh(client, profile):
+    try:
+        configure_client(client, profile)
+        options = connection_options(profile)
+    except (paramiko.SSHException, OSError, EOFError) as error:
+        raise EngineError(_ssh_error_message(error, "files")) from error
+    try:
+        client.connect(**options)
+    except (paramiko.SSHException, OSError, EOFError) as error:
+        raise EngineError(_ssh_error_message(error, "connect")) from error
 
 
 class DockerBackend:
@@ -49,17 +99,19 @@ class DockerBackend:
         kind = profile.get("kind", "local")
         if kind in {"ssh", "balena"}:
             client = paramiko.SSHClient()
-            configure_client(client, profile)
             try:
-                client.connect(**connection_options(profile))
+                _connect_ssh(client, profile)
                 cli = profile.get('cli') or ("balena" if kind == "balena" else "docker")
-                stdin, stdout, stderr = client.exec_command(shlex.join([cli, *args]), timeout=timeout)
-                if input_data is not None:
-                    stdin.write(input_data)
-                    stdin.flush()
-                stdin.channel.shutdown_write()
-                output, error = stdout.read(4_000_001), stderr.read(8192)
-                code = stdout.channel.recv_exit_status()
+                try:
+                    stdin, stdout, stderr = client.exec_command(shlex.join([cli, *args]), timeout=timeout)
+                    if input_data is not None:
+                        stdin.write(input_data)
+                        stdin.flush()
+                    stdin.channel.shutdown_write()
+                    output, error = stdout.read(4_000_001), stderr.read(8192)
+                    code = stdout.channel.recv_exit_status()
+                except (paramiko.SSHException, OSError, EOFError) as error:
+                    raise EngineError(_ssh_error_message(error, "command")) from error
             finally:
                 client.close()
         else:
@@ -91,23 +143,26 @@ class DockerBackend:
         if not isinstance(args,list) or not all(isinstance(v,str) and "\0" not in v for v in args):
             raise ValueError("Invalid Docker arguments")
         if self.profile.get("kind") in {"ssh","balena"}:
-            profile=self.profile;credentials=profile.get("credentials",{})
-            client=paramiko.SSHClient();configure_client(client,profile)
+            profile=self.profile
+            client=paramiko.SSHClient()
             try:
-                client.connect(**connection_options(profile))
-                channel=client.get_transport().open_session(timeout=12);channel.set_combine_stderr(True)
-                channel.exec_command(shlex.join([profile.get('cli') or ('balena' if profile['kind']=='balena' else 'docker'),*args]));channel.shutdown_write()
-                import codecs
-                decoder=codecs.getincrementaldecoder('utf-8')('replace')
-                deadline=time.monotonic()+timeout
-                while True:
-                    if channel.recv_ready():on_output(decoder.decode(channel.recv(8192)))
-                    elif channel.exit_status_ready():break
-                    elif time.monotonic()>deadline:raise EngineError("Docker operation timed out")
-                    else:time.sleep(.05)
-                remainder=decoder.decode(b'',final=True)
-                if remainder:on_output(remainder)
-                if channel.recv_exit_status():raise EngineError("Docker rejected the operation. Review the installation log.")
+                _connect_ssh(client, profile)
+                try:
+                    channel=client.get_transport().open_session(timeout=12);channel.set_combine_stderr(True)
+                    channel.exec_command(shlex.join([profile.get('cli') or ('balena' if profile['kind']=='balena' else 'docker'),*args]));channel.shutdown_write()
+                    import codecs
+                    decoder=codecs.getincrementaldecoder('utf-8')('replace')
+                    deadline=time.monotonic()+timeout
+                    while True:
+                        if channel.recv_ready():on_output(decoder.decode(channel.recv(8192)))
+                        elif channel.exit_status_ready():break
+                        elif time.monotonic()>deadline:raise EngineError("Docker operation timed out")
+                        else:time.sleep(.05)
+                    remainder=decoder.decode(b'',final=True)
+                    if remainder:on_output(remainder)
+                    if channel.recv_exit_status():raise EngineError("Docker rejected the operation. Review the installation log.")
+                except (paramiko.SSHException, OSError, EOFError) as error:
+                    raise EngineError(_ssh_error_message(error, "command")) from error
             finally:client.close()
             return
         command,environment,flags=self._local_command()

@@ -84,7 +84,7 @@ def connection_options(profile):
         private_text = None
     elif key and not private_text and not Path(key).is_file():
         raise ValueError('SSH key path is not available on the Web server. Upload the key in Profiles and select the shared folder, or choose SSH agent.')
-    options = dict(hostname=profile['host'], port=profile.get('port', 22), username=profile['username'],
+    options = dict(hostname=profile['host'], port=profile.get('port', 22222 if profile.get('kind') == 'balena' else 22), username=profile['username'],
                 key_filename=key, password=None if mode == 'agent' else secret.get('password') or None,
                 passphrase=None if mode == 'agent' else secret.get('passphrase') or None,
                 allow_agent=mode in {'auto', 'agent'}, look_for_keys=mode == 'auto',

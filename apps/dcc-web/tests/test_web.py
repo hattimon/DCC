@@ -3,6 +3,7 @@ import io
 import json
 from pathlib import Path
 import re
+import socket
 import sys
 import tempfile
 import time
@@ -14,6 +15,7 @@ from types import SimpleNamespace
 import subprocess
 import threading
 import tomllib
+import paramiko
 
 APP_ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(APP_ROOT))
@@ -27,6 +29,7 @@ from catalogs import Catalogs,install_plan,fetch_public,validate_catalog,image_r
 from mcp_preview import MCPService,stdio
 from client_adapters import _zip_files, export_client
 from engine import DockerBackend,EngineError
+from profile_ssh import connection_options
 from ports import published_ports,enrich_containers,inventory,parse_bindings
 from remote_api import VerifiedProfileAdapter,ssh_docker_client
 from ai_assistant import validate_connection,proposal
@@ -148,6 +151,16 @@ class WebTests(unittest.TestCase):
         for filename in Path(self.temp.name).glob('*'):
             if filename.is_file():self.assertNotIn(value['credentials']['password'].encode(),filename.read_bytes())
 
+    def test_unreadable_remote_profile_vault_reports_data_key_recovery(self):
+        response=self.request('profiles',{'name':'Remote SSH','kind':'ssh','host':'server.example','username':'docker','credentials':{'password':'secret'}})
+        self.assertEqual(response.status_code,201,response.json)
+        profile_id=response.json['id']
+        self.state.execute('UPDATE profiles SET private=? WHERE id=?',(b'invalid-ciphertext',profile_id))
+        response=self.client.get('/api/overview?profile='+profile_id)
+        self.assertEqual(response.status_code,500)
+        self.assertIn('data volume and master key together',response.json['error'])
+        self.assertNotIn('The request could not be completed',response.json['error'])
+
     def test_profiles_default_read_only_and_invalid_transport_rejected(self):
         response=self.request('profiles',{'name':'New host','kind':'local'})
         self.assertEqual(response.status_code,201)
@@ -156,6 +169,21 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.request('containers/abc/start',{'profile':profile}).status_code,403)
         self.assertEqual(self.request('profiles',{'name':'Bad','kind':'ssh','host':'-oProxyCommand=bad','username':'x'}).status_code,400)
         self.assertEqual(self.request('profiles',{'name':'Bad','kind':'tcp','endpoint':'tcp://server:2375','tls_verify':False}).status_code,400)
+
+    def test_balena_profiles_use_port_22222_and_legacy_defaults_migrate_once(self):
+        balena=validate_profile({'name':'New Balena','kind':'balena','host':'device.example','username':'root'})
+        self.assertEqual(balena['port'],22222)
+        self.assertEqual(connection_options(balena)['port'],22222)
+        self.state.save_profile('legacy-balena',{'name':'Legacy Balena','kind':'balena','host':'device.example','username':'root','port':22,'permissions':['read']})
+        self.state.save_profile('custom-balena',{'name':'Custom Balena','kind':'balena','host':'custom.example','username':'root','port':2222,'permissions':['read']})
+        migration_id='__dcc_web_migration_balena_ssh_port_22222_v1__'
+        self.state.execute('DELETE FROM settings WHERE user_id=?',(migration_id,))
+        migrated=State(self.temp.name,self.app.config['MASTER_KEY'])
+        self.assertEqual(migrated.profile('legacy-balena')['port'],22222)
+        self.assertEqual(migrated.profile('custom-balena')['port'],2222)
+        migrated.save_profile('legacy-balena',{'name':'Legacy Balena','kind':'balena','host':'device.example','username':'root','port':22,'permissions':['read']})
+        restarted=State(self.temp.name,self.app.config['MASTER_KEY'])
+        self.assertEqual(restarted.profile('legacy-balena')['port'],22)
 
     def test_import_export_legacy_profiles_and_tunnel(self):
         response=self.request('profiles/import',{'profiles':[{'name':'Old SSH','mode':'ssh','ssh_target':'user@server','ssh_port':22,'ssh_password':'not-imported'}]})
@@ -648,6 +676,31 @@ class WebTests(unittest.TestCase):
         self.assertIn("'a; touch /bad'",client.exec_command.call_args.args[0])
         self.assertEqual(type(client.set_missing_host_key_policy.call_args.args[0]).__name__,'RejectPolicy')
         client.close.assert_called_once()
+
+    def test_ssh_transport_failures_return_actionable_safe_messages(self):
+        cases=[
+            (socket.gaierror('private.example lookup detail'),'could not be resolved'),
+            (socket.timeout('private timeout detail'),'timed out'),
+            (ConnectionRefusedError('private connection detail'),'was refused'),
+            (paramiko.AuthenticationException('password=do-not-show'),'authentication failed'),
+        ]
+        for failure,expected in cases:
+            with self.subTest(expected=expected):
+                client=MagicMock();client.connect.side_effect=failure
+                with patch('engine.paramiko.SSHClient',return_value=client):
+                    with self.assertRaises(EngineError) as caught:
+                        DockerBackend({'kind':'ssh','host':'remote.example','username':'docker'}).info()
+                self.assertIn(expected,str(caught.exception))
+                self.assertNotIn(str(failure),str(caught.exception))
+                client.close.assert_called_once()
+
+    def test_profile_overview_returns_actionable_remote_engine_error(self):
+        created=self.request('profiles',{'name':'Remote SSH','kind':'ssh','host':'remote.example','username':'docker'})
+        self.assertEqual(created.status_code,201,created.json)
+        with patch.object(FakeBackend,'info',side_effect=EngineError('The SSH connection timed out. Check the host, port, firewall and network route from the DCC Web server.')):
+            response=self.client.get('/api/overview?profile='+created.json['id'])
+        self.assertEqual(response.status_code,503)
+        self.assertIn('SSH connection timed out',response.json['error'])
 
     def test_configuration_delegates_to_existing_updater_and_retains_environment(self):
         container=SimpleNamespace(attrs={'Config':{'Image':'demo:1','Env':['OLD=retained','CHANGE=old']}},image=SimpleNamespace(id='sha256:existing'))

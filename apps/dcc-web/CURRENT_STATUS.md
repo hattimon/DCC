@@ -1,4 +1,6 @@
-# DCC Web 0.2.6
+# DCC Web 0.2.7
+
+Web 0.2.7 uses BalenaOS SSH port 22222 by default, migrates existing Balena profiles saved with the former default 22, and replaces generic errors for common SSH transport failures with safe, actionable messages. Unreadable saved credentials identify the need to restore the matching data volume and master key.
 
 Web 0.2.6 recognizes the hosted zrok domain `shares.zrok.io` and pre-fills pending names when resuming Remote Access setup.
 

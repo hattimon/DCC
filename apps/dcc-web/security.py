@@ -147,14 +147,14 @@ def validate_profile(data):
     if result.get('cli') and result['cli'] not in {'docker','balena','balena-engine'}:
         raise ValueError('Unsupported engine CLI')
     if "port" in result:
-        result["port"] = int(result["port"] or 22)
+        result["port"] = int(result["port"] or (22222 if result.get("kind") == "balena" else 22))
         if not 1 <= result["port"] <= 65535:
             raise ValueError("Invalid connection port")
     if kind in {"ssh", "balena"}:
         for field in ("host", "username"):
             if not re.fullmatch(r"[a-zA-Z0-9_.:@-]{1,180}", str(result.get(field, ""))) or str(result[field]).startswith("-"):
                 raise ValueError("Invalid SSH host or username")
-        result["port"] = int(result.get("port") or 22)
+        result["port"] = int(result.get("port") or (22222 if kind == "balena" else 22))
         if not 1 <= result["port"] <= 65535:
             raise ValueError("Invalid SSH port")
     if kind == "tcp":
