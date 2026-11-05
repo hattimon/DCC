@@ -22,7 +22,7 @@ class RemoteAccessTests(unittest.TestCase):
         self.remote = self.app.extensions["dcc_remote_access"]
         self.remote.available = True
         self.user = self.state.rows("SELECT id FROM users")[0]["id"]
-        self.host = "fixture-dcc.share.zrok.io"
+        self.host = "fixture-dcc.shares.zrok.io"
         self.peer = "172.28.19.2"
         self.origin = "https://" + self.host
         self.route = dict(host=self.host, peer=self.peer, origin=self.origin, owner=self.user,
@@ -211,9 +211,17 @@ class RemoteAccessTests(unittest.TestCase):
         self.assertEqual(self.client.get(path, **local_https).status_code, 403)
 
     def test_provider_namespace_and_name_conflict(self):
-        self.assertEqual(name_origin("fixture-dcc", {"namespaceToken":"public","namespaceName":"share.zrok.io"}), self.origin)
-        with self.assertRaises(RemoteError):
-            name_origin("fixture-dcc", {"namespaceToken":"public","namespaceName":"attacker.invalid"})
+        for zone in ("share.zrok.io", "shares.zrok.io"):
+            self.assertEqual(name_origin("fixture-dcc", {"namespaceToken": "public", "namespaceName": zone}),
+                             "https://fixture-dcc." + zone)
+        for name, token, zone in (
+            ("fixture-dcc", "public", "attacker.invalid"),
+            ("fixture-dcc", "public", "shares.zrok.io.attacker.invalid"),
+            ("fixture-dcc", "private", "shares.zrok.io"),
+            ("fixture.dcc", "public", "shares.zrok.io"),
+        ):
+            with self.subTest(name=name, namespace=zone), self.assertRaises(RemoteError):
+                name_origin(name, {"namespaceToken": token, "namespaceName": zone})
         self.remote.save({"identity":"fixture"})
         container = Mock()
         with patch.object(self.remote,"restore"), patch.object(self.remote,"stop"), \
@@ -221,10 +229,32 @@ class RemoteAccessTests(unittest.TestCase):
             with self.assertRaisesRegex(RemoteError,"existing reservation"):
                 self.remote.configure(container, {"name":"fixture-dcc"})
 
+    def test_pending_hosted_reservation_can_be_completed_without_token_or_duplicate_name(self):
+        self.remote.save({"identity": "fixture", "pending_name": "fixture-dcc"})
+        self.remote.available = False
+        status = self.remote.status()
+        self.assertEqual(status["pending_name"], "fixture-dcc")
+        self.assertTrue(status["enrolled"])
+        self.assertNotIn("identity", status)
+        reservation = {"reserved": True, "namespaceName": "shares.zrok.io", "namespaceToken": "public"}
+        container = Mock()
+        with patch.object(self.remote, "restore"), patch.object(self.remote, "stop"), \
+                patch.object(self.remote, "reservation", return_value=reservation) as lookup, \
+                patch.object(self.remote, "command") as command:
+            with self.assertRaisesRegex(RemoteError, "pending reservation"):
+                self.remote.configure(container, {"name": "different-name"})
+            self.remote.configure(container, {"name": ""})
+        lookup.assert_called_with(container, "fixture-dcc")
+        command.assert_not_called()
+        self.assertEqual(self.remote.saved(), {
+            "identity": "fixture", "name": "fixture-dcc", "origin": self.origin,
+        })
+        self.assertIsNone(self.remote.status()["pending_name"])
+
     def test_configure_encrypts_enrollment_and_retains_verified_reservation(self):
         identity = b"fixture-archive-with-secret"
         container = Mock()
-        reservation = {"reserved":True, "namespaceName":"share.zrok.io", "namespaceToken":"public"}
+        reservation = {"reserved":True, "namespaceName":"shares.zrok.io", "namespaceToken":"public"}
         with patch.object(self.remote,"restore"), patch.object(self.remote,"stop") as stop, \
                 patch.object(self.remote,"reservation",side_effect=[None,reservation]), \
                 patch.object(self.remote,"command",side_effect=[b"",identity,b""]) as command:
@@ -239,7 +269,7 @@ class RemoteAccessTests(unittest.TestCase):
     def test_existing_share_prevents_activation_and_revocation_closes_ingress(self):
         self.enable_fixture_mfa()
         self.remote.save({"identity":"fixture","origin":self.origin,"name":"fixture-dcc"})
-        reservation = {"reserved":True, "namespaceName":"share.zrok.io", "namespaceToken":"public", "shareToken":"fixture"}
+        reservation = {"reserved":True, "namespaceName":"shares.zrok.io", "namespaceToken":"public", "shareToken":"fixture"}
         container = Mock()
         with patch.object(self.remote,"restore"), patch.object(self.remote,"stop") as stop, \
                 patch.object(self.remote,"reservation",return_value=reservation):

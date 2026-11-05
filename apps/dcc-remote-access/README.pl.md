@@ -6,13 +6,15 @@ Moduł umożliwia dostęp przez HTTPS do lokalnego DCC Web w przeglądarce. Publ
 
 W sklepie DCC Desktop wybierz **DCC Web**. Osobną pozycję **DCC Remote Access** znajdziesz w sklepie przeglądarkowego panelu DCC Web, który zarządza tunelem.
 
-1. Użyj opublikowanego obrazu DCC Web 0.2.5 lub nowszej wersji z Remote Access. Aby zaktualizować panel, wybierz istniejący kontener DCC Web w DCC Container Updater, sprawdź aktualizacje i zastosuj proponowany obraz. Odśwież panel pod dotychczasowym adresem. Przy nowej instalacji skorzystaj z [instrukcji kontenerowej DCC Web](../dcc-web/docs/installation.pl.md).
+1. Użyj opublikowanego obrazu DCC Web 0.2.6 lub nowszej wersji z Remote Access. Aby zaktualizować panel, wybierz istniejący kontener DCC Web w DCC Container Updater, sprawdź aktualizacje i zastosuj proponowany obraz. Odśwież panel pod dotychczasowym adresem. Przy nowej instalacji skorzystaj z [instrukcji kontenerowej DCC Web](../dcc-web/docs/installation.pl.md).
 2. Zaloguj się lokalnie jako administrator. W profilu lokalnego Dockera włącz **Instalowanie aplikacji**. W **Ustawienia → Administracja i bezpieczeństwo → Logowanie i uwierzytelnianie 2FA** skonfiguruj aplikację TOTP i zapisz kody odzyskiwania.
 3. Zainstaluj **DCC Remote Access** w kategorii **DCC** w sklepie lub otwórz **Ustawienia → Administracja i bezpieczeństwo → Dostęp do panelu i HTTPS (TLS) → Zdalny dostęp przez Internet**. Obie ścieżki zarządzają tą samą instancją.
 4. Utwórz konto w [myzrok.io](https://myzrok.io/) i skopiuj token konta z kreatora konsoli zrok. Otwórz lokalny panel przez zaufane HTTPS. Kliknij **Skonfiguruj**, wklej token i podaj nazwę publiczną lub pozostaw pole puste, aby wygenerować nazwę. Gdy nazwa jest zajęta, wybierz inną.
 5. Kliknij **Włącz dostęp**, przeczytaj informację o udostępnieniu panelu i potwierdź aktualnym hasłem oraz nowym kodem TOTP lub kodem odzyskiwania. Poczekaj na stan **Aktywny** i otwórz adres HTTPS. Zrok może pokazać własną stronę pośrednią przy pierwszej wizycie. Następnie zaloguj się na istniejące konto DCC.
 
 Lokalny panel, domeny i HTTPS Caddy działają niezależnie. [Instrukcja uzyskania tokenu zrok](https://netfoundry.io/docs/zrok/get-started/get-token/)
+
+Jeśli konfiguracja została przerwana po rejestracji środowiska, otwórz ponownie **Skonfiguruj** i zatwierdź podpowiedzianą nazwę. DCC użyje zapisanego środowiska i dokończy istniejącą rezerwację w publicznej domenie zrok.
 
 ## Wyłączenie, rotacja i aktualizacja
 

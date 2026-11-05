@@ -1,4 +1,6 @@
-# DCC Web 0.2.5
+# DCC Web 0.2.6
+
+Wersja 0.2.6 obsługuje rezerwacje w domenie `shares.zrok.io` i pozwala dokończyć oczekującą rezerwację z zapisanym środowiskiem.
 
 Wersja 0.2.5 naprawia błąd **Profile not found** podczas sprawdzania wyniku konfiguracji, włączania lub restartu Remote Access.
 
@@ -30,7 +32,7 @@ Przy instalacji ze Sklepu DCC świeży kontener tworzy konto `admin` z silnym, l
 
 ### Instalacja na Windows, macOS lub Linux
 
-Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.5/DCC-Web-0.2.5-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.2.5`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
+Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.2.6/DCC-Web-0.2.6-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.2.6`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
@@ -48,7 +50,7 @@ Dostęp do `/var/run/docker.sock` daje panelowi administracyjną kontrolę nad h
 
 [Instalacja](docs/installation.md) · [Bezpieczeństwo](docs/security.md) · [Profile](docs/configuration.md) · [Sklep](docs/catalogs.md) · [Funkcje i ograniczenia](docs/feature-matrix.md)
 
-Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.2.5/apps/dcc-web).
+Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.2.6/apps/dcc-web).
 
 
 ## Klucze SSH po imporcie profili

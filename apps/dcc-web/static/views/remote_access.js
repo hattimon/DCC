@@ -25,9 +25,11 @@ export async function remoteAction(action,status){
  const confirm=await openDialog(actions[action],html`<div class="stack">
   ${notice(consent[action],['enable','restart','uninstall'].includes(action)?'warning':'')}
   ${action==='configure'?html`<a href="https://myzrok.io/" target="_blank" rel="noopener noreferrer">myzrok.io ↗</a>
-   <p>Utwórz konto, otwórz konsolę zrok i skopiuj token konta z kreatora.</p>
-   ${status.enrolled?'':field('Token konta zrok','account_token','',{type:'password',required:true})}
-   ${field('Nazwa publiczna (pusta oznacza nazwę automatyczną)','name',status.name||'')}`:''}
+   ${status.enrolled?html`<p>Środowisko zrok jest już zapisane. Możesz zarezerwować nazwę publiczną.</p>`:html`
+    <p>Utwórz konto, otwórz konsolę zrok i skopiuj token konta z kreatora.</p>
+    ${field('Token konta zrok','account_token','',{type:'password',required:true})}`}
+   ${status.pending_name?notice('Dokończ zapamiętaną rezerwację. Aby wybrać inną nazwę, najpierw zwolnij wcześniejszą rezerwację w konsoli zrok.') : ''}
+   ${field('Nazwa publiczna (pusta oznacza nazwę automatyczną)','name',status.name||status.pending_name||'')}`:''}
   ${action==='uninstall'?html`<label class="check"><input name="keep_data" type="checkbox" checked>Zachowaj środowisko i rezerwację zrok</label>
    <label class="check"><input name="provider_cleaned" type="checkbox">Środowisko i nazwę usunięto już w konsoli zrok.</label>`:''}
   ${['configure','enable','restart','uninstall'].includes(action)?html`<div class="form-grid">${accountFields()}</div>`:''}
@@ -43,7 +45,10 @@ export async function remoteAction(action,status){
 
 function address(status){
  if(status.state!=='active')return '';
- try{const url=new URL(status.origin);return url.protocol==='https:'&&url.hostname.endsWith('.share.zrok.io')?url.origin:'';}catch{return '';}
+ try{
+  const url=new URL(status.origin);
+  return url.protocol==='https:'&&!url.port&&url.origin===status.origin&&/^[a-z0-9-]+\.shares?\.zrok\.io$/.test(url.hostname)?url.origin:'';
+ }catch{return '';}
 }
 
 export function mountRemoteAccess(root,ctx){

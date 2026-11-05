@@ -692,6 +692,8 @@ Zamknij tunel publiczny. Zarezerwowana nazwa pozostanie dostępna do ponownego u
 Uruchom ponownie tunel po ponownym sprawdzeniu wymagań bezpieczeństwa.|Restart the tunnel after checking the security policy again.
 Zatrzymaj tunel i usuń jego kontener. Wybierz, czy zachować rezerwację i środowisko zrok.|Stop the tunnel and remove its container. Choose whether to keep the zrok environment and reservation.
 Utwórz konto, otwórz konsolę zrok i skopiuj token konta z kreatora.|Create an account, open the zrok console and copy the account token from the wizard.
+Środowisko zrok jest już zapisane. Możesz zarezerwować nazwę publiczną.|Your zrok environment is already saved. You can reserve a public name.
+Dokończ zapamiętaną rezerwację. Aby wybrać inną nazwę, najpierw zwolnij wcześniejszą rezerwację w konsoli zrok.|Complete the remembered reservation. To pick another name, first release the earlier reservation in the zrok console.
 Zachowaj środowisko i rezerwację zrok|Keep the zrok environment and reservation
 Środowisko i nazwę usunięto już w konsoli zrok.|The environment and name have already been removed in the zrok console.
 Udostępnij panel przez HTTPS za pośrednictwem zrok.|Share the panel over HTTPS through zrok.
@@ -841,6 +843,8 @@ known_hosts — indywidualna ścieżka (opcjonalnie)|known_hosts — individual 
 const messages=Object.fromEntries(pairs.trim().split('\n').filter(line=>line.includes('|')).map(line=>line.split('|')));
 const reverse=Object.fromEntries(Object.entries(messages).filter(([a,b])=>a!==b).map(([a,b])=>[b,a]));
 const errorPL={
+ 'The reservation is outside the supported hosted namespace.':'Rezerwacja należy do nieobsługiwanej publicznej domeny zrok.',
+ 'Complete or release the pending reservation before choosing a different name.':'Dokończ oczekującą rezerwację albo zwolnij ją w konsoli zrok przed wyborem innej nazwy.',
  'This MCP grant is paused or expired.':'Ten dostęp MCP jest wstrzymany lub wygasł.',
 "The DCC Web container cannot open a host shell through the Docker socket. Create or select an SSH profile for this same Docker host, then enable host.exec for it.":"Kontener DCC Web nie otworzy powłoki systemowej przez socket Docker. Utwórz lub wybierz profil SSH prowadzący do tego samego hosta Docker i włącz w nim uprawnienie host.exec.",
 "Use a simple SSH filename without directories":"Podaj prostą nazwę pliku SSH bez katalogów.",

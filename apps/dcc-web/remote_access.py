@@ -28,7 +28,7 @@ SETTINGS = "__dcc_remote_access__"
 PORT = 8791
 NAME = re.compile(r"[a-z0-9](?:[a-z0-9-]{1,61})[a-z0-9]")
 TOKEN = re.compile(r"[A-Za-z0-9]{8,128}")
-PROVIDER = "share.zrok.io"
+HOSTED_ZONES = ("share.zrok.io", "shares.zrok.io")
 ENVIRONMENT = {"HOME": "/tmp", "ZROK2_API_ENDPOINT": "https://api-v2.zrok.io",
                "GODEBUG": "http2client=0,http2server=0"}
 PROFILE_ACTIONS = frozenset({"install", "uninstall"})
@@ -43,7 +43,8 @@ class RemoteError(ValueError):
 
 def name_origin(name, reservation):
     zone = reservation.get("namespaceName")
-    if reservation.get("namespaceToken") != "public" or zone != PROVIDER:
+    if (not isinstance(name, str) or not NAME.fullmatch(name)
+            or reservation.get("namespaceToken") != "public" or zone not in HOSTED_ZONES):
         raise RemoteError("The reservation is outside the supported hosted namespace.")
     return f"https://{name}.{zone}"
 
@@ -409,7 +410,8 @@ class RemoteAccess:
         status = {"module": "DCC Remote Access", "version": VERSION, "provider": "zrok",
                   "provider_version": ZROK_VERSION, "digest": DIGEST, "available": self.available,
                   "state": "not-installed", "container": "missing", "tunnel": self.tunnel,
-                  "name": config.get("name"), "origin": config.get("origin"), "enrolled": bool(config.get("identity")),
+                  "name": config.get("name"), "pending_name": config.get("pending_name"),
+                  "origin": config.get("origin"), "enrolled": bool(config.get("identity")),
                   "last_connection": self.last_connection, "error": self.error, "update": self.update,
                   "security": "blocked" if self.blocked() else "pinned"}
         if not self.available:

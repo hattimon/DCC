@@ -6,13 +6,15 @@ DCC Remote Access is a managed zrok 2 sidecar for containerized DCC Web. NetFoun
 
 In the DCC Desktop App Store, choose **DCC Web**. The **DCC Remote Access** entry is in the browser-based DCC Web App Store, where the panel manages its tunnel.
 
-1. Use the published DCC Web 0.2.5 Docker image or a newer Web release with Remote Access. To upgrade, select the existing DCC Web container in DCC Container Updater, check for updates, and apply the offered Web image. Reload your existing panel address afterward. For a fresh installation, follow the [DCC Web container instructions](../dcc-web/docs/installation.md).
+1. Use the published DCC Web 0.2.6 Docker image or a newer Web release with Remote Access. To upgrade, select the existing DCC Web container in DCC Container Updater, check for updates, and apply the offered Web image. Reload your existing panel address afterward. For a fresh installation, follow the [DCC Web container instructions](../dcc-web/docs/installation.md).
 2. Sign in locally as a DCC administrator. In the **local Docker** profile, enable **Install applications**. In **Settings → Administration and security → Login and two-factor authentication**, enroll a TOTP app and save the recovery codes.
 3. Install **DCC Remote Access** from the **DCC** category in the App Store or open **Settings → Administration and security → Panel access and HTTPS (TLS) → Remote Internet Access**. Both paths manage the same container.
 4. Create an account at [myzrok.io](https://myzrok.io/). In the zrok API console, copy the account token from the getting-started wizard. Open the local panel over trusted HTTPS for enrollment and reauthentication. Use **Configure** to enter the token and choose a name or let DCC generate one. The hosted service reserves the name. If your chosen name is taken, select another name.
 5. Select **Enable access**, read the consent prompt and confirm with your current password and a fresh TOTP or recovery code. Wait for **Active** and open the displayed HTTPS address. DCC verifies the TLS endpoint and a one-use-per-launch proof from this installation before enabling the panel. The hosted service may display its own first-visit interstitial. Sign in with your existing DCC credentials.
 
 The [hosted enrollment guide](https://netfoundry.io/docs/zrok/get-started/get-token/) explains where to find the token. Local HTTPS, domain settings and DCC profiles continue to work independently of zrok.
+
+If setup was interrupted after enrollment, open **Configure** again and confirm the suggested name. DCC uses the saved environment to complete the pending reservation in the hosted public namespace.
 
 ## Stop, remove, or rotate
 

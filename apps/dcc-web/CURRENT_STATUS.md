@@ -1,4 +1,6 @@
-# DCC Web 0.2.5
+# DCC Web 0.2.6
+
+Web 0.2.6 recognizes the hosted zrok domain `shares.zrok.io` and pre-fills pending names when resuming Remote Access setup.
 
 Web 0.2.5 fixes reporting the result of Remote Access configuration, activation and restart in workspaces with custom profile IDs.
 
