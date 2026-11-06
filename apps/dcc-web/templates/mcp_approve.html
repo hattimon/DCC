@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="pl" data-theme="ocean"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>DCC MCP — potwierdź sesję / authorize session</title><link rel="stylesheet" href="/static/app.css"></head>
+<body class="auth-page"><main class="auth-card mcp-approval"><h1>DCC MCP — nowa sesja / new session</h1>
+<p>Klient / Client: <strong>{{ pending.client_name }}</strong></p>
+<p>Powrót / Callback: <code>{{ pending.params.redirect_uri }}</code></p>
+<p>Wyzwanie / Challenge: <code>{{ challenge }}</code></p>
+<p>Dostęp / Grant: <strong>{{ grant.name }}</strong> ({{ pending.grant }})</p>
+<p>Profile: {% for profile in profiles %}{{ profile.name }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+<p>Narzędzia / Tools: {{ grant.tools|join(', ') }}</p>
+<p>Terminal: {{ grant.terminal_profiles|join(', ') if grant.allow_host_terminal else 'brak / none' }}</p>
+<p>Zatwierdź wyłącznie rozpoczęte przez siebie połączenie. Użyj kodu z istniejącego wpisu DCC w Google Authenticator. Jeśli użyto go do logowania, poczekaj na następny kod. Nie podawaj kodu w czacie.</p>
+<p>Approve only a connection you started. Use the existing DCC authenticator entry. A code used for login cannot be reused; wait for the next code. Never send codes in chat.</p>
+<form method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}">
+<label>Obecne hasło / Current password<input name="current_password" type="password" autocomplete="current-password" required maxlength="256"></label>
+<label>Nowy kod 2FA / Fresh 2FA code<input name="otp" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code" required maxlength="6"></label>
+<label>Czas sesji / Session duration<select name="duration">{% for minutes in [15,30,60] %}{% if minutes <= grant.public_session_minutes %}<option value="{{ minutes }}">{{ minutes }} min</option>{% endif %}{% endfor %}</select></label>
+<p>Bezczynność: 10 min. Bez automatycznego odnawiania. / Idle timeout: 10 minutes. No automatic renewal.</p>
+<label><input name="confirm" type="checkbox" value="yes" required>Potwierdzam ten klient, dostęp i zakres / I approve this client, grant and scope</label>
+<button type="submit">Zatwierdź sesję / Authorize session</button></form></main></body></html>

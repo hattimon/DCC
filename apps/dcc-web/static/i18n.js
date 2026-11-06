@@ -1,6 +1,35 @@
 // Only authored UI strings/template fragments are translated. Interpolated Docker data is preserved.
 let language='EN';
 const pairs=`
+Narzędzia tylko do odczytu|Read-only tools
+Narzędzia modyfikujące|Modifying tools
+Uprawnienia MCP|MCP permissions
+Edytuj dostęp MCP|Edit MCP grant
+Zapisz dostęp|Save grant
+Zmień termin ważności|Change expiry
+Zezwól na dostęp terminalowy|Allow host terminal access
+Urządzenia z dostępem terminalowym|Devices with host terminal access
+Narzędzia terminala MCP|MCP terminal tools
+Zapis zachowa obecny token. Wszystkie czaty używające tego tokena otrzymają nowy zakres. Otwarte terminale zostaną zamknięte.|Saving keeps the current token. All chats using it receive the new scope. Open terminals will be closed.
+Ta zgoda włącza container_remove i potwierdza usuwanie. Wolumeny pozostają. Nie ogranicza poleceń wykonywanych przez terminal.|This consent enables container_remove and authorizes removal. Volumes remain. It does not restrict shell commands.
+Polecenia działają jako użytkownik SSH profilu i mogą zmieniać lub usuwać dane hosta. Uprawnienia root lub sudo zależą od tego konta. Wybierz urządzenia osobno.|Commands run as the profile SSH account and can modify or delete host data. Root or sudo privileges depend on that account. Select devices separately.
+Dostępne są profile SSH i Balena z uprawnieniem host.exec. Profil Local w kontenerze nie udostępnia terminala hosta.|SSH and Balena profiles with host.exec are eligible. A containerized Local profile does not provide a host shell.
+Dostęp zapisany. Token pozostał ten sam. Połącz MCP ponownie i pobierz aktualne instrukcje.|Grant saved. The token is unchanged. Reconnect MCP and export updated instructions.
+ZIP nigdy nie zawiera tokena. Wartość jest widoczna tylko przy utworzeniu dostępu; DCC zapisuje wyłącznie jej skrót. Zmiana zakresu zachowuje aktywny token. Po utracie tokena utwórz nowy dostęp.|The ZIP never contains the token. Its value is shown only when creating a grant; DCC stores only its hash. Scope edits preserve the active token. If it is lost, create a new grant.
+System komputera z klientem MCP|MCP client computer platform
+System klienta jest niezależny od systemu urządzenia. Instrukcja zawiera znane dane profili i osobny zakres terminala.|The client platform is separate from the device OS. Instructions include known profile facts and the separate terminal scope.
+Instalacja krok po kroku|Step-by-step setup
+Wybierz system klienta i pobierz paczkę projektu ZIP.|Select the client platform and download the project ZIP.
+Rozpakuj w głównym katalogu projektu. Jeśli AGENTS.md lub konfiguracja już istnieją, rozpakuj osobno i scal pliki bez zastępowania własnych ustawień.|Extract at the project root. If AGENTS.md or configuration already exists, extract separately and merge without replacing your settings.
+Sprawdź wymagany runtime opisany w README z paczki. Adres publicznego panelu nie jest endpointem HTTP MCP.|Check the runtime requirements in the bundled README. The public panel URL is not an HTTP MCP endpoint.
+Jeśli DCC_MCP_TOKEN jest już w środowisku, zachowaj ją. Zamknij całkowicie klienta i uruchom go ponownie, aby odziedziczył aktualną zmienną. Nie wklejaj sekretu do czatu.|If DCC_MCP_TOKEN is already in the environment, keep it. Fully quit and restart the client to inherit the current value. Do not paste the secret into chat.
+Otwórz zaufany projekt i nowy czat. Poproś o listę kontenerów przyznanego profilu przez DCC MCP. Udany odczyt potwierdza połączenie.|Open a trusted project and a new chat. Ask DCC MCP to list containers in a granted profile. A successful read confirms the connection.
+Po zmianie zakresu: połącz MCP ponownie i scal nowy eksport instrukcji. Nie musisz zmieniać tokena.|After changing scope, reconnect MCP and merge the new instruction export. You do not need to change the token.
+Paczka zawiera konfigurację, instrukcje agenta i README dla wybranej platformy. Nie instaluje ani nie nadpisuje plików automatycznie.|The package contains configuration, agent instructions and a README for the selected platform. It does not install or overwrite files automatically.
+Podgląd i osobne pliki|Preview and individual files
+ChatGPT Web — wymagane DCC MCP|ChatGPT Web — DCC MCP required
+Alternatywa: wtyczka Codex|Alternative: Codex plugin
+Użyj zamiast konfiguracji projektu. Rozpakuj w osobnym folderze, uruchom codex plugin marketplace add . i zainstaluj DCC Web MCP z tego źródła. Wtyczka także wymaga DCC_MCP_TOKEN i nie zawiera sekretu.|Use this instead of project configuration. Extract into a separate folder, run codex plugin marketplace add . and install DCC Web MCP from that source. The plugin also requires DCC_MCP_TOKEN and contains no secret.
 Ładowanie zainstalowanych aplikacji z hosta. Katalog pozostaje dostępny.|Loading installed apps from the host. The catalog remains available.
 Odświeżanie stanu hosta w tle; katalog pozostaje dostępny.|Refreshing host status in the background; the catalog remains available.
 Stan hosta jest sprawdzany w tle|Host status is being checked in the background
@@ -850,6 +879,13 @@ known_hosts — indywidualna ścieżka (opcjonalnie)|known_hosts — individual 
 const messages=Object.fromEntries(pairs.trim().split('\n').filter(line=>line.includes('|')).map(line=>line.split('|')));
 const reverse=Object.fromEntries(Object.entries(messages).filter(([a,b])=>a!==b).map(([a,b])=>[b,a]));
 const errorPL={
+"Select at least one write tool":"Wybierz przynajmniej jedno narzędzie modyfikujące lub terminalowe.",
+"Select terminal devices within this grant and explicitly allow terminal access":"Wybierz urządzenia w tym grancie i jawnie zezwól na dostęp terminalowy.",
+"Terminal devices require SSH or Balena profiles with host.exec permission":"Terminal wymaga profilu SSH lub Balena z uprawnieniem host.exec.",
+"This grant changed or was revoked. Reload it before editing.":"Dostęp został zmieniony lub odebrany. Wczytaj go ponownie przed edycją.",
+"A revoked token cannot be restored; create a new grant":"Nie można przywrócić odebranego tokena. Utwórz nowy dostęp.",
+"This native stdio export requires the server OS and paths. Use a container export for another client platform.":"Eksport natywny stdio wymaga systemu i ścieżek serwera. Dla innego systemu klienta użyj eksportu kontenerowego.",
+
  'The reservation is outside the supported hosted namespace.':'Rezerwacja należy do nieobsługiwanej publicznej domeny zrok.',
  'Complete or release the pending reservation before choosing a different name.':'Dokończ oczekującą rezerwację albo zwolnij ją w konsoli zrok przed wyborem innej nazwy.',
  'This MCP grant is paused or expired.':'Ten dostęp MCP jest wstrzymany lub wygasł.',

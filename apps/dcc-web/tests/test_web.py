@@ -828,7 +828,8 @@ class WebTests(unittest.TestCase):
         with ZipFile(io.BytesIO(self.client.get("/api/mcp/bundle/" + grant["id"] + "?variant=chatgpt-web").data)) as bundle:
             self.assertEqual(bundle.read("AGENTS.md"), web_variant.data)
             self.assertNotIn("AGENTS.chatgpt-web.md", bundle.namelist())
-        self.assertIn(b"authorized indirect access", web_variant.data)
+        self.assertIn(b"DCC MCP connection required", web_variant.data)
+        self.assertNotIn(b"authorized indirect access", web_variant.data)
 
         self.state.save_profile("granted-ssh", {"name": "Read SSH", "kind": "ssh", "permissions": ["read"]})
         self.state.save_profile("local", {"name": "Local without read", "kind": "local", "permissions": []})

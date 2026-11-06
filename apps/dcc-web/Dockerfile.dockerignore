@@ -1,5 +1,6 @@
 .git
 .venv*
+.local-test-deps
 .pip-build-cache
 .uv-cache
 build

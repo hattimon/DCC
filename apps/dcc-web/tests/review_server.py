@@ -22,6 +22,7 @@ def main():
     state=app.extensions['dcc_state']
     state.execute('INSERT OR IGNORE INTO users VALUES(?,?,?,?)',('fixture-admin','review-admin',generate_password_hash('Review-only-password-4488'),'admin'))
     state.save_profile('local',{'name':'Local Docker · TEST FIXTURE','kind':'local','permissions':sorted(CAPABILITIES)})
+    state.save_profile('mcp-ssh-qa',{'name':'SSH · MCP TEST FIXTURE','kind':'ssh','host':'192.0.2.99','username':'fixture','permissions':sorted(CAPABILITIES)})
     originals=list(FakeBackend.entries)
     # Explicit synthetic AI transport for browser QA; never installed in create_app.
     import ai_assistant,json

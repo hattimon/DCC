@@ -35,7 +35,7 @@ from remote_access import (
 from profile_ssh import WORKSPACE_ACTIONS, MAX_FILE
 from urllib.parse import urlsplit
 
-VERSION = "0.2.8"
+VERSION = "0.2.9"
 THEMES = {"obsidian":"Obsidian Graphite", "violet":"Midnight Violet", "ocean":"Deep Ocean", "arctic":"Arctic Light", "emerald":"Emerald Terminal"}
 DEFAULT_SETTINGS = {"theme":"ocean", "accent":"#72d9df", "intensity":65, "effects":True, "density":"comfortable", "animations":True, "language":"EN", "refresh":15, "refresh_changes_only":False, "terminal_limit":16, "check_updates_on_refresh":True, "audio":{"enabled":True,"master":40,"effects":60,"notifications":55,"style":"soft"}}
 MCP_GRANT_ACTIONS={"mcp.grant.pause","mcp.grant.resume","mcp.grant.revoke","mcp.grant.delete-history"}
@@ -193,7 +193,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             code, message = 503, 'SSH connection failed. Check the username, key, passphrase or SSH agent and trusted known_hosts in Profiles.'
         else:
             code, message = 500, "The request could not be completed"
-        if request.path.startswith("/api/"):
+        if request.path.startswith(("/api/","/mcp","/.well-known/")) or request.path in {'/authorize','/token','/register','/revoke'}:
             return jsonify(error=message), code
         if g.get("user"):
             return render_template("error.html",message=message,code=code),code
@@ -235,19 +235,23 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             mfa = user and state.mfa.enabled(user["id"])
             remote_admin_without_mfa = user and g.get("dcc_remote") and user["role"] == "admin" and not mfa
             if not error and user and not remote_admin_without_mfa and check_password_hash(user["password"],password) and (not mfa or state.mfa.verify(user["id"],request.form.get("otp"))):
+                # Keep the pending MCP approval target across session rotation.
+                # The new session must still review the challenge and use fresh 2FA.
+                next_mcp = session.get('mcp_login_next')
                 session.clear()
                 session["sid"], session["csrf"] = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
                 session.permanent = True
                 session['mfa_verified'] = state.mfa.enabled(users[0]['id'])
                 state.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(session["sid"].encode()).hexdigest(),users[0]["id"],time.time()+43200))
                 state.audit(users[0]["id"],"login","session",200)
-                return redirect("/")
+                return redirect('/mcp-approve/'+next_mcp if isinstance(next_mcp,str) and re.fullmatch(r'[A-Za-z0-9_-]{40,50}',next_mcp) else '/')
             state.execute("INSERT INTO attempts VALUES(?,?)", (address,time.time()))
             error = error or "Nieprawidłowa nazwa użytkownika lub hasło."
         return render_template("login.html", setup=setup, error=error)
 
     @app.post("/api/logout")
     def logout():
+        app.extensions['dcc_mcp_http'].oauth.revoke_user(g.user['id'])
         state.execute("DELETE FROM sessions WHERE token=?", (hashlib.sha256(session["sid"].encode()).hexdigest(),))
         session.clear()
         return jsonify(ok=True)
@@ -292,6 +296,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             raise
         session['mfa_verified'] = True
         revoke_other_sessions()
+        app.extensions['dcc_mcp_http'].oauth.revoke_user(g.user['id'])
         return jsonify(recovery_codes=codes)
 
     @app.post('/api/account/2fa/disable')
@@ -305,6 +310,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             raise
         session['mfa_verified'] = False
         revoke_other_sessions()
+        app.extensions['dcc_mcp_http'].oauth.revoke_user(g.user['id'])
         return jsonify(ok=True)
 
     @app.get("/")
@@ -615,6 +621,8 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def infrastructure():
         selected=profile()
         info=factory(selected).info()
+        from profile_facts import remember
+        remember(state, selected, info)
         address=profile_display_address(selected,info,request.host)
         return jsonify(available=True,name=info.get('Name',''),address=address,operating_system=info.get('OperatingSystem',''),os_type=info.get('OSType',''),architecture=info.get('Architecture',''),docker_version=info.get('ServerVersion',''),cpus=info.get('NCPU',0),memory_bytes=info.get('MemTotal',0),kernel_version=info.get('KernelVersion',''))
 
@@ -1133,16 +1141,19 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         if not check_password_hash(g.user["password"],data.get("current","")) or not 12<=len(data.get("password",""))<=256:
             abort(400,"Current password or new password is invalid")
         state.execute("UPDATE users SET password=? WHERE id=?",(generate_password_hash(data["password"]),g.user["id"]))
+        app.extensions['dcc_mcp_http'].oauth.revoke_user(g.user['id'])
         state.execute("DELETE FROM sessions WHERE user_id=?",(g.user["id"],))
         session.clear()
         return jsonify(ok=True)
 
-    # MCP is scoped to explicit stdio grants; HTTP transport is not enabled.
+    # MCP stdio uses explicit grants; HTTP/OAuth is a separate opt-in transport.
     from mcp_preview import register_mcp
     register_mcp(app,state,profile,reauthenticate,confirmed)
     from ai_assistant import register_ai
     register_ai(app,state,profile,factory,body)
     register_remote_access(app, state, body, profile, confirmed, reauthenticate, start_job, installed_scans.invalidate)
+    from mcp_http import register_public_mcp
+    register_public_mcp(app,state,reauthenticate,factory,terminal_factory)
     return app
 
 

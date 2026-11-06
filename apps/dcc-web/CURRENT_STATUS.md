@@ -1,6 +1,6 @@
-# DCC Web 0.2.8
+# DCC Web 0.2.9
 
-Web 0.2.8 can resume an approved zrok tunnel after a compatible image replacement through Updater 1.1.4. The manual procedure is visible in Remote Internet Access settings.
+Web 0.2.9 supports the opt-in zrok handoff in Container Updater 1.1.4. For compatible Web images, the updater pauses the managed tunnel during replacement and resumes it after the new container is healthy, preserving the configured public domain without manual disablement. The compatibility procedure for older Web images remains visible in Remote Internet Access settings.
 
 Web 0.2.7 uses BalenaOS SSH port 22222 by default, migrates existing Balena profiles saved with the former default 22, and replaces generic errors for common SSH transport failures with safe, actionable messages. It also moves legacy DCC Remote Access panel networks into a collision-checked subnet pool, preventing the isolated network from taking routes to remote hosts even before profiles are added. The tunnel sidecar stops during a network migration and must be enabled again. Unreadable saved credentials identify the need to restore the matching data volume and master key.
 

@@ -185,6 +185,7 @@ def register_recovery(app,state,reauthenticate):
                     email = recovery.consume(user,'reset',request.form.get('code'),session.get('recovery_nonce',''))
                     if email and hmac.compare_digest(email,recovery.address(user)):
                         state.execute('DELETE FROM mfa WHERE user_id=?',(user,))
+                        app.extensions['dcc_mcp_http'].oauth.revoke_user(user)
                         state.execute('DELETE FROM sessions WHERE user_id=?',(user,))
                         session.clear(); complete=True
                     else:

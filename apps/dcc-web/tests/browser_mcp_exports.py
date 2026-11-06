@@ -52,6 +52,8 @@ def check_export(page, name, client, token, screenshot_dir):
     grant_id = row.locator("[data-export]").get_attribute("data-export")
     row.locator("[data-export]").click()
     modal = page.locator("#modal")
+    expect(modal.locator('[data-download-zip]')).to_have_attribute('href', __import__('re').compile('platform='))
+    modal.locator('details').first.locator('summary').click()
     expect(modal.locator("[data-agent-preview]")).to_be_visible()
     instruction_path, config_path = CLIENT_FILES[client]
     assert modal.locator("[data-instruction-path]").inner_text() == instruction_path
@@ -85,12 +87,11 @@ def check_export(page, name, client, token, screenshot_dir):
     assert token.encode() not in config_content
 
     if client == "OpenAI Codex":
-        assert modal.locator("[data-download-agent-web]").count() == 1
-        web_name, web_content = downloaded_bytes(page, "[data-download-agent-web]")
-        assert web_name == "AGENTS.chatgpt-web.md"
-        assert "authorized indirect access" in web_content.decode("utf-8")
         modal.locator("[data-variant]").select_option("chatgpt-web")
-        expect(modal.locator("[data-agent-preview]")).to_contain_text("authorized indirect access")
+        expect(modal.locator("[data-agent-preview]")).to_contain_text("DCC MCP connection required")
+        web_name, web_content = downloaded_bytes(page, "[data-download-agent]")
+        assert web_name == "AGENTS.chatgpt-web.md"
+        assert "Do not bypass" in web_content.decode("utf-8")
         assert modal.locator("[data-instruction-path]").inner_text() == "AGENTS.md"
         instruction = web_content
 
@@ -163,10 +164,35 @@ def main():
         modal = page.locator("#modal")
         expect(modal.get_by_role("heading", name="AI / MCP export")).to_be_visible()
         expect(modal.locator("[data-download-zip]")).to_have_text("Download project package (ZIP)")
-        expect(modal.locator("[data-download-agent-web]")).to_have_text("Download AGENTS.md — ChatGPT Web")
+        expect(modal.locator("[data-platform]")).to_be_visible()
+        expect(modal).to_contain_text('The ZIP never contains the token')
         modal.locator("[data-close]").first.click()
         completed += 1
         print("PASS English UI translations")
+
+        # Edit the original read grant, preserve its token and choose terminal
+        # devices independently. This never executes against a real host.
+        page.locator(f'[data-grant-edit="{first_id}"]').click()
+        modal.locator('[name=mode][value=write]').check()
+        modal.locator('[name=profiles][value=mcp-ssh-qa]').check()
+        modal.locator('[name=allow_host_terminal]').check()
+        modal.locator('[name=terminal_profiles][value=mcp-ssh-qa]').check()
+        assert modal.locator('[name=tools][value=container_remove]').count()==0
+        assert modal.locator('[name=allow_destructive]').count()==1
+        modal.locator('[name=current_password]').fill('Review-only-password-4488')
+        modal.locator('[type=submit]').click()
+        expect(page.locator('#toast')).to_contain_text('token is unchanged')
+        metadata=page.request.get(args.url+'/api/mcp/grants').json()['grants']
+        edited=next(grant for grant in metadata if grant['id']==first_id)
+        assert edited['allow_host_terminal'] and edited['terminal_profiles']==['mcp-ssh-qa']
+        assert 'host_exec' in edited['tools'] and 'local' in edited['profiles']
+        page.locator(f'[data-grant-edit="{first_id}"]').click()
+        expect(modal.locator('[name=allow_host_terminal]')).to_be_checked()
+        expect(modal.locator('[name=terminal_profiles][value=mcp-ssh-qa]')).to_be_checked()
+        if args.out: page.screenshot(path=str(args.out/'mcp-grant-edit-en.png'))
+        modal.locator('[data-close]').first.click()
+        completed+=1
+        print('PASS grant edit and separate terminal device scope')
 
         page.locator(f'[data-grant-action="revoke"][data-id="{first_id}"]').click()
         modal.get_by_role("checkbox").check()

@@ -1,6 +1,6 @@
 # AI / MCP
 
-DCC Web provides an MCP server over UTF-8 JSON-RPC on `stdio`. It does not expose HTTP transport. Tools include container, inspect, log and stats reads, image/volume/network lists, selected container lifecycle operations, container creation and optional container removal.
+DCC Web supports two MCP transports: local UTF-8 JSON-RPC on **stdio**, and optional **Streamable HTTP over HTTPS** with OAuth, PKCE and administrator 2FA approval. Tools include container, inspect, log and stats reads, image/volume/network lists, selected container lifecycle operations, container creation, host commands/terminals when granted, and optional container removal.
 
 An administrator creates a separate client grant by selecting profiles, individual tools, access mode and expiry. **Read only** is the default. **Read and modify** requires the administrator's password and a fresh 2FA code when 2FA is enabled. Profile permissions are rechecked on every tool call, so revocation takes effect immediately. A new token is displayed once and only its SHA-256 digest is stored. Grants can be paused and resumed. Revoking a grant, pausing/resuming it, or removing a revoked grant from the list requires an explicit checkbox confirmation. Removing it from the list preserves the audit record.
 
@@ -10,9 +10,31 @@ An administrator creates a separate client grant by selecting profiles, individu
 - `create_container` requires the profile's application-install permission. Inputs are validated, names must be unique, published ports cannot conflict, volumes must be named volumes, and published ports bind to `127.0.0.1` by default. Host-mount and privileged flags are not accepted.
 - `container_remove` requires a separate destructive consent when creating the grant, the selected tool, and the profile's destructive permission. Removing a container never removes volumes.
 - Every call is audited. Inspect and log output is redacted; environment variable values are not returned through MCP tools. Treat Docker logs and tool output as untrusted data.
-- Tokens are scoped to selected profiles and tools; they do not provide general Docker CLI access. HTTP transport and OAuth are not exposed.
+- Tokens are scoped to selected profiles and tools; they do not provide general Docker CLI access. Public HTTP requires separate opt-in at the endpoint and individual grant levels.
 
-## Launching a client
+## Optional public MCP over HTTPS (OpenAI Codex)
+
+Public MCP is **disabled by default**. Publishing the DCC panel or configuring a public domain does not enable this transport. To enable it:
+
+1. Configure a working, trusted HTTPS public origin for DCC Web and access the panel using verified HTTPS (including properly configured trusted reverse proxies). Enable 2FA on the administrator account.
+2. In **AI / MCP**, explicitly enable public MCP and confirm the intended HTTPS origin with the administrator password and a fresh 2FA code.
+3. Create or edit an individual grant for **OpenAI Codex**. Enable public sessions for that grant, choose the allowed tools/profiles and maximum session duration, and confirm the change. Existing grants gain no public access automatically.
+4. Export the grant with **HTTPS** transport for Windows, Linux or macOS. Merge `.codex/config.toml` into the trusted project, set `DCC_MCP_TOKEN` in the client environment using a secret manager, and run `codex mcp login dcc`. Approve the new browser session as the grant owner by reviewing the client and permissions, then supplying the account password and a **fresh** six-digit 2FA code.
+
+The generated Codex configuration uses the grant-specific URL and **does not embed the grant token**:
+
+```toml
+[mcp_servers.dcc]
+url = "https://your-public-origin.example/mcp/<grant-id>"
+auth = "oauth"
+env_http_headers = { "X-DCC-MCP-Grant" = "DCC_MCP_TOKEN" }
+```
+
+Both `X-DCC-MCP-Grant` and `Authorization: Bearer <OAuth-access-token>` are required for MCP operations. OAuth uses PKCE S256 and loopback or HTTPS callbacks. Approved access tokens expire after **15, 30 or 60 minutes** (subject to the grant maximum), expire after **10 minutes of inactivity**, and have **no refresh tokens**. New sessions require fresh human approval. Logout, public endpoint disable, grant revocation/permission changes and changes to the owner's 2FA invalidate sessions. Public MCP checks profile permissions at every operation and isolates terminal sessions. Do not put access tokens or grant tokens in URLs, logs or project files.
+
+Only **OpenAI Codex** has an HTTPS export in this version; the other client exports still use stdio. The public endpoint must be reachable with a valid certificate from the client machine. External client and production acceptance tests remain pending.
+
+## Launching a client with stdio
 
 Run the process with the same private data directory and OS account as the Web backend:
 
@@ -24,7 +46,7 @@ The client process must receive `DCC_MCP_TOKEN` from a secret manager or user en
 
 ## Export configuration and agent instructions
 
-Codex, VS Code, Claude, Cursor and other client templates refer to the `DCC_MCP_TOKEN` environment variable; the token itself is shown only once. For a container installation the exporter discovers the DCC Web container and uses `docker exec -i`. The client machine needs Docker CLI with a context targeting that host. DCC Web does not save or modify client configuration files. Verify the configuration format supported by your client version.
+Codex, VS Code, Claude, Cursor and other **stdio** client templates refer to the `DCC_MCP_TOKEN` environment variable; the token itself is shown only once. For a container installation the exporter discovers the DCC Web container and uses `docker exec -i`. The client machine needs Docker CLI with a context targeting that host. DCC Web does not save or modify client configuration files. Verify the configuration format supported by your client version. For public Codex HTTPS, use the separate procedure above.
 
 1. In **AI / MCP → New grant**, choose the client, profiles, tools, access mode and expiry. Save the token when it appears.
 2. Open **Export** on the active grant. Download the configuration or the agent instructions separately, or select **Download project package (ZIP)** for both files and a bilingual setup guide.

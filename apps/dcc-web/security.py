@@ -14,9 +14,11 @@ SECRET_WORDS = re.compile(r"password|passwd|passphrase|private.?key|token|secret
 
 
 def trusted_public_https_request(app):
-    """Recognize an explicitly configured public HTTPS endpoint."""
+    """Recognize a public endpoint only after verifying its HTTPS transport."""
     if g.get("dcc_remote"):
         return True
+    if not trusted_https_request(app):
+        return False
     host=(urlsplit("//"+request.host).hostname or "").lower()
     trusted={str(value).lower() for value in app.config.get("TRUSTED_HTTPS_HOSTS",[]) if value}
     public_origin=app.config.get("PUBLIC_ORIGIN") or ""
@@ -27,19 +29,24 @@ def trusted_public_https_request(app):
 
 
 def trusted_https_request(app):
-    """Recognize TLS from Flask, a configured public host, or authenticated Caddy."""
+    """Recognize TLS from the request or a specifically trusted TLS proxy."""
     # Direct TLS termination is trustworthy even when the hostname is a private
     # LAN address. Public HSTS is handled separately by trusted_public_https_request.
     if request.is_secure:
         return True
-    if trusted_public_https_request(app):
+    if g.get("dcc_remote"):
         return True
     # Waitress clears standard forwarded headers from untrusted network peers.
     # The private, per-installation marker authenticates our TLS-only proxy
     # independently of those headers; client-supplied X-Forwarded-Proto is not
     # sufficient to mark an ordinary HTTP request as secure.
     domains=app.extensions.get("dcc_domains")
-    return bool(domains and domains.trusts_proxy(request.headers.get("X-DCC-Web-Internal-TLS", "")))
+    if domains and domains.trusts_proxy(request.headers.get("X-DCC-Web-Internal-TLS", "")):
+        return True
+    # External reverse proxies must be explicitly trusted by source address.
+    # Host and X-Forwarded-Proto alone never prove that TLS was used.
+    peers = app.config.get("MCP_TRUSTED_PROXY_IPS", ())
+    return request.remote_addr in peers and request.headers.get("X-Forwarded-Proto") == "https"
 
 
 def redact(value):
@@ -63,8 +70,17 @@ def initialize_security(app, state):
             probe = remote.guard()
             if probe is not None:
                 return probe
+        public_mcp = app.extensions.get('dcc_mcp_http')
+        if public_mcp and request.endpoint == 'mcp_http':
+            return public_mcp.guard()
+        if public_mcp and (str(request.endpoint).startswith('dcc_oauth_') or request.endpoint == 'mcp_resource_metadata'):
+            public_mcp.boundary()
+            return None
+        public_approval = public_mcp and request.endpoint == 'mcp_approve'
+        if public_approval:
+            public_mcp.boundary()
         host = (urlsplit("//"+request.host).hostname or "").lower()
-        if not g.get("dcc_remote") and host not in app.config["ALLOWED_HOSTS"]:
+        if not public_approval and not g.get("dcc_remote") and host not in app.config["ALLOWED_HOSTS"]:
             abort(400, "Untrusted Host header")
         session.setdefault("csrf", secrets.token_urlsafe(32))
         if request.method not in {"GET", "HEAD", "OPTIONS"}:

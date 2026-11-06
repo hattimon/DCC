@@ -1,6 +1,6 @@
 # AI / MCP
 
-DCC Web udostępnia serwer MCP przez UTF-8 JSON-RPC po `stdio`. Nie wystawia transportu HTTP. Narzędzia obejmują odczyt kontenerów, inspekcji, logów, statystyk, obrazów, wolumenów i sieci, a także wybrane operacje cyklu życia, tworzenie kontenera i opcjonalne usuwanie kontenera.
+DCC Web obsługuje dwa transporty MCP: lokalny UTF-8 JSON-RPC przez **stdio** oraz opcjonalny **Streamable HTTP przez HTTPS** z OAuth, PKCE i zatwierdzaniem sesji przez administratora z 2FA. Narzędzia obejmują odczyt kontenerów, inspekcji, logów, statystyk, obrazów, wolumenów i sieci, wybrane operacje cyklu życia, tworzenie kontenerów, polecenia/terminale hosta po przyznaniu uprawnień i opcjonalne usuwanie kontenerów.
 
 Administrator tworzy osobny dostęp dla klienta, wybierając profile, konkretne narzędzia, tryb i czas ważności. Tryb **Tylko odczyt** jest domyślny. Tryb **Odczyt i modyfikacje** wymaga ponownego podania hasła oraz kodu 2FA, jeśli jest włączone. Uprawnienia profilu są sprawdzane ponownie przy każdym wywołaniu, więc cofnięcie ich od razu blokuje narzędzie. Nowy dostęp pokazuje token tylko raz i przechowuje wyłącznie jego SHA-256. Dostęp można wstrzymać i później wznowić. Przed wstrzymaniem, wznowieniem, odebraniem lub usunięciem odebranego grantu z listy wymagane jest zaznaczenie potwierdzenia. Usunięcie z listy zachowuje wpis w dzienniku operacji.
 
@@ -10,9 +10,31 @@ Administrator tworzy osobny dostęp dla klienta, wybierając profile, konkretne 
 - `create_container` wymaga uprawnienia instalowania aplikacji. Parametry są walidowane; nazwa musi być unikalna, porty nie mogą kolidować, wolumeny są wyłącznie nazwane, a opublikowany port domyślnie wiąże się z `127.0.0.1`. Narzędzie nie przyjmuje flag host-mount ani trybu privileged.
 - `container_remove` wymaga włączenia osobnej zgody destrukcyjnej przy tworzeniu dostępu, wybrania narzędzia oraz uprawnienia destrukcyjnego w profilu. Usunięcie kontenera nie usuwa wolumenów.
 - Każde wywołanie jest audytowane. Wyniki inspekcji i logów są redagowane; wartości zmiennych środowiskowych nie są zwracane przez narzędzia MCP. Treści logów i wyniki narzędzi traktuj jako niezaufane dane.
-- Token ogranicza profile i listę narzędzi; nie daje ogólnego dostępu do Docker CLI. Transport HTTP i OAuth nie są udostępnione.
+- Token ogranicza profile i listę narzędzi; nie daje ogólnego dostępu do Docker CLI. Publiczny HTTP wymaga osobnego włączenia na poziomie endpointu i każdego grantu.
 
-## Uruchamianie klienta
+## Opcjonalne publiczne MCP przez HTTPS (OpenAI Codex)
+
+Publiczne MCP jest **domyślnie wyłączone**. Udostępnienie panelu przez domenę publiczną samo w sobie nie włącza MCP. Konfiguracja:
+
+1. Przygotuj działający publiczny adres HTTPS DCC Web z zaufanym certyfikatem, uwzględniając prawidłowo skonfigurowane zaufane reverse proxy. Włącz 2FA na koncie administratora.
+2. W sekcji **AI / MCP** jawnie włącz publiczne MCP i potwierdź adres HTTPS hasłem administratora oraz świeżym kodem 2FA.
+3. Utwórz lub edytuj indywidualny dostęp dla **OpenAI Codex**. Zezwól na sesje publiczne w tym grancie, wybierz narzędzia, profile i maksymalny czas sesji, a następnie zatwierdź zmianę. Wcześniejsze granty nie otrzymują nowych uprawnień automatycznie.
+4. Wyeksportuj grant z transportem **HTTPS** dla Windows, Linux lub macOS. Scal `.codex/config.toml` z konfiguracją zaufanego projektu, ustaw `DCC_MCP_TOKEN` w środowisku klienta poprzez menedżer sekretów i uruchom `codex mcp login dcc`. W przeglądarce właściciel grantu sprawdza klienta i uprawnienia, a następnie zatwierdza sesję hasłem i **świeżym** sześciocyfrowym kodem 2FA.
+
+Eksportowana konfiguracja używa adresu grantu i **nie zawiera jego tokenu**:
+
+```toml
+[mcp_servers.dcc]
+url = "https://twoja-publiczna-domena.example/mcp/<grant-id>"
+auth = "oauth"
+env_http_headers = { "X-DCC-MCP-Grant" = "DCC_MCP_TOKEN" }
+```
+
+Każda operacja MCP wymaga równocześnie nagłówków `X-DCC-MCP-Grant` i `Authorization: Bearer <token-dostępu-OAuth>`. OAuth używa PKCE S256 oraz callbacków HTTPS lub loopback. Sesje trwają **15, 30 lub 60 minut** (z uwzględnieniem limitu grantu), wygasają po **10 minutach bezczynności** i **nie mają refresh tokenów**. Każda nowa sesja wymaga ponownego zatwierdzenia. Wylogowanie, wyłączenie publicznego endpointu, cofnięcie lub zmiana uprawnień grantu oraz zmiana 2FA właściciela unieważniają sesje. MCP weryfikuje uprawnienia profilu przy każdej operacji i izoluje terminale. Nie umieszczaj tokenów w adresach URL, logach ani plikach projektu.
+
+W tej wersji eksport HTTPS jest dostępny tylko dla **OpenAI Codex**; pozostałe klienty korzystają z eksportu stdio. Endpoint wymaga poprawnego certyfikatu zaufanego na urządzeniu klienta. Test rzeczywistego klienta zewnętrznego i odbiór produkcyjny pozostają do wykonania.
+
+## Uruchamianie klienta przez stdio
 
 Uruchom proces z tym samym prywatnym katalogiem i użytkownikiem systemowym co backend:
 
@@ -24,7 +46,7 @@ Proces klienta musi otrzymać `DCC_MCP_TOKEN` z menedżera sekretów lub środow
 
 ## Eksport konfiguracji i instrukcji agenta
 
-Konfiguracja Codex, VS Code, Claude, Cursor i innych klientów wskazuje nazwę zmiennej `DCC_MCP_TOKEN`; sam token jest pokazywany tylko raz. Dla instalacji kontenerowej eksporter rozpoznaje kontener DCC Web i używa `docker exec -i`. Klient musi mieć Docker CLI z kontekstem wskazującym host kontenera. Konfiguracja klienta nie jest zapisywana ani zmieniana automatycznie. Sprawdź format obsługiwany przez zainstalowaną wersję klienta.
+Konfiguracja Codex, VS Code, Claude, Cursor i innych klientów **stdio** wskazuje nazwę zmiennej `DCC_MCP_TOKEN`; sam token jest pokazywany tylko raz. Dla instalacji kontenerowej eksporter rozpoznaje kontener DCC Web i używa `docker exec -i`. Klient musi mieć Docker CLI z kontekstem wskazującym host kontenera. Konfiguracja klienta nie jest zapisywana ani zmieniana automatycznie. Sprawdź format obsługiwany przez zainstalowaną wersję klienta. Dla publicznego HTTPS Codex skorzystaj z osobnej instrukcji powyżej.
 
 1. W **AI / MCP → Nowy dostęp** wybierz klienta, profile, narzędzia, tryb i czas ważności. Zapisz token, gdy się pojawi.
 2. Przy aktywnym grancie otwórz **Eksport**. Pobierz konfigurację lub instrukcje osobno albo wybierz **Pobierz paczkę projektu (ZIP)**, aby otrzymać oba pliki i dwujęzyczną instrukcję konfiguracji.

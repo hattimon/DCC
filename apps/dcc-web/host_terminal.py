@@ -96,13 +96,14 @@ class TerminalSession:
             try:self.connection.close()
             except Exception:pass
 
-    def output(self,offset,wait=1):
+    def output(self,offset,wait=1,max_bytes=1_000_000):
         self.touched=time.monotonic()
         with self.condition:
             if offset>self.offset+len(self.buffer):raise ValueError("Invalid terminal output offset")
             if offset==self.offset+len(self.buffer) and not self.closed:self.condition.wait(min(1,max(0,wait)))
             start=max(offset,self.offset)
-            return {"data":base64.b64encode(bytes(self.buffer[start-self.offset:])).decode(),"offset":self.offset+len(self.buffer),"closed":self.closed,"truncated":offset<self.offset}
+            end=min(self.offset+len(self.buffer),start+max_bytes)
+            return {"data":base64.b64encode(bytes(self.buffer[start-self.offset:end-self.offset])).decode(),"offset":end,"closed":self.closed,"truncated":offset<self.offset}
 
     def close(self):
         with self.condition:
@@ -166,3 +167,9 @@ class HostTerminals:
                 if value.profile in profile_ids:
                     value.close()
                     self.sessions.pop(ident, None)
+
+    def close_all(self):
+        with self.lock:
+            for value in self.sessions.values():
+                value.close()
+            self.sessions.clear()
