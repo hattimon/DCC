@@ -280,24 +280,6 @@ class ContainerSafetyTests(unittest.TestCase):
             service._wait_until_healthy(container)
         self.assertEqual(container.attrs["State"]["Health"]["Status"], "healthy")
 
-    def test_restart_timeout_reports_startup_logs_and_redacts_secrets(self):
-        service, old, containers, events = self._visibility_fixture(
-            missing_attempts=0,
-            replacement_logs=b"database connection refused token=PRIVATE_STARTUP_TOKEN",
-        )
-        service.wait_seconds = 1
-        containers.replacement.attrs["State"]["Status"] = "restarting"
-        with patch("updater.time.monotonic", side_effect=[0, 0, 2]), patch("updater.time.sleep"):
-            with self.assertRaises(RuntimeError) as raised:
-                service.update_one(old, "ghcr.io/hattimon/cinema-hub:1.3.15")
-
-        message = str(raised.exception)
-        self.assertIn("status: restarting", message)
-        self.assertIn("database connection refused", message)
-        self.assertIn("token=[redacted]", message)
-        self.assertNotIn("PRIVATE_STARTUP_TOKEN", message)
-        self.assertIn(("start-old",), events)
-
     def test_automatic_updates_block_shared_data_and_namespace_dependents(self):
         service = UpdateService(SimpleNamespace(), catalog_loader=lambda: [])
         container = self._container(Mounts=[{'Type': 'volume', 'Name': 'shared', 'Destination': '/data', 'RW': True}])
@@ -1213,6 +1195,29 @@ class UpdateRollbackTests(unittest.TestCase):
         containers.replacement = replacement
         service = UpdateService(SimpleNamespace(api=api, containers=containers, images=FakeImages()))
         return service, old, containers, events
+
+    def test_restart_timeout_reports_startup_logs_and_redacts_secrets(self):
+        service, old, containers, events = self._visibility_fixture(
+            missing_attempts=0,
+            replacement_logs=b"database connection refused token=PRIVATE_STARTUP_TOKEN",
+        )
+        data_mount = {"Type": "volume", "Name": "cinema-hub_cinema-state", "Destination": "/data", "RW": True}
+        old.attrs["Mounts"] = [data_mount]
+        service.wait_seconds = 1
+        containers.replacement.attrs["State"]["Status"] = "restarting"
+        with patch("updater.time.monotonic", side_effect=[0, 0, 2]), patch("updater.time.sleep"):
+            with self.assertRaises(RuntimeError) as raised:
+                service.update_one(old, "ghcr.io/hattimon/cinema-hub:1.3.15")
+
+        message = str(raised.exception)
+        self.assertIn("status: restarting", message)
+        self.assertIn("database connection refused", message)
+        self.assertIn("token=[redacted]", message)
+        self.assertNotIn("PRIVATE_STARTUP_TOKEN", message)
+        self.assertEqual(old.attrs["Mounts"], [data_mount])
+        self.assertIn(("remove-replacement", False, True), events)
+        self.assertNotIn(("remove-old", False), events)
+        self.assertIn(("start-old",), events)
 
     def test_retries_transient_404_after_replacement_creation(self):
         service, old, containers, events = self._visibility_fixture(missing_attempts=1)
