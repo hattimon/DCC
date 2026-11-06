@@ -37,6 +37,10 @@ jobs:
         working-directory: apps/container-updater
         run: python -m unittest discover -s tests -v
 
+      - name: Verify image-default update and persistent-volume retention with Docker
+        working-directory: apps/container-updater
+        run: python tests/docker_image_defaults_smoke.py
+
       - name: Verify managed HTTPS Web update and rollback with Docker
         working-directory: apps/container-updater
         run: python tests/docker_web_https_smoke.py

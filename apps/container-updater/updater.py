@@ -1607,9 +1607,28 @@ class UpdateService:
         container: Any,
         target_image: str,
         update_instructions: dict[str, Any] | None = None,
+        *,
+        target_image_config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         attrs = container.attrs
         config = attrs.get("Config") or {}
+        old_image_config = {}
+        try:
+            old_image_config = (container.image.attrs.get("Config") or {})
+        except Exception:
+            pass
+
+        def process_setting(field: str) -> Any:
+            current = config.get(field)
+            missing = object()
+            old_default = old_image_config.get(field, missing)
+            if target_image_config is None or old_default is missing:
+                return current
+            normalize = lambda value: None if value is None or value == [] else value
+            if normalize(current) == normalize(old_default):
+                return target_image_config.get(field)
+            return current
+
         host = copy.deepcopy(attrs.get("HostConfig") or {})
         for generated in ("ContainerIDFile", "Cgroup", "MaskedPaths", "ReadonlyPaths"):
             host.pop(generated, None)
@@ -1664,7 +1683,7 @@ class UpdateService:
 
         create_options = {
             "image": target_image,
-            "command": config.get("Cmd"),
+            "command": process_setting("Cmd"),
             "hostname": config.get("Hostname"),
             "user": config.get("User"),
             "detach": True,
@@ -1674,7 +1693,7 @@ class UpdateService:
             "environment": config.get("Env"),
             "volumes": config.get("Volumes"),
             "network_disabled": bool(config.get("NetworkDisabled")),
-            "entrypoint": config.get("Entrypoint"),
+            "entrypoint": process_setting("Entrypoint"),
             "working_dir": config.get("WorkingDir"),
             "domainname": config.get("Domainname"),
             "host_config": host,
@@ -1977,13 +1996,28 @@ class UpdateService:
         # Pull first: a registry or network failure leaves the running service untouched.
         if not _image_already_pulled:
             self._pull_image_with_retry(target_image)
+        try:
+            target_image_object = self.client.images.get(target_image)
+            target_image_config = target_image_object.attrs.get("Config") or {}
+            if not isinstance(target_image_config, dict):
+                raise RuntimeError("Docker nie zwrócił konfiguracji obrazu docelowego.")
+        except Exception as exc:
+            raise RuntimeError(
+                "Nie udało się odczytać domyślnych ustawień startowych nowego obrazu; stary kontener działa. "
+                f"({_safe_exception_summary(exc)})"
+            ) from exc
+        raw_config = self._create_config(
+            container,
+            target_image,
+            update_instructions,
+            target_image_config=target_image_config,
+        )
         nonce = None
         if pause_tunnel:
-            target = self.client.images.get(target_image)
-            labels = (target.attrs.get("Config") or {}).get("Labels") or {}
-            if labels.get(DCC_REMOTE_UPDATE_LABEL) != "1" or target.id == container.attrs.get("Image"):
+            labels = target_image_config.get("Labels") or {}
+            if labels.get(DCC_REMOTE_UPDATE_LABEL) != "1" or target_image_object.id == container.attrs.get("Image"):
                 raise RuntimeError(DCC_REMOTE_STOP_REQUIRED)
-            _expected_image_id = target.id
+            _expected_image_id = target_image_object.id
             nonce = secrets.token_hex(32)
         managed_networks = {
             name: (self.client.networks.get(name), list(aliases)) for name, aliases in attachments.items()

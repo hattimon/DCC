@@ -977,6 +977,56 @@ class ContainerConfigurationTests(unittest.TestCase):
         self.assertEqual(next(m for m in mounts if m["Target"] == "/data")["Source"], "service-data")
         self.assertTrue(next(m for m in mounts if m["Target"] == "/config")["ReadOnly"])
 
+    def test_update_uses_new_image_command_when_old_command_was_its_default(self):
+        old_entrypoint = ["/usr/bin/tini", "-g", "--"]
+        self.container.attrs["Config"].update(
+            Cmd=["sh", "/app/ops/public-start.sh"],
+            Entrypoint=old_entrypoint,
+        )
+        self.container.image = SimpleNamespace(attrs={"Config": {
+            "Cmd": ["sh", "/app/ops/public-start.sh"],
+            "Entrypoint": old_entrypoint,
+        }})
+        target_config = {
+            "Cmd": ["sh", "/app/ops/start.sh"],
+            "Entrypoint": old_entrypoint,
+        }
+
+        config = self.service._create_config(
+            self.container,
+            "ghcr.io/hattimon/cinema-hub:1.3.15",
+            target_image_config=target_config,
+        )
+
+        self.assertEqual(config["command"], ["sh", "/app/ops/start.sh"])
+        self.assertEqual(config["entrypoint"], old_entrypoint)
+        data_mount = next(m for m in config["host_config"]["Mounts"] if m["Target"] == "/data")
+        self.assertEqual(data_mount["Source"], "service-data")
+
+    def test_update_preserves_a_custom_command_override(self):
+        old_entrypoint = ["/usr/bin/tini", "-g", "--"]
+        custom_entrypoint = ["/bin/custom-entrypoint"]
+        self.container.attrs["Config"].update(
+            Cmd=["node", "custom-entry.mjs"],
+            Entrypoint=custom_entrypoint,
+        )
+        self.container.image = SimpleNamespace(attrs={"Config": {
+            "Cmd": ["sh", "/app/ops/public-start.sh"],
+            "Entrypoint": old_entrypoint,
+        }})
+
+        config = self.service._create_config(
+            self.container,
+            "ghcr.io/hattimon/cinema-hub:1.3.15",
+            target_image_config={
+                "Cmd": ["sh", "/app/ops/start.sh"],
+                "Entrypoint": old_entrypoint,
+            },
+        )
+
+        self.assertEqual(config["command"], ["node", "custom-entry.mjs"])
+        self.assertEqual(config["entrypoint"], custom_entrypoint)
+
     def test_explicit_update_instructions_change_only_declared_options(self):
         config = self.service._create_config(
             self.container,
@@ -1120,8 +1170,9 @@ class UpdateRollbackTests(unittest.TestCase):
             def create_container_config(self, **kwargs):
                 return kwargs
 
-            def create_container_from_config(self, _config, name):
+            def create_container_from_config(self, config, name):
                 events.append(("create", name))
+                self.created_config = config
                 return {"Id": "replacement-123456"}
 
             def remove_container(self, container_id, v=False, force=False):
@@ -1132,16 +1183,33 @@ class UpdateRollbackTests(unittest.TestCase):
             def pull(self, image):
                 events.append(("pull", image))
 
+            def get(self, image):
+                events.append(("get-image", image))
+                return SimpleNamespace(id="target-image", attrs={"Config": {
+                    "Cmd": ["sh", "/app/ops/start.sh"],
+                    "Entrypoint": ["/usr/bin/tini", "-g", "--"],
+                    "Labels": {},
+                }})
+
         old = SimpleNamespace(
             id="original-123456",
             name="cinema-hub",
             attrs={
-                "Config": {"Image": "ghcr.io/hattimon/cinema-hub:1.3.5", "Labels": {}},
+                "Config": {
+                    "Image": "ghcr.io/hattimon/cinema-hub:1.3.5",
+                    "Cmd": ["sh", "/app/ops/public-start.sh"],
+                    "Entrypoint": ["/usr/bin/tini", "-g", "--"],
+                    "Labels": {},
+                },
                 "HostConfig": {"NetworkMode": "bridge", "AutoRemove": False},
                 "NetworkSettings": {"Networks": {"bridge": {}}},
                 "State": {"Status": "running"},
                 "Mounts": [],
             },
+            image=SimpleNamespace(attrs={"Config": {
+                "Cmd": ["sh", "/app/ops/public-start.sh"],
+                "Entrypoint": ["/usr/bin/tini", "-g", "--"],
+            }}),
         )
 
         def stop(timeout):
@@ -1218,6 +1286,12 @@ class UpdateRollbackTests(unittest.TestCase):
         self.assertIn(("remove-replacement", False, True), events)
         self.assertNotIn(("remove-old", False), events)
         self.assertIn(("start-old",), events)
+        replacement_config = service.client.api.created_config
+        self.assertEqual(replacement_config["command"], ["sh", "/app/ops/start.sh"])
+        self.assertEqual(
+            next(m for m in replacement_config["host_config"]["Mounts"] if m["Target"] == "/data")["Source"],
+            "cinema-hub_cinema-state",
+        )
 
     def test_retries_transient_404_after_replacement_creation(self):
         service, old, containers, events = self._visibility_fixture(missing_attempts=1)
@@ -1309,6 +1383,9 @@ class UpdateRollbackTests(unittest.TestCase):
         class FakeImages:
             def pull(self, image):
                 events.append(("pull", image))
+
+            def get(self, image):
+                return SimpleNamespace(id="target-image", attrs={"Config": {}})
 
         container = SimpleNamespace(
             id="1234567890abcdef",

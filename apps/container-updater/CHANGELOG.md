@@ -1,8 +1,8 @@
 # DCC Container Updater 1.1.7
 
-When Docker reports a replacement as `restarting`, the updater now waits through the configured startup window before deciding to roll back. If startup still fails, the error includes bounded, sanitized container state and recent startup logs captured before cleanup, so the cause is visible while the previous container is restored.
+When the old container uses its image's default command or entrypoint, the replacement now uses the target image's defaults. Explicit runtime overrides remain intact. This fixes updates where an image removed or renamed its default startup script, including Cinema Hub 1.3.5 to 1.3.15. The updater also waits through Docker's `restarting` state and includes bounded, sanitized startup logs if rollback is still needed. Existing data mounts remain attached to the replacement and are never deleted during rollback.
 
-Gdy Docker zgłasza stan `restarting`, updater czeka przez skonfigurowany czas startu, zanim wycofa aktualizację. Jeśli kontener nadal nie wstanie, komunikat zawiera ograniczone i oczyszczone informacje o stanie oraz końcowe logi startowe pobrane przed usunięciem nieudanego kontenera. Poprzedni kontener jest przywracany.
+Jeśli stary kontener używa domyślnej komendy lub punktu wejścia obrazu, nowy dostaje ustawienia domyślne nowego obrazu. Ręczne nadpisania są zachowane. Naprawia to aktualizacje, w których obraz zmienił skrypt startowy, w tym Cinema Hub 1.3.5 do 1.3.15. Updater czeka też na zakończenie stanu `restarting` i przy dalszej awarii pokazuje ograniczone, oczyszczone logi startowe. Podłączone wolumeny z danymi pozostają dołączone i nie są usuwane podczas wycofania.
 
 Linux amd64 / arm64 · `ghcr.io/hattimon/dcc-container-updater:1.1.7` · `latest`
 

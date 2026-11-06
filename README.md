@@ -21,7 +21,7 @@ DCC Web: Windows, macOS, Linux · Docker Compose.
 
 [Install DCC Web (EN)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/installation.md) · [Instalacja DCC Web (PL)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/installation.pl.md)
 
-Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.3.1](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1) · [DCC Container Updater 1.1.7](https://github.com/hattimon/DCC/releases/tag/updater-v1.1.7) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
+Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.3.1](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1) · [DCC Container Updater 1.1.6](https://github.com/hattimon/DCC/releases/tag/updater-v1.1.6) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
 
 ### Automatic DCC Web updates / Automatyczne aktualizacje DCC Web
 
