@@ -2,7 +2,7 @@ import{groupContainers,primaryNetwork}from'../static/container_data.js';
 import assert from 'node:assert/strict';
 import{html,t,setLanguage,getLanguage,literal}from'../static/i18n.js';
 import{sshFileKind}from'../static/ssh_files.js';
-import{sortContainers,nextSortState}from'../static/container_sort.js';
+import{sortContainers,sortMetrics,nextSortState}from'../static/container_sort.js';
 assert.equal(sshFileKind('key.pem','-----BEGIN OPENSSH PRIVATE KEY-----'),'private key');
 assert.equal(sshFileKind('no_extension','-----BEGIN ENCRYPTED PRIVATE KEY-----'),'private key');
 assert.equal(sshFileKind('renamed.pub','-----BEGIN RSA PRIVATE KEY-----'),'private key');
@@ -62,3 +62,19 @@ assert.deepEqual(nextSortState(null,'cpu'),{key:'cpu',direction:'desc'});
 assert.deepEqual(nextSortState({key:'cpu',direction:'desc'},'cpu'),{key:'cpu',direction:'asc'});
 assert.equal(nextSortState({key:'cpu',direction:'asc'},'cpu'),null);
 console.log('CPU/RAM sorting order and three-state controls passed');
+
+const monitoring=[
+ {Name:'small',CPUPerc:'2%',MemUsage:'900KiB / 1GiB',MemPerc:'0.5%',NetIO:'900kB / 0B',BlockIO:'1MB / 0B',PIDs:'9'},
+ {Name:'large',CPUPerc:'10%',MemUsage:'1MiB / 2GiB',MemPerc:'12%',NetIO:'1MB / 0B',BlockIO:'900kB / 2MB',PIDs:'100'},
+ {Name:'missing',CPUPerc:'—',MemUsage:'--',MemPerc:'--',NetIO:'-- / --',BlockIO:'--',PIDs:'--'}
+];
+for(const key of ['cpu','ram','ram-percent','network','disk','processes']){
+ assert.deepEqual(sortMetrics(monitoring,key,'desc').map(v=>v.Name),['large','small','missing'],key+' desc');
+ assert.deepEqual(sortMetrics(monitoring,key,'asc').map(v=>v.Name),['small','large','missing'],key+' asc');
+ assert.deepEqual(sortMetrics(monitoring,null,null),monitoring);
+}
+assert.deepEqual(sortMetrics([{Name:'tx',NetIO:'0B / 2MB'},{Name:'rx',NetIO:'1MB / 0B'}],'network','desc').map(v=>v.Name),['tx','rx']);
+assert.deepEqual(sortMetrics([{Name:'byte',MemUsage:'900B / 1GiB'},{Name:'kilo',MemUsage:'1kB / 1GiB'},{Name:'tebi',MemUsage:'1TiB / 2TiB'}],'ram','desc').map(v=>v.Name),['tebi','kilo','byte']);
+assert.deepEqual(sortMetrics([{Name:'zero',PIDs:0},{Name:'missing'},{Name:'tie',PIDs:'0'}],'processes','desc').map(v=>v.Name),['zero','tie','missing']);
+assert.deepEqual(monitoring.map(v=>v.Name),['small','large','missing']);
+console.log('Monitoring: all six metric columns, numeric units, IO totals, stable ties, missing values and default order passed');

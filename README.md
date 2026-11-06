@@ -202,6 +202,8 @@ Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom wła
 
 ## DCC Web
 
+Monitoring in **0.3.0** supports descending → ascending → default sorting for CPU, RAM, RAM %, network, disk I/O and processes. / Monitoring w **0.3.0** obsługuje sortowanie malejące → rosnące → domyślne dla CPU, RAM, RAM %, sieci, dysku I/O i procesów.
+
 DCC Web **0.3.0** keeps reconnecting after Internet outages and adds optional tunnel recovery after a Web/computer restart. Enable both restart recovery and Updater handoff in the local Remote Internet Access dialog to cover both cases. / DCC Web **0.3.0** ponawia połączenie po przerwie w Internecie i dodaje opcjonalne wznowienie tunelu po restarcie panelu/komputera. Zaznacz obie zgody na wznowienie w lokalnych ustawieniach zdalnego dostępu. [Release / Wydanie 0.3.0](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.0)
 
 DCC Web is the browser-based counterpart to DCC Desktop and runs as a separate service. See the [product overview](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.0/apps/dcc-web/README.md) and the [GitHub repository](https://github.com/hattimon/DCC).

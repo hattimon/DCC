@@ -1,5 +1,7 @@
 # DCC Web 0.3.0
 
+Monitoring now sorts CPU, RAM, RAM %, network, disk I/O and process counts with the same descending → ascending → default cycle as Containers. Network and disk sorting use the sum of both displayed directions.
+
 Web 0.3.0 keeps retrying after Internet/DNS/zrok outages and recovers an unexpectedly stopped tunnel. When enabling access locally, select **Resume the tunnel after restarting DCC Web or the computer** to save restart consent. Select the separate Updater option as well to cover image updates. Disable access cancels recovery; public traffic remains blocked until HTTPS is verified again.
 
 When enabling zrok from the local panel, administrators can allow DCC Container Updater 1.1.4 or newer to pause and resume the tunnel during compatible Web updates. Both Web images must support the handoff. The first upgrade from an older Web version uses the manual steps shown next to the blocker. [Release notes](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.0)

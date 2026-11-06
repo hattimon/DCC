@@ -1,5 +1,7 @@
 # DCC Web 0.3.0
 
+Monitoring sortuje CPU, RAM, RAM %, sieć, dysk I/O i liczbę procesów tak jak zakładka Kontenery: malejąco → rosnąco → kolejność domyślna. Sieć i dysk są porządkowane według sumy obu wyświetlanych kierunków.
+
 Wersja 0.3.0 ponawia połączenie po awarii Internetu/DNS/zrok i odtwarza nieoczekiwanie zatrzymany tunel. Przy lokalnym włączaniu dostępu zaznacz **Wznawiaj tunel po restarcie DCC Web lub komputera**, aby zapisać zgodę na wznowienie. Osobno zaznacz zgodę dla Updatera, aby objąć aktualizacje obrazu. Wyłączenie dostępu anuluje wznowienie; publiczny panel pozostaje zamknięty do ponownej weryfikacji HTTPS.
 
 Przy włączaniu zrok z lokalnego panelu administrator może zezwolić DCC Container Updaterowi 1.1.4 lub nowszemu na zatrzymanie i wznowienie tunelu podczas zgodnych aktualizacji Web. Oba obrazy DCC Web muszą obsługiwać przekazanie zgody. Przy pierwszej aktualizacji ze starszego Web wykonaj kroki wskazane obok blokady. [Opis wydania](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.0)

@@ -1,5 +1,5 @@
 import{groupContainers,networksOf}from'../container_data.js';
-import{sortContainers,nextSortState}from'../container_sort.js';
+import{sortContainers,sortMetrics,nextSortState}from'../container_sort.js';
 import{assistantPanel,wireAssistant}from'./ai.js';
 import{html,t,literal,setLanguage}from'../i18n.js';
 import{api,state,can,post,pollJob}from'../api.js';
@@ -172,7 +172,24 @@ export async function logs(root,ctx){
  root.querySelector('#logs-container').onchange=e=>location.hash='logs/'+encodeURIComponent(e.target.value);root.querySelector('#logs-search').oninput=e=>{state.logQuery=e.target.value;clearTimeout(timer);timer=setTimeout(load,300);};root.querySelector('#logs-tail').onchange=e=>{state.logTail=Number(e.target.value);load();};root.querySelector('#logs-live').onchange=e=>state.logLive=e.target.checked;root.querySelector('#logs-download').onclick=()=>window.open(html`/api/logs/${encodeURIComponent(target)}?profile=${encodeURIComponent(state.profile)}&tail=${state.logTail||200}&download=1`,'_blank','noopener');await load();
 }
 
-export async function monitoring(root,ctx){const data=await api('monitoring');if(!ctx.valid())return;ctx.connected(true);root.innerHTML=heading('Monitoring','CPU, pamięć, sieć i I/O. Historia obejmuje zebrane pomiary tego profilu.')+html`<div class="two-columns"><section class="panel"><div class="panel-header"><h2>CPU kontenerów (%)</h2></div><div class="chart-block">${chart(data.history.map(h=>h.stats.reduce((s,v)=>s+number(v.CPUPerc),0)),'CPU')}</div></section><section class="panel"><div class="panel-header"><h2>Pamięć (MiB)</h2></div><div class="chart-block">${chart(data.history.map(h=>h.stats.reduce((s,v)=>s+memory(v.MemUsage),0)),'Pamięć')}</div></section></div><section class="panel"><div class="panel-header"><h2>Aktualne zasoby</h2><span class="fine">${data.history.length} pomiarów</span></div>${table(['Kontener','CPU','RAM','RAM %','Sieć','Dysk I/O','Procesy'],data.stats.map(v=>html`<tr>${['Name','CPUPerc','MemUsage','MemPerc','NetIO','BlockIO','PIDs'].map(k=>html`<td>${esc(v[k]||'—')}</td>`).join('')}</tr>`))}</section>`;}
+export async function monitoring(root,ctx){
+ const data=await api('monitoring');if(!ctx.valid())return;ctx.connected(true);
+ const columns=[['cpu','CPU'],['ram','RAM'],['ram-percent','RAM %'],['network','Sieć'],['disk','Dysk I/O'],['processes','Procesy']];
+ const sortStorage='dcc-monitor-sort-'+state.user.id+'-'+state.profile;
+ let sort=null;try{sort=JSON.parse(localStorage.getItem(sortStorage)||'null');}catch{}
+ if(sort&&(!columns.some(([key])=>key===sort.key)||!['asc','desc'].includes(sort.direction)))sort=null;
+ root.innerHTML=heading('Monitoring','CPU, pamięć, sieć i I/O. Historia obejmuje zebrane pomiary tego profilu.')+html`<div class="two-columns"><section class="panel"><div class="panel-header"><h2>CPU kontenerów (%)</h2></div><div class="chart-block">${chart(data.history.map(h=>h.stats.reduce((s,v)=>s+number(v.CPUPerc),0)),'CPU')}</div></section><section class="panel"><div class="panel-header"><h2>Pamięć (MiB)</h2></div><div class="chart-block">${chart(data.history.map(h=>h.stats.reduce((s,v)=>s+memory(v.MemUsage),0)),'Pamięć')}</div></section></div><section class="panel"><div class="panel-header"><h2>Aktualne zasoby</h2><span class="fine">${data.history.length} pomiarów</span></div><div id="monitoring-table"></div></section>`;
+ const redraw=()=>{
+  const ordered=sort?sortMetrics(data.stats,sort.key,sort.direction):data.stats;
+  root.querySelector('#monitoring-table').innerHTML=table(['Kontener',...columns.map(([key,label])=>sortHeader(key,label,true))],ordered.map(v=>html`<tr>${['Name','CPUPerc','MemUsage','MemPerc','NetIO','BlockIO','PIDs'].map(k=>html`<td>${esc(v[k]??'—')}</td>`).join('')}</tr>`));
+  root.querySelectorAll('[data-sort]').forEach(control=>{
+   const key=control.dataset.sort,active=sort?.key===key;
+   control.closest('th').setAttribute('aria-sort',active?(sort.direction==='asc'?'ascending':'descending'):'none');
+   control.setAttribute('aria-pressed',String(active));if(active)control.dataset.direction=sort.direction;
+   control.onclick=()=>{sort=nextSortState(sort,key);if(sort)localStorage.setItem(sortStorage,JSON.stringify(sort));else localStorage.removeItem(sortStorage);redraw();root.querySelector('[data-sort="'+key+'"]').focus({preventScroll:true});};
+  });
+ };redraw();
+}
 
 async function configure(target,ctx){
  try{

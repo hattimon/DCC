@@ -318,6 +318,10 @@ CPU|CPU
 Sortuj według CPU|Sort by CPU usage
 Pamięć|Memory
 Sortuj według RAM|Sort by memory usage
+Sortuj według RAM %|Sort by memory percentage
+Sortuj według Sieć|Sort by total network traffic
+Sortuj według Dysk I/O|Sort by total disk I/O
+Sortuj według Procesy|Sort by process count
 Akcje|Actions
 Porty / panele|Ports / panels
 Porty|Ports
