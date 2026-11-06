@@ -1098,7 +1098,7 @@ class UpdateRollbackTests(unittest.TestCase):
     class DockerNotFound(Exception):
         status_code = 404
 
-    def _visibility_fixture(self, missing_attempts):
+    def _visibility_fixture(self, missing_attempts, replacement_start_error=None):
         events = []
 
         class FakeApi:
@@ -1145,12 +1145,17 @@ class UpdateRollbackTests(unittest.TestCase):
         old.rename = rename
         old.start = start
         old.remove = lambda v=False: events.append(("remove-old", v))
+        def start_replacement():
+            events.append(("start-replacement",))
+            if replacement_start_error is not None:
+                raise replacement_start_error
+
         replacement = SimpleNamespace(
             id="replacement-123456",
             name="cinema-hub",
             attrs={"Config": {"Image": "ghcr.io/hattimon/cinema-hub:1.3.15", "Healthcheck": None},
                    "State": {"Status": "running"}},
-            start=lambda: events.append(("start-replacement",)),
+            start=start_replacement,
             stop=lambda timeout: events.append(("stop-replacement", timeout)),
             remove=lambda v=False, force=False: events.append(("remove-replacement", v, force)),
         )
@@ -1193,6 +1198,23 @@ class UpdateRollbackTests(unittest.TestCase):
         self.assertEqual(containers.attempts, 5)
         self.assertIn(("remove-created-id", "replacement-123456", False, True), events)
         self.assertLess(events.index(("remove-created-id", "replacement-123456", False, True)), events.index(("rename-old", "cinema-hub")))
+        self.assertIn(("start-old",), events)
+
+    def test_rollback_reports_sanitized_original_failure(self):
+        service, old, _containers, events = self._visibility_fixture(
+            missing_attempts=0,
+            replacement_start_error=RuntimeError(
+                'startup rejected token=PRIVATE_TOKEN password="PRIVATE PASSWORD" Authorization: Bearer PRIVATE_BEARER'
+            ),
+        )
+        with self.assertRaises(RuntimeError) as raised:
+            service.update_one(old, "ghcr.io/hattimon/cinema-hub:1.3.15")
+
+        message = str(raised.exception)
+        self.assertIn("RuntimeError: startup rejected", message)
+        self.assertIn("token=[redacted]", message)
+        self.assertIn("password=[redacted]", message)
+        self.assertNotIn("PRIVATE", message)
         self.assertIn(("start-old",), events)
 
     def test_transient_pull_retries_before_touching_the_running_container(self):

@@ -201,6 +201,28 @@ def _error_excerpt(error: Any) -> str:
     return " ".join(value.replace("\r", " ").replace("\n", " ").split())[:180]
 
 
+def _safe_exception_summary(error: Exception, limit: int = 220) -> str:
+    """Keep the cause useful while preventing common secrets from reaching the UI."""
+    explanation = getattr(error, "explanation", None)
+    if isinstance(explanation, dict):
+        value = json.dumps(explanation, ensure_ascii=False)
+    elif explanation:
+        value = str(explanation)
+    else:
+        value = str(error)
+    value = re.sub(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+", r"\1 [redacted]", value)
+    value = re.sub(
+        r'''(?i)(["']?\b(?:password|token|secret|api[_-]?key|authorization|credential)\b["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)''',
+        r"\1[redacted]",
+        value,
+    )
+    value = re.sub(r"(https?://)[^/@\s]+:[^/@\s]+@", r"\1[redacted]@", value)
+    value = re.sub(r"[\x00-\x1f\x7f]+", " ", value)
+    value = " ".join(value.split())[:limit]
+    kind = type(error).__name__
+    return f"{kind}: {value}" if value and value.lower() != kind.lower() else kind
+
+
 def friendly_registry_error(error: Any, operation: str = "Sprawdzanie") -> str:
     """Translate Docker/Compose registry failures into a concise Polish message."""
     detail = _error_text(error)
@@ -2021,7 +2043,8 @@ class UpdateService:
                 rollback_exc = rollback_errors[0]
                 reason = "Docker wykrył konflikt portu" if port_conflict else "Aktualizacja nie powiodła się"
                 raise RuntimeError(
-                    f"{reason} ({type(exc).__name__}); przywrócenie starego kontenera wymaga interwencji ({type(rollback_exc).__name__})."
+                    f"{reason} ({_safe_exception_summary(exc)}); przywrócenie starego kontenera wymaga interwencji "
+                    f"({_safe_exception_summary(rollback_exc)})."
                 ) from exc
             tunnel_result = ""
             if nonce:
@@ -2032,7 +2055,7 @@ class UpdateService:
                     "Docker wykrył zajęty port podczas uruchamiania nowego kontenera; przywrócono poprzedni kontener."
                     + tunnel_result
                 ) from exc
-            failure = str(exc) if isinstance(exc, ContainerVisibilityError) else type(exc).__name__
+            failure = _safe_exception_summary(exc)
             raise RuntimeError(f"Aktualizacja nie powiodła się; przywrócono poprzedni kontener ({failure}).{tunnel_result}") from exc
 
     def update_selected(

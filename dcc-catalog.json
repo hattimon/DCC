@@ -260,8 +260,8 @@
         }
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "updater-v1.1.5",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/updater-v1.1.5",
+      "latest_release": "updater-v1.1.6",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/updater-v1.1.6",
       "release_tag_pattern": "updater-v[0-9]+\\.[0-9]+\\.[0-9]+"
     },
     {

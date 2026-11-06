@@ -1,3 +1,11 @@
+# DCC Container Updater 1.1.6
+
+When an update fails and the previous container is restored, the result now includes a short, sanitized description of the underlying Docker error. Common credentials and authorization headers are redacted.
+
+Jeśli aktualizacja się nie powiedzie, a poprzedni kontener zostanie przywrócony, wynik pokaże krótki, oczyszczony opis błędu Docker. Typowe hasła, tokeny i nagłówki autoryzacji są ukrywane.
+
+Linux amd64 / arm64 · `ghcr.io/hattimon/dcc-container-updater:1.1.6` · `latest`
+
 # DCC Container Updater 1.1.5
 
 Docker Desktop can briefly return 404 when the updater inspects a container immediately after Docker created it. The updater now retries that bounded lookup and, if the ID never becomes visible, removes only the replacement created by that update before restoring the previous container. This prevents a transient inspect race from leaving a name conflict or blocking rollback.

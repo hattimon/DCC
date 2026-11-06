@@ -21,7 +21,7 @@ DCC Web: Windows, macOS, Linux · Docker Compose.
 
 [Install DCC Web (EN)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/installation.md) · [Instalacja DCC Web (PL)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/installation.pl.md)
 
-Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.3.1](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1) · [DCC Container Updater 1.1.5](https://github.com/hattimon/DCC/releases/tag/updater-v1.1.5) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
+Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.3.1](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1) · [DCC Container Updater 1.1.6](https://github.com/hattimon/DCC/releases/tag/updater-v1.1.6) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
 
 ### Automatic DCC Web updates / Automatyczne aktualizacje DCC Web
 
@@ -29,9 +29,9 @@ Install **DCC Container Updater** from **App Store → DCC** in DCC Desktop or D
 
 Zainstaluj **DCC Container Updater** przez **Sklep aplikacji → DCC** w DCC Desktop lub DCC Web. W obsługiwanej instalacji kontenerowej włącz automatyczne aktualizacje kontenera DCC Web w panelu Updatera.
 
-DCC Web 0.2.8 or newer and Updater 1.1.5 can preserve the configured public zrok domain across a compatible Web update. When the administrator has enabled tunnel resumption, Updater pauses the tunnel during container replacement and resumes it after the new Web container passes its health check. You do not need to turn off or remove the public domain manually. For the first upgrade from Web older than 0.2.8, follow the compatibility instructions shown by Updater.
+DCC Web 0.2.8 or newer and Updater 1.1.6 can preserve the configured public zrok domain across a compatible Web update. When the administrator has enabled tunnel resumption, Updater pauses the tunnel during container replacement and resumes it after the new Web container passes its health check. You do not need to turn off or remove the public domain manually. For the first upgrade from Web older than 0.2.8, follow the compatibility instructions shown by Updater.
 
-DCC Web 0.2.8 lub nowszy i Updater 1.1.5 mogą zachować skonfigurowaną publiczną domenę zrok podczas zgodnej aktualizacji Web. Jeśli administrator włączył wznawianie tunelu, Updater automatycznie wstrzymuje tunel na czas podmiany kontenera i wznawia go po pozytywnym teście zdrowia nowego kontenera Web. Nie trzeba ręcznie wyłączać dostępu publicznego ani usuwać domeny. Przy pierwszej aktualizacji z Web starszego niż 0.2.8 wykonaj instrukcje zgodności wyświetlone przez Updater.
+DCC Web 0.2.8 lub nowszy i Updater 1.1.6 mogą zachować skonfigurowaną publiczną domenę zrok podczas zgodnej aktualizacji Web. Jeśli administrator włączył wznawianie tunelu, Updater automatycznie wstrzymuje tunel na czas podmiany kontenera i wznawia go po pozytywnym teście zdrowia nowego kontenera Web. Nie trzeba ręcznie wyłączać dostępu publicznego ani usuwać domeny. Przy pierwszej aktualizacji z Web starszego niż 0.2.8 wykonaj instrukcje zgodności wyświetlone przez Updater.
 
 [DCC Container Updater](apps/container-updater/README.md) · [Installation guide / Instrukcja instalacji](apps/container-updater/README.md#install)
 
