@@ -261,7 +261,7 @@ class SelfUpdateTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.service.update_one(self.container,NEW_REFERENCE,_allow_self=True,_image_already_pulled=True,_expected_image_id=NEW_ID)
         replacement.start.assert_not_called()
-        replacement.remove.assert_called_once_with(v=False)
+        replacement.remove.assert_called_once_with(v=False, force=True)
         self.container.start.assert_called_once()
         self.assertEqual(self.container.rename.call_args.args[0],self.container.name)
         self.container.remove.assert_not_called()

@@ -1,3 +1,11 @@
+# DCC Container Updater 1.1.5
+
+Docker Desktop can briefly return 404 when the updater inspects a container immediately after Docker created it. The updater now retries that bounded lookup and, if the ID never becomes visible, removes only the replacement created by that update before restoring the previous container. This prevents a transient inspect race from leaving a name conflict or blocking rollback.
+
+Docker Desktop może przez chwilę zwracać 404 przy odczycie kontenera bezpośrednio po jego utworzeniu. Updater ponawia ograniczoną liczbę prób; jeśli identyfikator nadal nie jest widoczny, usuwa wyłącznie kontener utworzony w tej aktualizacji, a potem przywraca poprzedni kontener. Chwilowy błąd odczytu nie powinien już blokować wycofania ani pozostawiać konfliktu nazwy.
+
+Linux amd64 / arm64 · `ghcr.io/hattimon/dcc-container-updater:1.1.5` · `latest`
+
 # DCC Container Updater 1.1.4
 
 Updater pauses and resumes the active zrok tunnel during compatible DCC Web updates after local administrator opt-in. It waits for the replacement or restored panel to become healthy before requesting tunnel resumption. The blocker now shows the manual procedure for older Web versions and installations without consent.

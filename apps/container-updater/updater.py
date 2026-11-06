@@ -52,6 +52,7 @@ COMPOSE_CONFIG_ROOTS = ("/home", "/opt", "/srv", "/mnt", "/media", "/root")
 REGISTRY_RETRY_DELAYS = (2, 5)
 COMPOSE_TIMEOUT = 45
 COMPOSE_PULL_TIMEOUT = 900
+CREATED_CONTAINER_INSPECT_RETRY_DELAYS = (0.1, 0.25, 0.5, 1, 2)
 CONFIG_UPDATE_FIELDS = {
     "command", "hostname", "user", "stdin_open", "tty", "ports", "environment",
     "volumes", "network_disabled", "entrypoint", "working_dir", "domainname",
@@ -169,6 +170,10 @@ class ComposeProject:
     working_dir: Path
     config_files: tuple[Path, ...]
     config: dict[str, Any]
+
+
+class ContainerVisibilityError(RuntimeError):
+    """Docker created a replacement but did not expose it to inspect yet."""
 
 
 def _error_text(error: Any) -> str:
@@ -1679,6 +1684,34 @@ class UpdateService:
             raise RuntimeError("Przekroczono czas oczekiwania na stan healthy.")
 
     @staticmethod
+    def _is_docker_not_found(error: Exception) -> bool:
+        if type(error).__name__ == "NotFound":
+            return True
+        status = getattr(error, "status_code", None)
+        response = getattr(error, "response", None)
+        if status is None and response is not None:
+            status = getattr(response, "status_code", None)
+        try:
+            return int(status) == 404
+        except (TypeError, ValueError):
+            return False
+
+    def _get_created_container(self, container_id: str) -> Any:
+        """Retry Docker Desktop's short create/inspect visibility race."""
+        for attempt, delay in enumerate(CREATED_CONTAINER_INSPECT_RETRY_DELAYS):
+            try:
+                return self.client.containers.get(container_id)
+            except Exception as exc:
+                if not self._is_docker_not_found(exc):
+                    raise
+                if attempt + 1 == len(CREATED_CONTAINER_INSPECT_RETRY_DELAYS):
+                    raise ContainerVisibilityError(
+                        "Docker utworzył kontener aktualizacji, ale nie udostępnił go do odczytu po kilku próbach."
+                    ) from exc
+                time.sleep(delay)
+        raise ContainerVisibilityError("Docker nie udostępnił utworzonego kontenera.")
+
+    @staticmethod
     def _is_docker_port_conflict(error: Exception) -> bool:
         message = str(error).lower()
         return any(marker in message for marker in (
@@ -1904,6 +1937,7 @@ class UpdateService:
             backup_name = f"{base_backup_name}-{suffix}"
         disconnected = []
         replacement = None
+        created_id = None
         stopped = renamed = False
         try:
             if nonce:
@@ -1920,7 +1954,10 @@ class UpdateService:
                 disconnected.append((network, aliases))
 
             created = self.client.api.create_container_from_config(raw_config, name=original_name)
-            replacement = self.client.containers.get(created["Id"])
+            created_id = str(created.get("Id") or "")
+            if not created_id or len(created_id) > 128:
+                raise RuntimeError("Docker nie zwrócił prawidłowego identyfikatora nowego kontenera.")
+            replacement = self._get_created_container(created_id)
             for network, aliases in disconnected:
                 network.connect(replacement, aliases=aliases)
             if _expected_image_id and str(replacement.attrs.get("Image") or "") != _expected_image_id:
@@ -1943,16 +1980,26 @@ class UpdateService:
                     self._remote_update_control(container, "resume", nonce)
                 raise
             port_conflict = self._is_docker_port_conflict(exc)
+            rollback_errors = []
             if replacement is not None:
                 try:
                     replacement.stop(timeout=5)
                 except Exception:
                     pass
                 try:
-                    replacement.remove(v=False)
-                except Exception:
-                    pass
-            rollback_errors = []
+                    replacement.remove(v=False, force=True)
+                except Exception as cleanup_exc:
+                    if not self._is_docker_not_found(cleanup_exc):
+                        rollback_errors.append(cleanup_exc)
+            elif created_id:
+                # `create_container` may have succeeded even when the following
+                # inspect briefly returns 404. Remove only the ID returned by
+                # this operation before restoring the old container name.
+                try:
+                    self.client.api.remove_container(created_id, v=False, force=True)
+                except Exception as cleanup_exc:
+                    if not self._is_docker_not_found(cleanup_exc):
+                        rollback_errors.append(cleanup_exc)
             for network, aliases in disconnected:
                 try:
                     network.connect(container, aliases=aliases)
@@ -1985,7 +2032,8 @@ class UpdateService:
                     "Docker wykrył zajęty port podczas uruchamiania nowego kontenera; przywrócono poprzedni kontener."
                     + tunnel_result
                 ) from exc
-            raise RuntimeError(f"Aktualizacja nie powiodła się; przywrócono poprzedni kontener ({type(exc).__name__}).{tunnel_result}") from exc
+            failure = str(exc) if isinstance(exc, ContainerVisibilityError) else type(exc).__name__
+            raise RuntimeError(f"Aktualizacja nie powiodła się; przywrócono poprzedni kontener ({failure}).{tunnel_result}") from exc
 
     def update_selected(
         self,

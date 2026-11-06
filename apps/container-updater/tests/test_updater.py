@@ -1013,7 +1013,7 @@ class DccWebHttpsUpdateTests(unittest.TestCase):
                    "Image": "sha256:new", "State": {"Status": "running"}},
             start=None,
             stop=lambda timeout: events.append(("stop-replacement", timeout)),
-            remove=lambda v=False: events.append(("remove-replacement", v)),
+            remove=lambda v=False, force=False: events.append(("remove-replacement", v, force)),
         )
 
         class FakeContainers:
@@ -1095,6 +1095,106 @@ class DccWebHttpsUpdateTests(unittest.TestCase):
                 self.assertLess(events.index(("healthy", resume[1])), events.index(resume))
 
 class UpdateRollbackTests(unittest.TestCase):
+    class DockerNotFound(Exception):
+        status_code = 404
+
+    def _visibility_fixture(self, missing_attempts):
+        events = []
+
+        class FakeApi:
+            def create_container_config(self, **kwargs):
+                return kwargs
+
+            def create_container_from_config(self, _config, name):
+                events.append(("create", name))
+                return {"Id": "replacement-123456"}
+
+            def remove_container(self, container_id, v=False, force=False):
+                events.append(("remove-created-id", container_id, v, force))
+                raise UpdateRollbackTests.DockerNotFound("already removed")
+
+        class FakeImages:
+            def pull(self, image):
+                events.append(("pull", image))
+
+        old = SimpleNamespace(
+            id="original-123456",
+            name="cinema-hub",
+            attrs={
+                "Config": {"Image": "ghcr.io/hattimon/cinema-hub:1.3.5", "Labels": {}},
+                "HostConfig": {"NetworkMode": "bridge", "AutoRemove": False},
+                "NetworkSettings": {"Networks": {"bridge": {}}},
+                "State": {"Status": "running"},
+                "Mounts": [],
+            },
+        )
+
+        def stop(timeout):
+            events.append(("stop-old", timeout))
+            old.attrs["State"]["Status"] = "exited"
+
+        def rename(name):
+            events.append(("rename-old", name))
+            old.name = name
+
+        def start():
+            events.append(("start-old",))
+            old.attrs["State"]["Status"] = "running"
+
+        old.stop = stop
+        old.rename = rename
+        old.start = start
+        old.remove = lambda v=False: events.append(("remove-old", v))
+        replacement = SimpleNamespace(
+            id="replacement-123456",
+            name="cinema-hub",
+            attrs={"Config": {"Image": "ghcr.io/hattimon/cinema-hub:1.3.15", "Healthcheck": None},
+                   "State": {"Status": "running"}},
+            start=lambda: events.append(("start-replacement",)),
+            stop=lambda timeout: events.append(("stop-replacement", timeout)),
+            remove=lambda v=False, force=False: events.append(("remove-replacement", v, force)),
+        )
+
+        class FakeContainers:
+            attempts = 0
+
+            def list(self, all=False, ignore_removed=False):
+                return [old]
+
+            def get(self, identifier):
+                self.attempts += 1
+                events.append(("inspect-created-id", identifier))
+                if self.attempts <= missing_attempts:
+                    raise UpdateRollbackTests.DockerNotFound("not visible yet")
+                return replacement
+
+        api = FakeApi()
+        containers = FakeContainers()
+        service = UpdateService(SimpleNamespace(api=api, containers=containers, images=FakeImages()))
+        return service, old, containers, events
+
+    def test_retries_transient_404_after_replacement_creation(self):
+        service, old, containers, events = self._visibility_fixture(missing_attempts=1)
+        with patch("updater.time.sleep") as sleep, patch.object(service, "_wait_until_healthy"):
+            result = service.update_one(old, "ghcr.io/hattimon/cinema-hub:1.3.15")
+
+        self.assertIn("Zaktualizowano", result)
+        self.assertEqual(containers.attempts, 2)
+        sleep.assert_called_once_with(0.1)
+        self.assertIn(("remove-old", False), events)
+        self.assertNotIn(("remove-created-id", "replacement-123456", False, True), events)
+
+    def test_cleans_created_container_before_restoring_after_persistent_404(self):
+        service, old, containers, events = self._visibility_fixture(missing_attempts=99)
+        with patch("updater.time.sleep"):
+            with self.assertRaisesRegex(RuntimeError, "przywrócono poprzedni kontener.*nie udostępnił go do odczytu"):
+                service.update_one(old, "ghcr.io/hattimon/cinema-hub:1.3.15")
+
+        self.assertEqual(containers.attempts, 5)
+        self.assertIn(("remove-created-id", "replacement-123456", False, True), events)
+        self.assertLess(events.index(("remove-created-id", "replacement-123456", False, True)), events.index(("rename-old", "cinema-hub")))
+        self.assertIn(("start-old",), events)
+
     def test_transient_pull_retries_before_touching_the_running_container(self):
         events = []
 
