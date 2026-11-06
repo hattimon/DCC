@@ -265,6 +265,39 @@ class ContainerSafetyTests(unittest.TestCase):
         with patch('updater.time.monotonic', side_effect=[0, 0, 1]), patch('updater.time.sleep'):
             service._wait_until_healthy(container)
 
+    def test_waits_through_docker_restart_state_until_healthy(self):
+        service = UpdateService(SimpleNamespace(), catalog_loader=lambda: [], wait_seconds=10)
+        states = iter([
+            {"Status": "restarting", "Health": {"Status": "starting"}},
+            {"Status": "running", "Health": {"Status": "starting"}},
+            {"Status": "running", "Health": {"Status": "healthy"}},
+        ])
+        container = SimpleNamespace(
+            attrs={"Config": {"Healthcheck": {"Test": ["CMD", "true"]}}, "State": {}},
+            reload=lambda: container.attrs.update(State=next(states)),
+        )
+        with patch("updater.time.sleep"):
+            service._wait_until_healthy(container)
+        self.assertEqual(container.attrs["State"]["Health"]["Status"], "healthy")
+
+    def test_restart_timeout_reports_startup_logs_and_redacts_secrets(self):
+        service, old, containers, events = self._visibility_fixture(
+            missing_attempts=0,
+            replacement_logs=b"database connection refused token=PRIVATE_STARTUP_TOKEN",
+        )
+        service.wait_seconds = 1
+        containers.replacement.attrs["State"]["Status"] = "restarting"
+        with patch("updater.time.monotonic", side_effect=[0, 0, 2]), patch("updater.time.sleep"):
+            with self.assertRaises(RuntimeError) as raised:
+                service.update_one(old, "ghcr.io/hattimon/cinema-hub:1.3.15")
+
+        message = str(raised.exception)
+        self.assertIn("status: restarting", message)
+        self.assertIn("database connection refused", message)
+        self.assertIn("token=[redacted]", message)
+        self.assertNotIn("PRIVATE_STARTUP_TOKEN", message)
+        self.assertIn(("start-old",), events)
+
     def test_automatic_updates_block_shared_data_and_namespace_dependents(self):
         service = UpdateService(SimpleNamespace(), catalog_loader=lambda: [])
         container = self._container(Mounts=[{'Type': 'volume', 'Name': 'shared', 'Destination': '/data', 'RW': True}])
@@ -1098,7 +1131,7 @@ class UpdateRollbackTests(unittest.TestCase):
     class DockerNotFound(Exception):
         status_code = 404
 
-    def _visibility_fixture(self, missing_attempts, replacement_start_error=None):
+    def _visibility_fixture(self, missing_attempts, replacement_start_error=None, replacement_logs=b""):
         events = []
 
         class FakeApi:
@@ -1158,6 +1191,8 @@ class UpdateRollbackTests(unittest.TestCase):
             start=start_replacement,
             stop=lambda timeout: events.append(("stop-replacement", timeout)),
             remove=lambda v=False, force=False: events.append(("remove-replacement", v, force)),
+            reload=lambda: None,
+            logs=lambda tail=25: replacement_logs,
         )
 
         class FakeContainers:
@@ -1175,6 +1210,7 @@ class UpdateRollbackTests(unittest.TestCase):
 
         api = FakeApi()
         containers = FakeContainers()
+        containers.replacement = replacement
         service = UpdateService(SimpleNamespace(api=api, containers=containers, images=FakeImages()))
         return service, old, containers, events
 
@@ -1206,6 +1242,7 @@ class UpdateRollbackTests(unittest.TestCase):
             replacement_start_error=RuntimeError(
                 'startup rejected token=PRIVATE_TOKEN password="PRIVATE PASSWORD" Authorization: Bearer PRIVATE_BEARER'
             ),
+            replacement_logs=b"startup rejected token=PRIVATE_LOG_TOKEN",
         )
         with self.assertRaises(RuntimeError) as raised:
             service.update_one(old, "ghcr.io/hattimon/cinema-hub:1.3.15")
@@ -1215,6 +1252,7 @@ class UpdateRollbackTests(unittest.TestCase):
         self.assertIn("token=[redacted]", message)
         self.assertIn("password=[redacted]", message)
         self.assertNotIn("PRIVATE", message)
+        self.assertIn("logi startowe=startup rejected token=[redacted]", message)
         self.assertIn(("start-old",), events)
 
     def test_transient_pull_retries_before_touching_the_running_container(self):

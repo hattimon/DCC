@@ -1,3 +1,11 @@
+# DCC Container Updater 1.1.7
+
+When Docker reports a replacement as `restarting`, the updater now waits through the configured startup window before deciding to roll back. If startup still fails, the error includes bounded, sanitized container state and recent startup logs captured before cleanup, so the cause is visible while the previous container is restored.
+
+Gdy Docker zgłasza stan `restarting`, updater czeka przez skonfigurowany czas startu, zanim wycofa aktualizację. Jeśli kontener nadal nie wstanie, komunikat zawiera ograniczone i oczyszczone informacje o stanie oraz końcowe logi startowe pobrane przed usunięciem nieudanego kontenera. Poprzedni kontener jest przywracany.
+
+Linux amd64 / arm64 · `ghcr.io/hattimon/dcc-container-updater:1.1.7` · `latest`
+
 # DCC Container Updater 1.1.6
 
 When an update fails and the previous container is restored, the result now includes a short, sanitized description of the underlying Docker error. Common credentials and authorization headers are redacted.

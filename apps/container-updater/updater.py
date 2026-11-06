@@ -201,6 +201,20 @@ def _error_excerpt(error: Any) -> str:
     return " ".join(value.replace("\r", " ").replace("\n", " ").split())[:180]
 
 
+def _safe_text_excerpt(value: str, limit: int) -> str:
+    """Keep diagnostics useful while preventing common secrets from reaching the UI."""
+    value = re.sub(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+", r"\1 [redacted]", value)
+    value = re.sub(
+        r'''(?i)(["']?\b(?:[A-Za-z0-9]+[_-])*(?:password|passwd|token|access[_-]?token|refresh[_-]?token|secret|api[_-]?key|authorization|credential)\b["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)''',
+        r"\1[redacted]",
+        value,
+    )
+    value = re.sub(r"(https?://)[^/@\s]+:[^/@\s]+@", r"\1[redacted]@", value)
+    value = re.sub(r"[\x00-\x1f\x7f]+", " ", value)
+    value = " ".join(value.split())[:limit]
+    return value
+
+
 def _safe_exception_summary(error: Exception, limit: int = 220) -> str:
     """Keep the cause useful while preventing common secrets from reaching the UI."""
     explanation = getattr(error, "explanation", None)
@@ -210,15 +224,7 @@ def _safe_exception_summary(error: Exception, limit: int = 220) -> str:
         value = str(explanation)
     else:
         value = str(error)
-    value = re.sub(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+", r"\1 [redacted]", value)
-    value = re.sub(
-        r'''(?i)(["']?\b(?:password|token|secret|api[_-]?key|authorization|credential)\b["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)''',
-        r"\1[redacted]",
-        value,
-    )
-    value = re.sub(r"(https?://)[^/@\s]+:[^/@\s]+@", r"\1[redacted]@", value)
-    value = re.sub(r"[\x00-\x1f\x7f]+", " ", value)
-    value = " ".join(value.split())[:limit]
+    value = _safe_text_excerpt(value, limit)
     kind = type(error).__name__
     return f"{kind}: {value}" if value and value.lower() != kind.lower() else kind
 
@@ -1688,11 +1694,16 @@ class UpdateService:
         deadline = time.monotonic() + self.wait_seconds
         healthcheck = (container.attrs.get("Config") or {}).get("Healthcheck") or {}
         has_healthcheck = bool(healthcheck and healthcheck.get("Test") != ["NONE"])
+        last_status = "nieznany"
         while time.monotonic() <= deadline:
             container.reload()
             state = container.attrs.get("State") or {}
             status = state.get("Status")
+            last_status = str(status or "nieznany")
             health = (state.get("Health") or {}).get("Status")
+            if status == "restarting":
+                time.sleep(1)
+                continue
             if status != "running":
                 raise RuntimeError(f"Nowy kontener zakończył pracę (status: {status or 'nieznany'}).")
             if health == "unhealthy":
@@ -1702,8 +1713,42 @@ class UpdateService:
             if not has_healthcheck and time.monotonic() >= deadline - self.wait_seconds + min(5, self.wait_seconds):
                 return
             time.sleep(1)
+        if last_status == "restarting":
+            raise RuntimeError(
+                f"Nowy kontener nadal restartuje się po {self.wait_seconds} s (status: restarting)."
+            )
         if has_healthcheck:
             raise RuntimeError("Przekroczono czas oczekiwania na stan healthy.")
+
+    @staticmethod
+    def _replacement_failure_details(container: Any) -> str:
+        """Capture bounded startup diagnostics before rollback removes the replacement."""
+        try:
+            container.reload()
+        except Exception:
+            pass
+        state = (getattr(container, "attrs", {}).get("State") or {})
+        details = []
+        status = state.get("Status")
+        exit_code = state.get("ExitCode")
+        if status:
+            details.append(f"stan={status}")
+        if exit_code is not None:
+            details.append(f"exit_code={exit_code}")
+        if state.get("OOMKilled"):
+            details.append("OOMKilled=true")
+        if state.get("Error"):
+            details.append(f"docker_error={_safe_text_excerpt(str(state['Error']), 220)}")
+        try:
+            raw_logs = container.logs(tail=25)
+            if isinstance(raw_logs, bytes):
+                raw_logs = raw_logs.decode("utf-8", errors="replace")
+            excerpt = _safe_text_excerpt(str(raw_logs or ""), 900)
+            if excerpt:
+                details.append(f"logi startowe={excerpt}")
+        except Exception:
+            details.append("logi startowe niedostępne")
+        return "; ".join(details)
 
     @staticmethod
     def _is_docker_not_found(error: Exception) -> bool:
@@ -2003,7 +2048,9 @@ class UpdateService:
                 raise
             port_conflict = self._is_docker_port_conflict(exc)
             rollback_errors = []
+            replacement_failure_details = ""
             if replacement is not None:
+                replacement_failure_details = self._replacement_failure_details(replacement)
                 try:
                     replacement.stop(timeout=5)
                 except Exception:
@@ -2042,9 +2089,13 @@ class UpdateService:
             if rollback_errors:
                 rollback_exc = rollback_errors[0]
                 reason = "Docker wykrył konflikt portu" if port_conflict else "Aktualizacja nie powiodła się"
+                diagnostics = (
+                    f"; diagnostyka nowego kontenera: {replacement_failure_details}"
+                    if replacement_failure_details else ""
+                )
                 raise RuntimeError(
                     f"{reason} ({_safe_exception_summary(exc)}); przywrócenie starego kontenera wymaga interwencji "
-                    f"({_safe_exception_summary(rollback_exc)})."
+                    f"({_safe_exception_summary(rollback_exc)}){diagnostics}."
                 ) from exc
             tunnel_result = ""
             if nonce:
@@ -2056,6 +2107,8 @@ class UpdateService:
                     + tunnel_result
                 ) from exc
             failure = _safe_exception_summary(exc)
+            if replacement_failure_details:
+                failure += f"; diagnostyka nowego kontenera: {replacement_failure_details}"
             raise RuntimeError(f"Aktualizacja nie powiodła się; przywrócono poprzedni kontener ({failure}).{tunnel_result}") from exc
 
     def update_selected(
