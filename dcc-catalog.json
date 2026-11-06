@@ -414,8 +414,8 @@
       "homepage_url": "https://changedetection.io/",
       "icon_text": "📊",
       "upstream_repo": "dgtlmoon/changedetection.io",
-      "latest_release": "0.70.1",
-      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.70.1",
+      "latest_release": "0.70.2",
+      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.70.2",
       "icon_url": "catalog/media/icons/changedetection-io.png"
     },
     {
@@ -1599,8 +1599,8 @@
       "homepage_url": "https://vikunja.io/",
       "icon_text": "✅",
       "upstream_repo": "go-vikunja/vikunja",
-      "latest_release": "v2.7.1",
-      "latest_release_url": "https://github.com/go-vikunja/vikunja/releases/tag/v2.7.1",
+      "latest_release": "v2.8.0",
+      "latest_release_url": "https://github.com/go-vikunja/vikunja/releases/tag/v2.8.0",
       "icon_url": "catalog/media/icons/vikunja.png"
     },
     {
