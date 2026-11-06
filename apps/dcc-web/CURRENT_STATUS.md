@@ -1,4 +1,6 @@
-# DCC Web 0.2.9
+# DCC Web 0.3.0
+
+Web 0.3.0 removes the permanent tunnel shutdown after eight failed public HTTPS checks. Unexpected sidecar exits recover during the authorized session. A separate local password/MFA-confirmed option persists recovery across Web/computer restarts; existing installations must opt in. Valid Updater handoffs preserve this consent, bind it to the replacement image and retry temporary startup failures. Disable, uninstall, reconfiguration and security revocation cancel recovery. Safe event names are recorded in Web logs and audit.
 
 Web 0.2.9 supports the opt-in zrok handoff in Container Updater 1.1.4. For compatible Web images, the updater pauses the managed tunnel during replacement and resumes it after the new container is healthy, preserving the configured public domain without manual disablement. The compatibility procedure for older Web images remains visible in Remote Internet Access settings.
 

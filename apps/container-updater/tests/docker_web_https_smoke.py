@@ -32,10 +32,14 @@ SYNTHETIC_PROVIDER = """
 from contextlib import closing
 import remote_maintenance
 import web
+from host_setup import local_container
 
 start_control = remote_maintenance.start_control
 def start_fixture(remote):
-    remote.restore = lambda sidecar, config: sidecar.start()
+    def restore(sidecar, config):
+        remote.stop(sidecar)
+        sidecar.start()
+    remote.restore = restore
     remote.reservation = lambda sidecar, name: {
         'reserved': True, 'namespaceToken': 'public', 'namespaceName': 'shares.zrok.io'
     }
@@ -54,6 +58,8 @@ def start_fixture(remote):
         remote.save({'name': 'qa-fixture', 'origin': 'https://qa-fixture.shares.zrok.io', 'identity': 'fixture'})
         with closing(remote.client_factory()) as client:
             remote.enable(remote.container(client), owner, remote.epoch, resume_after_update=True)
+            remote.remember_recovery(owner, remote.epoch, local_container(client).attrs['Image'],
+                                     resume_after_restart=True, resume_after_update=True)
         return True
     remote.maintenance = maintenance
     start_control(remote)
@@ -276,6 +282,9 @@ with closing(remote.client_factory()) as client:
             assert sidecar.id == remote_id
             if args.with_tunnel_resume:
                 wait_for(lambda: assert_tunnel_ready(service, web), 'Tunnel did not resume after successful replacement')
+                web.restart(timeout=12)
+                service._wait_until_healthy(web)
+                wait_for(lambda: assert_tunnel_ready(service, web), 'Tunnel did not recover after restarting Web')
             else:
                 assert sidecar.attrs['State']['Status'] == 'created'
         headers, page = wait_for(login_page, 'New Web HTTPS does not respond')
@@ -295,6 +304,8 @@ with closing(remote.client_factory()) as client:
             remote = json.loads(body)
             expected_state = 'active' if args.with_tunnel_resume else 'configure' if remote_name else 'not-installed'
             assert status == 200 and remote['available'] and remote['state'] == expected_state, remote
+            if args.with_tunnel_resume:
+                assert remote['restart_resume_allowed'], remote
             status, _, body = request('/static/views/remote_access.js')
             assert status == 200 and 'Zdalny dostęp przez Internet'.encode() in body
             if args.verify_catalog:

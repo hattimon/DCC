@@ -95,6 +95,9 @@ class RemoteAccess:
         self.error = ""
         self.network_error = ""
         self.update = None
+        self.recovery = None
+        self.recovery_failures = 0
+        self.recovery_next = 0
 
     def saved(self):
         rows = self.state.rows("SELECT data FROM settings WHERE user_id=?", (SETTINGS,))
@@ -458,6 +461,8 @@ class RemoteAccess:
 
     def enable(self, container, owner, epoch, *, resume_after_update=False):
         self.policy(owner)
+        if epoch != self.epoch:
+            raise RemoteError("Public access was disabled during startup.")
         config = self.saved()
         if not config.get("origin") or not config.get("identity"):
             raise RemoteError("Configure a zrok environment and reserve a name first.")
@@ -494,6 +499,102 @@ class RemoteAccess:
             self.stop(container)
             raise
         threading.Thread(target=self.monitor, args=(route,), name="dcc-remote-tunnel", daemon=True).start()
+
+    def event(self, owner, action, status):
+        # Only fixed event names reach logs; never include provider output or identity material.
+        try:
+            self.state.audit(owner, "remote-access." + action, self.name, status)
+        except Exception:
+            self.app.logger.warning("DCC Remote Access: audit unavailable")
+        self.app.logger.warning("DCC Remote Access: %s (%s)", action, status)
+
+    def forget_recovery(self):
+        # The caller holds the intent lock, so Disable wins over an in-flight launch.
+        self.recovery = None
+        self.recovery_failures = 0
+        self.recovery_next = 0
+        config = self.saved()
+        if config.pop("recovery", None) is not None:
+            self.save(config)
+
+    def remember_recovery(self, owner, epoch, panel_image, *, resume_after_restart=False, resume_after_update=False):
+        with self.intent:
+            if epoch != self.epoch:
+                return
+            self.recovery = dict(owner=owner, panel_image=panel_image,
+                                 resume_after_restart=resume_after_restart, resume_after_update=resume_after_update)
+            self.recovery_failures, self.recovery_next = 0, 0
+            config = self.saved()
+            if resume_after_restart:
+                config["recovery"] = dict(self.recovery)
+            else:
+                config.pop("recovery", None)
+            self.save(config)
+
+    def recover_once(self):
+        """Restore an authorized session, or opt-in startup intent, without publishing an unverified route."""
+        with self.lock:
+            if not self.available or self.network_error or self.route or time.monotonic() < self.recovery_next:
+                return False
+            # An updater must finish its image-bound, one-use handoff first.
+            if self.state.rows("SELECT data FROM settings WHERE user_id=?", (UPDATE_TICKET,)):
+                return False
+            with self.intent:
+                recovery = self.recovery
+                if recovery is None:
+                    recovery = self.saved().get("recovery")
+                    if not isinstance(recovery, dict) or recovery.get("resume_after_restart") is not True:
+                        return False
+                if (not isinstance(recovery.get("owner"), str)
+                        or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(recovery.get("panel_image", "")))):
+                    return False
+                self.recovery = recovery
+                epoch = self.epoch
+            owner = recovery["owner"]
+            try:
+                self.policy(owner)
+            except RemoteError:
+                with self.intent:
+                    if epoch == self.epoch:
+                        self.forget_recovery()
+                        self.tunnel, self.error = "blocked", "Automatic tunnel recovery was revoked by the security policy."
+                self.event(owner, "recovery-blocked", 403)
+                return False
+            try:
+                with closing(self.client_factory()) as client:
+                    panel = local_container(client)
+                    if panel.attrs.get("Image") != recovery["panel_image"]:
+                        raise RemoteError("Enable access locally after changing the DCC Web image without an updater handoff.")
+                    container = self.container(client)
+                    if not container:
+                        raise RemoteError("Install DCC Remote Access first.")
+                    container.reload()
+                    self.validate_container(container)
+                    self.enable(container, owner, epoch, resume_after_update=recovery.get("resume_after_update") is True)
+            except Exception:
+                with self.intent:
+                    if epoch != self.epoch:
+                        return False
+                    self.recovery_failures += 1
+                    self.recovery_next = time.monotonic() + min(300, 5 * 2 ** min(self.recovery_failures, 6))
+                    self.tunnel = "reconnecting"
+                    self.error = "Automatic tunnel recovery is retrying. Check Internet access, the reservation and the DCC Web image."
+                if self.recovery_failures == 1:
+                    self.event(owner, "recovery-retrying", 503)
+                return False
+            self.recovery_failures, self.recovery_next = 0, 0
+            self.event(owner, "recovery-started", 200)
+            return True
+
+    def start_recovery(self):
+        def recover():
+            while True:
+                try:
+                    self.recover_once()
+                except Exception:
+                    self.app.logger.warning("DCC Remote Access: recovery check unavailable; retrying")
+                time.sleep(5)
+        threading.Thread(target=recover, name="dcc-remote-recovery", daemon=True).start()
 
     def update_pause_allowed(self):
         route = self.route
@@ -533,6 +634,8 @@ class RemoteAccess:
             owner = self.route["owner"]
             ticket = dict(proof=proof, owner=owner, panel=panel.id, target=target_image,
                           expires=time.time() + UPDATE_TICKET_SECONDS)
+            if self.recovery:
+                ticket["recovery"] = dict(self.recovery)
             self.state.execute("INSERT OR REPLACE INTO settings VALUES(?,?)",
                                (UPDATE_TICKET, self.state.encode_profile(ticket)))
             self.epoch += 1
@@ -558,6 +661,10 @@ class RemoteAccess:
         if not sidecar or not self.state.execute("DELETE FROM settings WHERE user_id=? AND data=?", (UPDATE_TICKET, saved)):
             return False
         owner, epoch = ticket["owner"], self.epoch
+        # The nonce and target have been verified. Keep this authorized intent
+        # even if the first launch encounters an Internet/provider outage.
+        self.remember_recovery(owner, epoch, panel.attrs.get("Image"), resume_after_update=True,
+                               resume_after_restart=(ticket.get("recovery") or {}).get("resume_after_restart") is True)
         self.tunnel, self.error = "connecting", ""
 
         def restore():
@@ -569,8 +676,8 @@ class RemoteAccess:
                     self.state.audit(owner, "remote-access.update-resume", self.name, 200)
                 except Exception:
                     if self.epoch == epoch:
-                        self.tunnel = "error"
-                        self.error = "Could not resume the tunnel after updating. Enable access from the local panel."
+                        self.tunnel = "reconnecting"
+                        self.error = "Could not resume the tunnel after updating. Automatic recovery is retrying."
                     self.state.audit(owner, "remote-access.update-resume", self.name, 503)
 
         threading.Thread(target=restore, name="dcc-remote-update-resume", daemon=True).start()
@@ -582,17 +689,41 @@ class RemoteAccess:
             try:
                 policy_ok = not self.blocked() and self.owner_can_enable(route["owner"])
             except Exception:
-                policy_ok = False
+                with self.lock:
+                    if self.route is not route:
+                        return
+                    route["verified"] = False
+                    self.tunnel = "reconnecting"
+                time.sleep(5)
+                continue
             if not policy_ok:
                 with self.lock:
                     if self.route is route:
+                        with self.intent:
+                            self.epoch += 1
+                            self.forget_recovery()
                         try:
                             with closing(self.client_factory()) as client:
                                 self.stop(self.container(client))
                         except (DockerException, RemoteError):
                             self.route = None
                         self.tunnel = "blocked"
+                        self.event(route["owner"], "policy-blocked", 403)
                 return
+            if self.recovery:
+                try:
+                    with self.lock, closing(self.client_factory()) as client:
+                        if self.route is not route:
+                            return
+                        container = self.container(client)
+                        if not container or not container.attrs["State"]["Running"]:
+                            self.route = None
+                            self.tunnel, self.error = "reconnecting", "The tunnel stopped; automatic recovery is retrying."
+                            self.event(route["owner"], "sidecar-stopped", 503)
+                            return
+                except (DockerException, RemoteError):
+                    # A temporary engine outage must not revoke the administrator's intent.
+                    route["verified"] = False
             try:
                 verified = self.probe(route["origin"], route["nonce"])
             except Exception:
@@ -602,22 +733,20 @@ class RemoteAccess:
                     return
                 route["verified"] = verified
                 if verified:
+                    if failures:
+                        self.event(route["owner"], "connection-restored", 200)
                     failures = 0
                     self.tunnel, self.error = "active", ""
                     self.last_connection = time.time()
                 else:
                     failures += 1
+                    if failures == 1:
+                        self.event(route["owner"], "https-unreachable", 503)
                     self.tunnel = "reconnecting" if self.last_connection else "connecting"
                     self.error = "The public HTTPS endpoint has not passed verification."
-                    if failures >= 8:
-                        try:
-                            with closing(self.client_factory()) as client:
-                                self.stop(self.container(client))
-                        except (DockerException, RemoteError):
-                            self.route = None
-                        self.tunnel = "error"
-                        return
-            time.sleep(20 if verified else min(30, 2 ** failures))
+                    # Keep the lease alive and the public gate closed until proof returns.
+                    # Internet/DNS/provider failures are not a request to disable access.
+            time.sleep(20 if verified else min(30, 2 ** min(failures, 5)))
 
     def uninstall(self, client, container, keep, provider_cleaned):
         config = self.saved()
@@ -667,6 +796,7 @@ class RemoteAccess:
                   "origin": config.get("origin"), "enrolled": bool(config.get("identity")),
                   "last_connection": self.last_connection, "error": self.error, "update": self.update,
                   "security": "blocked" if self.blocked() else "pinned",
+                  "restart_resume_allowed": (config.get("recovery") or {}).get("resume_after_restart") is True,
                   "update_resume_allowed": self.update_pause_allowed()}
         if self.network_error:
             status.update(state="error", tunnel="disabled", error=self.network_error)
@@ -680,7 +810,7 @@ class RemoteAccess:
                     status["container"] = container.attrs["State"]["Status"]
                     self.validate_container(container)
                     status["state"] = ("blocked" if self.blocked() else
-                                       self.tunnel if self.route or self.tunnel in {"blocked", "error"} else
+                                       self.tunnel if self.route or self.recovery or self.tunnel in {"blocked", "error"} else
                                        "disabled" if config.get("origin") else "configure")
                     if self.route and status["container"] != "running":
                         status.update(state="error", tunnel="error", error="The zrok process stopped. Check the reservation and account.")
@@ -702,6 +832,7 @@ class RemoteAccess:
             with self.intent:
                 self.epoch += 1
                 self.route = None
+                self.forget_recovery()
         with self.lock, closing(self.client_factory()) as client:
             if action != "install":
                 self.state.execute("DELETE FROM settings WHERE user_id=?", (UPDATE_TICKET,))
@@ -719,11 +850,21 @@ class RemoteAccess:
                     raise RemoteError("This zrok image is blocked by the security policy.")
                 if self.route:
                     raise RemoteError("Disable public access before changing the configuration.")
+                with self.intent:
+                    self.forget_recovery()
                 self.configure(container, data)
             elif action in {"enable", "restart"}:
                 if action == "enable" and self.route:
                     return {"accepted": True}
+                panel_image = local_container(client).attrs.get("Image")
+                with self.intent:
+                    if epoch != self.epoch:
+                        raise RemoteError("Public access was disabled during startup.")
+                    self.forget_recovery()
                 self.enable(container, owner, epoch, resume_after_update=data.get("resume_after_update") is True)
+                self.remember_recovery(owner, epoch, panel_image,
+                                       resume_after_restart=data.get("resume_after_restart") is True,
+                                       resume_after_update=data.get("resume_after_update") is True)
             self.state.audit(owner, "remote-access." + action, self.name, 200)
             return {"accepted": True}
 

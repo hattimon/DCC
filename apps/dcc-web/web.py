@@ -1226,6 +1226,7 @@ def main():
                 start_control(remote)
             except OSError as error:
                 print(f"DCC Remote Access update control unavailable ({type(error).__name__}).", flush=True)
+            remote.start_recovery()
     print(f"DCC Web {VERSION}: http://{args.host}:{args.port} (initial setup at /login)",flush=True)
     serve(app,host=args.host,port=args.port,threads=8,channel_timeout=60,ident="DCC-Web")
 

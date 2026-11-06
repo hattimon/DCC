@@ -34,11 +34,13 @@ export async function remoteAction(action,status){
    <label class="check"><input name="provider_cleaned" type="checkbox">Środowisko i nazwę usunięto już w konsoli zrok.</label>`:''}
   ${['configure','enable','restart','uninstall'].includes(action)?html`<div class="form-grid">${accountFields()}</div>`:''}
   ${['enable','restart'].includes(action)?html`<label class="check"><input name="resume_after_update" type="checkbox" ${status.update_resume_allowed?'checked':''}>Wznawiaj tunel po aktualizacjach DCC Web przez Updater</label>
-   <p class="fine">Updater zatrzyma tunel na czas podmiany i wznowi go po sprawdzeniu panelu. Zwykły restart panelu nadal wymaga ręcznego włączenia tunelu.</p>`:''}
+   <p class="fine">Updater zatrzyma tunel na czas podmiany i wznowi go po sprawdzeniu panelu.</p>
+   <label class="check"><input name="resume_after_restart" type="checkbox" ${status.restart_resume_allowed?'checked':''}>Wznawiaj tunel po restarcie DCC Web lub komputera</label>
+   <p class="fine">Zgoda pozostaje zapisana do wyłączenia dostępu. Połączenie wróci po sprawdzeniu HTTPS i 2FA administratora. Przerwa w Internecie nie wyłącza dostępu na stałe.</p>`:''}
   <label class="check"><input type="checkbox" required>Potwierdzam świadomie tę zmianę.</label>
  </div>`,{submit:actions[action],danger:['enable','uninstall'].includes(action),onSubmit:async form=>{
   const approval=await post('confirmations',{action:'remote-access.'+action,target:'dcc-remote-access'});
-  const result=await post('admin/remote-access/'+action,{...Object.fromEntries(form),keep_data:form.has('keep_data'),provider_cleaned:form.has('provider_cleaned'),resume_after_update:form.has('resume_after_update'),...approval});
+  const result=await post('admin/remote-access/'+action,{...Object.fromEntries(form),keep_data:form.has('keep_data'),provider_cleaned:form.has('provider_cleaned'),resume_after_update:form.has('resume_after_update'),resume_after_restart:form.has('resume_after_restart'),...approval});
   await pollJob(result);
   return true;
  }});
@@ -89,6 +91,7 @@ export function mountRemoteAccess(root,ctx){
    ${value.available&&value.can_manage&&!value.can_reauthenticate?notice('Open the local panel over HTTPS for this operation.') : ''}
    ${value.available&&!value.mfa_ready?notice('Włącz 2FA na swoim koncie administratora, aby uruchomić tunel.','warning'):''}
    ${value.update_resume_allowed?notice('Wznowienie tunelu po aktualizacji przez Updater jest dozwolone.'):''}
+   ${value.restart_resume_allowed?notice('Automatyczne wznowienie po restarcie jest włączone. Wyłączenie dostępu anuluje tę zgodę.'):''}
    ${value.available&&installed&&value.name?html`<div class="notice">
     <strong>Ręczna aktualizacja DCC Web z tunelem zrok</strong>
     <ol>

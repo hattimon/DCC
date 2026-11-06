@@ -19,6 +19,14 @@ Reviewed image `docker.io/openziti/zrok2:2.0.9@sha256:00c5b65bbb5b7c045c1d23d35a
 
 An operator can add a confirmed affected digest to `/data/dcc-remote-blocked-digests.txt` (one lowercase SHA-256 digest per line) or set `DCC_REMOTE_BLOCKED_DIGESTS` at Web startup. An unreadable or malformed file closes the public gate. DCC checks policy on public requests and while monitoring. The sidecar also checks a local lease and exits when DCC is unavailable or the lease is withdrawn. This policy affects the tunnel only.
 
+## Recovery authorization
+
+HTTPS probe failures close the public application gate and keep retrying; they do not revoke access intent after a fixed number of failures. Unexpected sidecar exits are retried for the currently authorized session. An administrator may separately approve recovery after a Web or computer restart during local password/MFA reauthentication. Only that opt-in stores recovery intent with the encrypted configuration. Existing installations remain opt-out.
+
+Startup recovery validates the current administrator/MFA, blocklist, pinned sidecar isolation, saved Web image digest and reserved public origin. It restores enrollment into tmpfs and requires fresh public HTTPS proof before opening application traffic. It never releases or takes over an occupied provider reservation. Recovery waits for any pending updater ticket and cannot replace the existing image-bound, single-use updater handoff. A successful authorized handoff preserves restart consent and binds it to the new image. Disable/uninstall withdraw the route and clear recovery intent before waiting for a startup operation; security revocation clears intent as well.
+
+Fixed events such as `https-unreachable`, `connection-restored`, `sidecar-stopped`, `recovery-retrying` and `recovery-started` are written to the DCC audit trail and Web logs without provider output, tokens, identity archives or lease values. Retry delays are capped at five minutes.
+
 ## Future Security Monitor contract
 
 The local administrator's `GET /api/admin/remote-access` response reports the module version, image digest, security state, container and tunnel states, last connection, last safe error and update availability. It contains no credentials. `POST /api/admin/remote-access/disable` withdraws the ingress and stops the managed sidecar; the action is idempotent, CSRF-protected, auditable and bound to a fresh, single-use confirmation. Enable/restart require a local administrator, current password, MFA, confirmation and an eligible pinned image. Check-update reports upstream metadata without applying it.

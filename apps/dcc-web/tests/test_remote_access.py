@@ -10,7 +10,8 @@ from unittest.mock import Mock, patch
 import unittest
 from test_web import WebTests as WebFixture
 from remote_access import (DIGEST, ENVIRONMENT, IMAGE, LABEL, PANEL_NETWORK_POOL,
-                           PANEL_NETWORK_PREFIX, RemoteError, SETTINGS, UPDATE_CONTROL_LABEL, WAIT, name_origin)
+                           PANEL_NETWORK_PREFIX, RemoteAccess, RemoteError, SETTINGS, UPDATE_CONTROL_LABEL,
+                           UPDATE_TICKET, WAIT, name_origin)
 
 
 class RemoteAccessTests(unittest.TestCase):
@@ -39,6 +40,233 @@ class RemoteAccessTests(unittest.TestCase):
     def enable_fixture_mfa(self):
         self.state.execute("INSERT INTO mfa VALUES(?,?,?,?,?,?,?)",
                            (self.user, b"test-only", 1, -1, "[]", 0, ""))
+
+    def recovery_fixture(self, *, persistent=True):
+        self.enable_fixture_mfa()
+        self.remote.save({"identity": "fixture", "origin": self.origin, "name": "fixture-dcc"})
+        panel = SimpleNamespace(id="panel", attrs={"Image": "sha256:" + "b" * 64})
+        self.remote.route = self.route
+        self.remote.remember_recovery(self.user, self.remote.epoch, panel.attrs["Image"],
+                                      resume_after_restart=persistent, resume_after_update=True)
+        self.remote.route = None
+        sidecar = Mock(attrs={"State": {"Running": False, "Status": "exited"}})
+        client = Mock()
+        self.remote.client_factory = lambda: client
+        return panel, sidecar, client
+
+    def test_long_internet_outage_recovers_without_permanently_stopping_tunnel(self):
+        self.enable_fixture_mfa()
+        self.route["verified"] = True
+        self.remote.route = self.route
+        self.remote.last_connection = time.time()
+        snapshots = []
+
+        def sleep(delay):
+            snapshots.append((self.remote.tunnel, self.route["verified"], delay))
+            if len(snapshots) == 11:
+                self.remote.route = None
+
+        with patch.object(self.remote, "probe", side_effect=[False] * 10 + [True]), \
+                patch.object(self.remote, "stop") as stop, patch("remote_access.time.sleep", side_effect=sleep):
+            self.remote.monitor(self.route)
+        stop.assert_not_called()
+        self.assertTrue(all(value[:2] == ("reconnecting", False) for value in snapshots[:10]))
+        self.assertEqual(snapshots[-1][:2], ("active", True))
+        self.assertTrue(all(value[2] <= 30 for value in snapshots))
+
+    def test_startup_recovery_requires_saved_opt_in_and_keeps_public_gate_closed(self):
+        panel, sidecar, client = self.recovery_fixture()
+        restarted = RemoteAccess(self.app, self.state, client_factory=lambda: client)
+        restarted.available = True
+        with patch("remote_access.local_container", return_value=panel), \
+                patch.object(restarted, "container", return_value=sidecar), \
+                patch.object(restarted, "validate_container"), \
+                patch.object(restarted, "restore"), \
+                patch.object(restarted, "reservation", return_value={
+                    "reserved": True, "namespaceName": "shares.zrok.io", "namespaceToken": "public"}), \
+                patch.object(restarted, "command"), patch("remote_access.threading.Thread"):
+            sidecar.attrs["NetworkSettings"] = {"Networks": {restarted.ingress: {"IPAddress": self.peer}}}
+            self.assertTrue(restarted.recover_once())
+        self.assertIsNotNone(restarted.route)
+        self.assertFalse(restarted.route["verified"])
+        self.assertTrue(restarted.route["resume_after_update"])
+        self.remote.route = restarted.route
+        self.assertEqual(self.tunnel("/login").status_code, 503)
+        restarted.available = False
+        self.assertNotIn("identity", restarted.status())
+
+    def test_legacy_install_and_session_only_recovery_do_not_enable_after_restart(self):
+        panel, sidecar, client = self.recovery_fixture(persistent=False)
+        self.assertIsNotNone(self.remote.recovery)
+        self.assertNotIn("recovery", self.remote.saved())
+        restarted = RemoteAccess(self.app, self.state, client_factory=lambda: client)
+        restarted.available = True
+        with patch.object(restarted, "enable") as enable:
+            self.assertFalse(restarted.recover_once())
+        enable.assert_not_called()
+
+    def test_recovery_retries_provider_outage_with_backoff_and_preserves_consent(self):
+        panel, sidecar, client = self.recovery_fixture()
+        with patch("remote_access.local_container", return_value=panel), \
+                patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "validate_container"), \
+                patch.object(self.remote, "enable", side_effect=[RemoteError("Provider unavailable"), None]) as enable, \
+                patch("remote_access.time.monotonic", return_value=100):
+            self.assertFalse(self.remote.recover_once())
+            self.assertFalse(self.remote.recover_once())
+            self.assertEqual(enable.call_count, 1)
+            self.assertEqual(self.remote.tunnel, "reconnecting")
+            self.assertTrue(self.remote.saved()["recovery"]["resume_after_restart"])
+            with patch("remote_access.time.monotonic", return_value=111):
+                self.assertTrue(self.remote.recover_once())
+        self.assertEqual(enable.call_count, 2)
+        self.assertEqual(self.remote.recovery_failures, 0)
+
+    def test_disabled_access_revokes_persistent_recovery_before_stopping_container(self):
+        panel, sidecar, client = self.recovery_fixture()
+        with patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "enable") as enable:
+            self.remote.perform("disable", {}, self.user, self.remote.epoch)
+            self.assertIsNone(self.remote.recovery)
+            self.assertNotIn("recovery", self.remote.saved())
+            self.assertFalse(self.remote.recover_once())
+        enable.assert_not_called()
+
+    def test_security_revocation_prevents_recovery_and_forgets_startup_consent(self):
+        self.recovery_fixture()
+        self.state.execute("DELETE FROM mfa WHERE user_id=?", (self.user,))
+        with patch.object(self.remote, "enable") as enable:
+            self.assertFalse(self.remote.recover_once())
+        enable.assert_not_called()
+        self.assertEqual(self.remote.tunnel, "blocked")
+        self.assertNotIn("recovery", self.remote.saved())
+
+    def test_pending_updater_handoff_and_changed_image_cannot_be_bypassed_by_startup(self):
+        panel, sidecar, client = self.recovery_fixture()
+        self.state.execute("INSERT INTO settings VALUES(?,?)", (UPDATE_TICKET, self.state.encode_profile({"proof": "fixture"})))
+        with patch("remote_access.local_container", return_value=panel), \
+                patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "validate_container"), patch.object(self.remote, "enable") as enable:
+            self.assertFalse(self.remote.recover_once())
+            self.state.execute("DELETE FROM settings WHERE user_id=?", (UPDATE_TICKET,))
+            panel.attrs["Image"] = "sha256:" + "c" * 64
+            self.assertFalse(self.remote.recover_once())
+        enable.assert_not_called()
+
+    def test_unexpected_sidecar_exit_enters_recovery_without_revoking_access(self):
+        panel, sidecar, client = self.recovery_fixture()
+        self.remote.route = self.route
+        with patch.object(self.remote, "container", return_value=sidecar), patch.object(self.remote, "probe") as probe:
+            self.remote.monitor(self.route)
+        probe.assert_not_called()
+        self.assertIsNone(self.remote.route)
+        self.assertEqual(self.remote.tunnel, "reconnecting")
+        self.assertTrue(self.remote.saved()["recovery"]["resume_after_restart"])
+
+    def test_disable_during_recovery_cannot_restore_saved_intent(self):
+        panel, sidecar, client = self.recovery_fixture()
+
+        def disabled(*args, **kwargs):
+            self.remote.perform("disable", {}, self.user, self.remote.epoch)
+            raise RemoteError("Public access was disabled during startup.")
+
+        with patch("remote_access.local_container", return_value=panel), \
+                patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "validate_container"), patch.object(self.remote, "enable", side_effect=disabled):
+            self.assertFalse(self.remote.recover_once())
+        self.assertIsNone(self.remote.recovery)
+        self.assertEqual(self.remote.tunnel, "disabled")
+        self.assertNotIn("recovery", self.remote.saved())
+
+    def test_updater_handoff_preserves_restart_consent_and_binds_it_to_replacement(self):
+        original, sidecar, client = self.recovery_fixture()
+        self.route.update(verified=True, resume_after_update=True)
+        self.remote.route = self.route
+        sidecar.attrs["State"]["Running"] = True
+        target = "sha256:" + "a" * 64
+        replacement = SimpleNamespace(id="replacement", attrs={"Image": target})
+        client.images.get.return_value.attrs = {
+            "RepoTags": ["ghcr.io/hattimon/dcc-web:0.2.9"],
+            "Config": {"Labels": {UPDATE_CONTROL_LABEL: "1"}},
+        }
+
+        def enabled(*args, **kwargs):
+            self.remote.route = self.route
+
+        with patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "validate_container"), patch.object(self.remote, "enable", side_effect=enabled), \
+                patch("remote_access.threading.Thread") as worker:
+            self.assertTrue(self.remote.pause_for_update(client, original, "proof", target))
+            self.assertTrue(self.remote.resume_after_update(client, replacement, "proof"))
+            worker.call_args.kwargs["target"]()
+        recovery = self.remote.saved()["recovery"]
+        self.assertEqual(recovery["panel_image"], target)
+        self.assertTrue(recovery["resume_after_restart"])
+        self.assertTrue(recovery["resume_after_update"])
+
+    def test_verified_update_handoff_retries_failed_launch_and_survives_another_restart(self):
+        original, sidecar, client = self.recovery_fixture()
+        self.route.update(verified=True, resume_after_update=True)
+        self.remote.route = self.route
+        sidecar.attrs["State"]["Running"] = True
+        target = "sha256:" + "a" * 64
+        replacement = SimpleNamespace(id="replacement", attrs={"Image": target})
+        client.images.get.return_value.attrs = {
+            "RepoTags": ["ghcr.io/hattimon/dcc-web:0.2.9"],
+            "Config": {"Labels": {UPDATE_CONTROL_LABEL: "1"}},
+        }
+        with patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "validate_container"), \
+                patch.object(self.remote, "enable", side_effect=RemoteError("Provider unavailable")), \
+                patch("remote_access.threading.Thread") as worker:
+            self.assertTrue(self.remote.pause_for_update(client, original, "proof", target))
+            self.assertTrue(self.remote.resume_after_update(client, replacement, "proof"))
+            worker.call_args.kwargs["target"]()
+        self.assertEqual(self.remote.tunnel, "reconnecting")
+        self.assertEqual(self.remote.saved()["recovery"]["panel_image"], target)
+        restarted = RemoteAccess(self.app, self.state, client_factory=lambda: client)
+        restarted.available = True
+        with patch("remote_access.local_container", return_value=replacement), \
+                patch.object(restarted, "container", return_value=sidecar), \
+                patch.object(restarted, "validate_container"), patch.object(restarted, "enable") as enable:
+            self.assertTrue(restarted.recover_once())
+        enable.assert_called_once_with(sidecar, self.user, restarted.epoch, resume_after_update=True)
+
+    def test_recovery_refuses_modified_sidecar_isolation(self):
+        panel, sidecar, client = self.recovery_fixture()
+        with patch("remote_access.local_container", return_value=panel), \
+                patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "validate_container", side_effect=RemoteError("Isolation changed")), \
+                patch.object(self.remote, "enable") as enable:
+            self.assertFalse(self.remote.recover_once())
+        enable.assert_not_called()
+
+    def test_manual_enable_records_restart_consent_only_after_successful_launch(self):
+        panel, sidecar, client = self.recovery_fixture()
+
+        def enabled(*args, **kwargs):
+            self.remote.route = self.route
+
+        with patch("remote_access.local_container", return_value=panel), \
+                patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "enable", side_effect=RemoteError("Provider unavailable")) as enable:
+            with self.assertRaises(RemoteError):
+                self.remote.perform("enable", {"resume_after_restart": False}, self.user, self.remote.epoch)
+            self.assertIsNone(self.remote.recovery)
+            self.assertNotIn("recovery", self.remote.saved())
+            enable.side_effect = enabled
+            self.remote.perform("enable", {"resume_after_restart": True}, self.user, self.remote.epoch)
+        self.assertTrue(self.remote.saved()["recovery"]["resume_after_restart"])
+
+    def test_reconfiguration_cancels_recovery_and_leaves_access_disabled(self):
+        panel, sidecar, client = self.recovery_fixture()
+        with patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "configure"), patch.object(self.remote, "enable") as enable:
+            self.remote.perform("configure", {"name": "other-name"}, self.user, self.remote.epoch)
+            self.assertFalse(self.remote.recover_once())
+        enable.assert_not_called()
+        self.assertIsNone(self.remote.recovery)
+        self.assertNotIn("recovery", self.remote.saved())
 
     def test_update_resume_requires_consent_and_accepts_only_the_expected_image_once(self):
         self.enable_fixture_mfa()

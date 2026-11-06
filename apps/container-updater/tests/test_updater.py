@@ -21,7 +21,7 @@ class ImageReferenceTests(unittest.TestCase):
         apps = json.loads((Path(__file__).resolve().parents[3] / 'dcc-catalog.json').read_text(encoding='utf-8'))['apps']
         target = next(app['image'] for app in apps if app['name'] == 'DCC Web')
         service = UpdateService.__new__(UpdateService)
-        for version in ('0.1.0', '0.1.1', '0.1.2'):
+        for version in ('0.1.0', '0.1.1', '0.1.2', '0.2.8', '0.2.9'):
             candidate = service._catalog_candidate('ghcr.io/hattimon/dcc-web:' + version, apps)
             self.assertTrue(candidate.available)
             self.assertEqual(candidate.target_image, target)

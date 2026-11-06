@@ -730,7 +730,10 @@ Instalacja jest dostępna w kontenerowym DCC Web na lokalnym silniku Docker.|Ins
 Zarządzaj zdalnym dostępem z lokalnego panelu.|Manage remote access from the local panel.
 Ręczna aktualizacja DCC Web z tunelem zrok|Manually updating DCC Web with a zrok tunnel
 Wznawiaj tunel po aktualizacjach DCC Web przez Updater|Resume the tunnel after DCC Web updates through Updater
-Updater zatrzyma tunel na czas podmiany i wznowi go po sprawdzeniu panelu. Zwykły restart panelu nadal wymaga ręcznego włączenia tunelu.|Updater will pause the tunnel during replacement and resume it after checking the panel. A regular panel restart still requires you to enable the tunnel manually.
+Updater zatrzyma tunel na czas podmiany i wznowi go po sprawdzeniu panelu.|Updater will pause the tunnel during replacement and resume it after checking the panel.
+Wznawiaj tunel po restarcie DCC Web lub komputera|Resume the tunnel after restarting DCC Web or the computer
+Zgoda pozostaje zapisana do wyłączenia dostępu. Połączenie wróci po sprawdzeniu HTTPS i 2FA administratora. Przerwa w Internecie nie wyłącza dostępu na stałe.|This authorization is saved until you disable access. The connection returns after checking HTTPS and administrator MFA. An Internet outage does not disable access permanently.
+Automatyczne wznowienie po restarcie jest włączone. Wyłączenie dostępu anuluje tę zgodę.|Automatic recovery after restart is enabled. Disabling access revokes this authorization.
 Wznowienie tunelu po aktualizacji przez Updater jest dozwolone.|Tunnel resumption after an update through Updater is authorized.
 Otwórz DCC Web przez lokalny adres HTTPS. W tej sekcji kliknij „Wyłącz dostęp” i potwierdź.|Open DCC Web using its local HTTPS address. In this section, click “Disable access” and confirm.
 W DCC Container Updater kliknij „Sprawdź” przy DCC Web, zaznacz kontener i kliknij „Aktualizuj zaznaczone”.|In DCC Container Updater, click “Check” next to DCC Web, select the container, and click “Update selected”.
