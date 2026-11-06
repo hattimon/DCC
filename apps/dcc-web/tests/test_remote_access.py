@@ -67,7 +67,8 @@ class RemoteAccessTests(unittest.TestCase):
                 self.remote.route = None
 
         with patch.object(self.remote, "probe", side_effect=[False] * 10 + [True]), \
-                patch.object(self.remote, "stop") as stop, patch("remote_access.time.sleep", side_effect=sleep):
+                patch.object(self.remote, "stop") as stop, \
+                patch("remote_access.time", SimpleNamespace(sleep=sleep, time=time.time, monotonic=time.monotonic)):
             self.remote.monitor(self.route)
         stop.assert_not_called()
         self.assertTrue(all(value[:2] == ("reconnecting", False) for value in snapshots[:10]))
@@ -703,7 +704,8 @@ class RemoteAccessTests(unittest.TestCase):
             snapshots.append((self.remote.tunnel, self.route["verified"]))
             if len(snapshots) == 3:
                 self.remote.route = None
-        with patch.object(self.remote,"probe",side_effect=[False,True,False]), patch("remote_access.time.sleep",side_effect=sleep):
+        with patch.object(self.remote,"probe",side_effect=[False,True,False]), \
+                patch("remote_access.time", SimpleNamespace(sleep=sleep, time=time.time, monotonic=time.monotonic)):
             self.remote.monitor(self.route)
         self.assertEqual(snapshots, [("connecting",False),("active",True),("reconnecting",False)])
         blocklist = self.state.directory / "dcc-remote-blocked-digests.txt"
