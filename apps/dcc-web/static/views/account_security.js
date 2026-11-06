@@ -43,6 +43,11 @@ export async function accountSecurity(root,ctx){
  root.querySelector('#admin-https')?.addEventListener('click',guarded(async()=>httpsDialog(await api('admin/domains'))));
  const access=account.querySelector('[data-security-group=access]');
  if(access){
+  const setting=await api('admin/panels');if(!ctx.valid())return;
+  const options=document.createElement('section');options.className='stack';
+  options.innerHTML=html`<label class="check"><input id="auto-panel-proxy" type="checkbox" ${setting.enabled?'checked':''}>Automatycznie otwieraj panele zdalne przez DCC Web</label>${notice('Przy publicznym wejściu panele otwierają się przez sesję DCC. Lokalne linki i kopiowane adresy pozostają bezpośrednie. Panel zachowuje własne logowanie.')}`;
+  access.querySelector('.security-group-body').append(options);
+  options.querySelector('input').onchange=async event=>{const checkbox=event.target;checkbox.disabled=true;try{await api('admin/panels',{method:'PUT',data:{enabled:checkbox.checked}});notify('Ustawienia zapisane');}catch(error){checkbox.checked=!checkbox.checked;notify(error.message,'error');}finally{checkbox.disabled=false;}};
   const remote=document.createElement('section');remote.id='remote-access';remote.className='stack';
   access.querySelector('.security-group-body').append(remote);
   access.addEventListener('toggle',()=>{if(access.open&&!remote.dataset.loaded){remote.dataset.loaded='true';mountRemoteAccess(root,ctx);}});

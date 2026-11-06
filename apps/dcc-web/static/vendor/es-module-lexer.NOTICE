@@ -1,0 +1,7 @@
+es-module-lexer 1.7.0, CSP asm.js build (dist/lexer.asm.js)
+Source: npm package es-module-lexer@1.7.0
+Upstream: https://github.com/guybedford/es-module-lexer
+License: MIT; see es-module-lexer.LICENSE.
+Unmodified vendored file SHA-256:
+11c73b8379b531f2b77ffd89c75ca720ecf7059ab15bdc71da66ee22f3fc9ae7
+The parser inspects module syntax. It never evaluates upstream panel code.

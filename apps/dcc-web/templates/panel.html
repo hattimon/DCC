@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="{{ language.lower() }}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="csrf-token" content="{{ session.get('csrf','') }}"><title>{{ panel.label }} · DCC Web</title>
+<link rel="stylesheet" href="/static/panel.css"><script type="module" src="/static/panel_view.js"></script></head>
+<body data-panel-api="/api/panels/{{ profile_id }}/{{ container_id }}/{{ panel_id }}" data-service-origin="{{ panel.url }}">
+<header><strong>{{ panel.label }}</strong><span id="panel-status" role="status">{{ tr('Łączenie z panelem…') }}</span>
+<button id="panel-reload" type="button">{{ tr('Odśwież') }}</button><a href="/docs/panels?lang={{ language }}">{{ tr('Dokumentacja') }}</a><a href="/">DCC Web</a></header>
+<p class="scope">{{ tr('Dostęp przez sesję DCC Web. Panel zachowuje własne logowanie. Aplikacje wymagające własnego originu mogą potrzebować osobnego reverse proxy.') }}</p>
+<iframe id="panel-frame" title="{{ panel.label }}" sandbox="allow-scripts allow-forms allow-downloads" referrerpolicy="no-referrer"></iframe>
+</body></html>

@@ -16,7 +16,7 @@
   <div class="docs-layout">
     <aside class="docs-sidebar">
       <a class="docs-back" href="/about?lang={{ language }}">← {{ tr('Dokumentacja') }}</a>
-      {% for name,label in [('installation','Instalacja i uruchamianie'),('configuration','Profile i konfiguracja'),('profiles-security','Profile, klucze i 2FA'),('security','Bezpieczeństwo'),('catalogs','Sklep i katalogi'),('ai','Asystent AI'),('mcp','AI / MCP'),('themes-audio','Motywy i dźwięki'),('feature-matrix','Macierz funkcji desktop / web'),('testing','Testy i ograniczenia')] %}
+      {% for name,label in [('installation','Instalacja i uruchamianie'),('configuration','Profile i konfiguracja'),('profiles-security','Profile, klucze i 2FA'),('security','Bezpieczeństwo'),('panels','Panele kontenerów'),('catalogs','Sklep i katalogi'),('ai','Asystent AI'),('mcp','AI / MCP'),('themes-audio','Motywy i dźwięki'),('feature-matrix','Macierz funkcji desktop / web'),('testing','Testy i ograniczenia')] %}
         <a class="docs-nav-link{% if name == doc_name %} active{% endif %}" href="/docs/{{ name }}?lang={{ language }}">{{ tr(label) }}</a>
       {% endfor %}
     </aside>

@@ -1,5 +1,14 @@
 # Testing and acceptance
 
+## Container panel gateway (0.3.1)
+
+`python -m unittest discover -s apps/dcc-web/tests -p test_panel_proxy.py -v` uses real loopback HTTP, SSE and WebSocket services with temporary DCC state. On Windows the test process needs permission to connect to its local listener. It never connects to user Docker profiles.
+
+For repeatable browser verification, run `panel_browser_fixture.py --updater` and `panel_browser_fixture.py` from `apps/dcc-web/tests` in separate processes with the Web dependencies installed. The fixtures use ports 18878/18879 and temporary data under `output/playwright`. Run `playwright-cli -s=dcc-panel open about:blank` then `playwright-cli -s=dcc-panel run-code --filename apps/dcc-web/tests/panel_browser_smoke.js` from the repository root. This checks service assets, API, forms, multipart upload, service/DCC cookie separation, live text messages, ES-module cycles/dynamic imports, Updater login/report navigation and clearing an open panel after logout. Stop only those test processes afterward.
+
+The separate backend tests cover binary WebSocket messages, idle revocation, expiry, new MFA requirements, permission changes, redirect/path manipulation, scoped cookies and bounded resources. The browser Updater uses its real UI with a synthetic Docker service; it does not update containers. Live SSH forwarding, public TLS/domain/IP, zrok and installed-image upgrades require separate infrastructure validation. [Panel trust model and limits](panels.md).
+
+
 Backend, repository root:
 
 ```powershell

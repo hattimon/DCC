@@ -41,14 +41,15 @@ def published_ports(text):
     return result
 
 
-def profile_host(profile,fallback='localhost'):
+def profile_host(profile,fallback=None):
     if profile.get('panel_host'):return profile['panel_host']
-    if profile.get('kind') in {'ssh','balena'}:return profile['host']
-    endpoint=profile.get('endpoint','')
-    return urlsplit(endpoint).hostname or fallback
+    if profile.get('kind') in {'ssh','balena'}:return profile.get('host')
+    if profile.get('kind') in {'tcp'}:
+        return urlsplit(profile.get('endpoint','')).hostname or fallback
+    return fallback
 
 
-def enrich_containers(containers,profile,fallback='localhost',host_panels=None):
+def enrich_containers(containers,profile,fallback=None,host_panels=None):
     host=profile_host(profile,fallback)
     for entry in containers:
         ports=published_ports(entry.get('Ports'))
@@ -62,10 +63,13 @@ def enrich_containers(containers,profile,fallback='localhost',host_panels=None):
         links={}
         for port in [*ports,*inferred]:
             address=port['host_ip']
-            remote=profile.get('kind') in {'ssh','balena','tcp'}
             loopback=address in {'127.0.0.1','::1','localhost'}
-            if port['protocol']!='tcp' or (remote and loopback):continue
-            target=host if address in {'0.0.0.0','::','*','127.0.0.1','::1','localhost'} else address
+            if port['protocol']!='tcp':continue
+            # A wildcard binding identifies an interface, not the hostname of
+            # the Docker host. Never substitute the HTTP Host of DCC itself.
+            # Remote loopback bindings are reachable via verified SSH forwarding.
+            target=host if address in {'0.0.0.0','::','*'} else address
+            if not target:continue
             if not re.fullmatch(r'[A-Za-z0-9.\-:_]+',target):continue
             try:
                 if ipaddress.ip_address(target).version==6:target='['+target+']'
@@ -77,9 +81,13 @@ def enrich_containers(containers,profile,fallback='localhost',host_panels=None):
             if url in links:
                 links[url]['likely_panel'] |= likely
             else:
-                links[url]={'url':url,'label':f'{target}:{port["host_port"]}','likely_panel':likely}
+                links[url]={'url':url,'label':f'{target}:{port["host_port"]}','likely_panel':likely,
+                            'host_port':port['host_port'],'container_port':port['container_port'],
+                            'loopback_only':loopback,'bind_ip':address,
+                            'panel_id':hashlib.sha256((url+'|'+str(port['container_port'])).encode()).hexdigest()[:24]}
         entry['PublishedPorts']=ports
         entry['PanelLinks']=list(links.values())
+        entry['PanelAddressRequired']=bool(not host and any(p['protocol']=='tcp' and p['host_ip'] in {'0.0.0.0','::','*'} for p in [*ports,*inferred]))
     return containers
 
 

@@ -1,4 +1,8 @@
-# DCC Web 0.3.0
+# DCC Web 0.3.1
+
+Web 0.3.1 separates original Docker service addresses from public opening URLs. An opaque-origin iframe and scoped data broker isolate panels from the DCC session; HTTP, assets, forms, cookies, ES modules and bounded SSE/WebSocket connections use existing profile transports. Session and permissions are checked throughout, without a CSRF exception. [Setup and compatibility limits](docs/panels.md).
+
+This is a local candidate. Publication, image build and production verification are recorded separately in `DCC_WEB_0.3.1_CONTINUATION.md`; the bundled catalog continues to reference published images until the release workflow updates it.
 
 Web 0.3.0 removes the permanent tunnel shutdown after eight failed public HTTPS checks. Unexpected sidecar exits recover during the authorized session. A separate local password/MFA-confirmed option persists recovery across Web/computer restarts; existing installations must opt in. Valid Updater handoffs preserve this consent, bind it to the replacement image and retry temporary startup failures. Disable, uninstall, reconfiguration and security revocation cancel recovery. Safe event names are recorded in Web logs and audit.
 

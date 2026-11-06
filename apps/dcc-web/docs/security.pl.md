@@ -4,6 +4,9 @@ DCC Web zarządza Dockerem. Socket Docker, uprzywilejowany kontener, bind mount 
 
 ## Zaimplementowane zabezpieczenia
 
+Panele kontenerów korzystają z ramki o odrębnym, nieprzezroczystym originie i ograniczonego mostu danych. Kod usługi nie działa w originie administracyjnym DCC. Trasy zachowują zwykłą kontrolę sesji, MFA, CSRF i profilu, a cookies i strumienie są odrębne dla logowania i panelu. [Konfiguracja, izolacja i ograniczenia](panels.md).
+
+
 - Hasła są haszowane Scrypt; bootstrap Sklepu używa jednorazowego losowego hasła, a logowanie ma limity prób.
 - Podpisane cookie jest rotowane, identyfikatory sesji są haszowane po stronie serwera, a sesja wygasa po 12 godzinach. Cookie jest HttpOnly/SameSite Strict. Konfiguracja HTTPS włącza Secure i HSTS.
 - Zmiany wymagają CSRF i zgodnego Origin. Hosty mają allowlistę, CORS nie jest otwarty, serwer WebSocket nie jest uruchomiony.

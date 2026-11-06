@@ -1,6 +1,10 @@
 // Only authored UI strings/template fragments are translated. Interpolated Docker data is preserved.
 let language='EN';
 const pairs=`
+Automatycznie otwieraj panele zdalne przez DCC Web|Automatically open remote panels through DCC Web
+Przy publicznym wejściu panele otwierają się przez sesję DCC. Lokalne linki i kopiowane adresy pozostają bezpośrednie. Panel zachowuje własne logowanie.|Public access opens panels through your DCC session. Local links and copied addresses stay direct. Each panel keeps its own sign-in.
+Ustaw adres hosta paneli w profilu|Set the panel host address in the profile
+Otwórz przez DCC Web|Open through DCC Web
 Narzędzia tylko do odczytu|Read-only tools
 Narzędzia modyfikujące|Modifying tools
 Uprawnienia MCP|MCP permissions

@@ -102,7 +102,7 @@ def initialize_security(app, state):
             remote_admin_without_mfa = g.get("dcc_remote") and g.user["role"] == "admin" and not mfa
             if needs_verification or remote_admin_without_mfa:
                 g.user = None
-        if request.path.startswith("/api/") and request.path != "/api/health" and not g.user:
+        if (request.path.startswith("/api/") and request.path != "/api/health" or request.path.startswith('/panels/')) and not g.user:
             abort(401, "Login required")
 
     @app.after_request
@@ -116,9 +116,16 @@ def initialize_security(app, state):
         if request.path=='/terminal':
             # xterm creates CSS rules for terminal colours and cell geometry; scripts remain self-only.
             response.headers['Content-Security-Policy']=response.headers['Content-Security-Policy'].replace("style-src 'self';","style-src 'self' 'unsafe-inline';")
+        if request.endpoint == 'panel_view':
+            # Only this trusted wrapper may embed an opaque-origin srcdoc.
+            # Upstream documents are returned as JSON, never served as DCC HTML.
+            response.headers['Content-Security-Policy']=("default-src 'self'; script-src 'self' data: blob: 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline' data: blob:; img-src 'self' data: blob:; font-src data: blob:; media-src data: blob:; connect-src 'self'; frame-src 'self' about:; "
+                "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         if app.config.get("SESSION_COOKIE_SECURE") or trusted_public_https_request(app):
             response.headers["Strict-Transport-Security"] = "max-age=31536000"
-        if request.path.startswith("/api/") and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        if (request.path.startswith("/api/") and request.method not in {"GET", "HEAD", "OPTIONS"}
+                and not (request.endpoint=='panel_live' and (request.view_args or {}).get('action')=='read')):
             state.audit(g.user["id"] if g.get("user") else "anonymous", request.method + " " + request.path, str(request.view_args or {}), response.status_code)
         return response
 

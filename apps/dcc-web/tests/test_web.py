@@ -51,7 +51,7 @@ class WebTests(unittest.TestCase):
         response=self.client.post('/setup',data={'username':'review-admin','password':'ReviewPassword-44-long','csrf':self.csrf})
         self.assertEqual(response.status_code,302)
         with self.client.session_transaction() as session:self.csrf=session['csrf']
-        self.state.save_profile('local',{'name':'Review Docker','kind':'local','permissions':sorted(CAPABILITIES)})
+        self.state.save_profile('local',{'name':'Review Docker','kind':'local','panel_host':'127.0.0.1','permissions':sorted(CAPABILITIES)})
 
     def request(self,path,data=None,method='POST',**kwargs):
         return self.client.open('/api/'+path,method=method,json={'profile':'local',**(data or {})},headers={'X-CSRF-Token':self.csrf},**kwargs)
@@ -893,7 +893,7 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.request('settings',{'language':'XX'},method='PUT').status_code,400)
 
     def test_documentation_preserves_language_and_resolves_internal_links(self):
-        names=('installation','configuration','profiles-security','security','catalogs','mcp','ai','themes-audio','feature-matrix','testing')
+        names=('installation','configuration','profiles-security','security','panels','catalogs','mcp','ai','themes-audio','feature-matrix','testing')
         for language in ('PL','EN'):
             self.assertEqual(self.request('settings',{'language':language},method='PUT').status_code,200)
             pages={}
@@ -923,7 +923,7 @@ class WebTests(unittest.TestCase):
     def test_panel_links_use_remote_host_and_ipv6_without_javascript_urls(self):
         entries=[{'Ports':'0.0.0.0:9443->9443/tcp, [::]:8080->80/tcp, 127.0.0.1:5000->5000/tcp, 0.0.0.0:53->53/udp'}]
         result=enrich_containers(entries,{'kind':'ssh','host':'192.168.1.7'})[0]
-        self.assertEqual([p['url'] for p in result['PanelLinks']],['https://192.168.1.7:9443','http://192.168.1.7:8080'])
+        self.assertEqual([p['url'] for p in result['PanelLinks']],['https://192.168.1.7:9443','http://192.168.1.7:8080','http://127.0.0.1:5000'])
         value=enrich_containers([{'Ports':'[::]:8080->80/tcp'}],{'kind':'ssh','host':'2001:db8::10'})[0]
         self.assertEqual(value['PanelLinks'][0]['url'],'http://[2001:db8::10]:8080')
         self.assertEqual(len(published_ports('0.0.0.0:8000-8002->80-82/tcp')),3)
@@ -936,7 +936,7 @@ class WebTests(unittest.TestCase):
         self.assertEqual([v['url'] for v in entry['PanelLinks']],['http://127.0.0.1:8788','http://192.0.2.7:8788','http://127.0.0.1:8080'])
         self.assertEqual(len(entry['PublishedPorts']),5)
         remote=enrich_containers([{'Ports':ports}],{'kind':'ssh','host':'192.168.1.7'})[0]
-        self.assertEqual(len(remote['PanelLinks']),3)
+        self.assertEqual(len(remote['PanelLinks']),4)
 
     def test_infrastructure_is_profile_scoped_and_exposes_only_host_summary(self):
         response=self.client.get('/api/infrastructure')

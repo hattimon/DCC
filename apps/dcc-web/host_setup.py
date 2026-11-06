@@ -165,7 +165,17 @@ class Domains:
 
     def public_settings(self):
         saved=self.saved()
-        return {key:saved.get(key,'') for key in ('local','public')}
+        return {**{key:saved.get(key,'') for key in ('local','public')},
+                'panel_proxy_enabled':self.panel_proxy_enabled()}
+
+    def panel_proxy_enabled(self):
+        saved=self.saved()
+        if 'panel_proxy_enabled' in saved:
+            return saved['panel_proxy_enabled'] is True
+        remote=self.state.rows('SELECT data FROM settings WHERE user_id=?',('__dcc_remote_access__',))
+        remote_enabled=bool(remote and self.state.decode_profile(remote[0]['data']).get('origin'))
+        return bool(saved.get('local_https_enabled') or saved.get('public_https_enabled') or saved.get('public')
+                    or getattr(self,'public_origin',None) or remote_enabled)
 
     def proxy_token(self):
         saved=self.saved()
@@ -390,6 +400,7 @@ class Domains:
 
 def register_host_setup(app,state,reauthenticate,confirmed):
     domains = Domains(state)
+    domains.public_origin=app.config.get('PUBLIC_ORIGIN')
     base_allowed=set(app.config['ALLOWED_HOSTS'])
     app.extensions['dcc_domains']=domains
     app.config['ALLOWED_HOSTS'] = list(base_allowed | {v for k,v in domains.saved().items() if k in {'local','public'} and v})
@@ -431,6 +442,16 @@ def register_host_setup(app,state,reauthenticate,confirmed):
             # Rebuild the allowlist so removing a saved name revokes it immediately.
             app.config['ALLOWED_HOSTS'] = list(base_allowed | {v for v in value.values() if v})
         return jsonify(domains.public_settings())
+
+    @app.route('/api/admin/panels',methods=['GET','PUT'])
+    def panel_proxy_setting():
+        admin()
+        if request.method=='PUT':
+            data=request.get_json(silent=True) or {}
+            if set(data) - {'enabled','profile'} or 'enabled' not in data or type(data['enabled']) is not bool:
+                raise ValueError('Provide a boolean enabled value')
+            domains.save({'panel_proxy_enabled':data['enabled']})
+        return jsonify(enabled=domains.panel_proxy_enabled())
 
     @app.get('/api/admin/https/status')
     def local_https_status():

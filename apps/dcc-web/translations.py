@@ -1,5 +1,8 @@
 """Small server-rendered authentication/shell dictionary; operational views use i18n.js."""
 EN={
+'Panele kontenerów':'Container panels',
+'Łączenie z panelem…':'Connecting to the panel…',
+'Dostęp przez sesję DCC Web. Panel zachowuje własne logowanie. Aplikacje wymagające własnego originu mogą potrzebować osobnego reverse proxy.':'Access through your DCC Web session. The panel keeps its own sign-in. Apps that require their own origin may need a separate reverse proxy.',
 'Infrastruktura hosta Docker':'Docker host infrastructure','Odczytywanie infrastruktury…':'Reading infrastructure…',
 'logowanie':'sign in','Nazwa użytkownika':'Username','Hasło':'Password','Pierwsze uruchomienie':'First launch','Witaj ponownie':'Welcome back',
 'Utwórz administratora. Wybierz własne hasło — nie ma hasła domyślnego.':'Create an administrator with your own password. There is no default password.',

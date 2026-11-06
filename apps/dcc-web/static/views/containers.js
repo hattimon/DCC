@@ -9,7 +9,7 @@ const number=value=>Number.parseFloat(String(value??0).replace('%',''))||0;
 function memory(value){const match=String(value||'').match(/([\d.]+)\s*([KMG])i?B/i);return match?Number(match[1])*({K:1/1024,M:1,G:1024}[match[2].toUpperCase()]||0):0;}
 
 function panelLinks(c,all=false){
- return (c.PanelLinks||[]).filter(v=>all||v.likely_panel).map(v=>html`<span class="panel-endpoint"><a class="panel-link" href="${esc(v.url)}" target="_blank" rel="noopener noreferrer" title="${esc(v.url)}">${esc(v.label)} ↗</a><button type="button" class="quiet icon-button small copy-panel" data-copy-panel="${esc(v.url)}" title="${esc(t('Kopiuj adres panelu'))}: ${esc(v.url)}" aria-label="${esc(t('Kopiuj adres panelu'))} ${esc(v.label)}">${icon('copy')}</button></span>`).join('');
+ return (c.PanelAddressRequired?html`<a class="secondary" href="#profiles">Ustaw adres hosta paneli w profilu</a>`:'')+(c.PanelLinks||[]).filter(v=>all||v.likely_panel).map(v=>html`<span class="panel-endpoint"><a class="panel-link" href="${esc(v.open_url||v.url)}" target="_blank" rel="noopener noreferrer" title="${esc(v.via_dcc?t('Otwórz przez DCC Web')+' · '+v.url:v.url)}">${esc(v.label)} ↗</a><button type="button" class="quiet icon-button small copy-panel" data-copy-panel="${esc(v.url)}" title="${esc(t('Kopiuj adres panelu'))}: ${esc(v.url)}" aria-label="${esc(t('Kopiuj adres panelu'))} ${esc(v.label)}">${icon('copy')}</button></span>`).join('');
 }
 function wireCopies(root){root.querySelectorAll('[data-copy-panel],[data-copy-image]').forEach(b=>b.onclick=()=>copyText(b.dataset.copyPanel??b.dataset.copyImage));}
 

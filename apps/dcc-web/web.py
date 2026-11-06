@@ -275,6 +275,8 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     register_recovery(app,state,reauthenticate)
     from host_setup import register_host_setup
     register_host_setup(app,state,reauthenticate,confirmed)
+    from panel_proxy import register_panels, panel_links
+    register_panels(app,factory,profile,app.extensions['dcc_domains'],catalogs.host_panel_ports,state)
 
     @app.get('/api/account/2fa')
     def mfa_status():
@@ -325,12 +327,13 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
 
     @app.get("/docs/<name>")
     def documentation(name):
-        allowed = {"installation","configuration","profiles-security","security","catalogs","mcp","ai","themes-audio","feature-matrix","testing"}
+        allowed = {"installation","configuration","profiles-security","security","catalogs","mcp","ai","themes-audio","feature-matrix","testing","panels"}
         if name not in allowed:
             abort(404)
         labels = {"installation":"Instalacja i uruchamianie","configuration":"Profile i konfiguracja","profiles-security":"Profile, klucze i 2FA","security":"Bezpieczeństwo","catalogs":"Sklep i katalogi","mcp":"AI / MCP","ai":"Asystent AI","themes-audio":"Motywy i dźwięki","feature-matrix":"Macierz funkcji desktop / web","testing":"Testy i ograniczenia"}
         language = ui_language()
         docs = Path(__file__).parent/"docs"
+        labels['panels']='Panele kontenerów'
         localized = docs/(name+".pl.md") if language == "PL" else docs/(name+".md")
         source = (localized if localized.is_file() else docs/(name+".md")).read_text(encoding="utf-8")
         return render_template("documentation.html", doc_name=name, doc_label=labels[name], version=VERSION, rendered_content=Markup(render_markdown(source, allowed, language=language)))
@@ -631,13 +634,13 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         engine = backend()
         info, containers = engine.info(), engine.containers()
         info['HostAddress']=info['address']=profile_display_address(engine.profile,info,request.host)
-        return jsonify(info=redact(info), revision=container_revision(containers), containers=enrich_containers(containers,engine.profile,urlsplit(request.host_url).hostname or 'localhost',catalogs.host_panel_ports()))
+        return jsonify(info=redact(info), revision=container_revision(containers), containers=panel_links(containers,engine.profile,app.extensions['dcc_domains'],app,catalogs.host_panel_ports()))
 
     @app.get("/api/containers")
     def containers():
         engine=backend()
         raw=engine.containers()
-        values = enrich_containers(raw,engine.profile,urlsplit(request.host_url).hostname or 'localhost',catalogs.host_panel_ports())
+        values = panel_links(raw,engine.profile,app.extensions['dcc_domains'],app,catalogs.host_panel_ports())
         query = request.args.get("q","").casefold()
         status = request.args.get("status","")
         return jsonify(revision=container_revision(raw),containers=[v for v in values if query in json.dumps(v).casefold() and (not status or v.get("State")==status)])

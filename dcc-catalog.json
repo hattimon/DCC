@@ -276,7 +276,7 @@
         "Administration 🛠",
         "WWW 🌐"
       ],
-      "image": "ghcr.io/hattimon/dcc-web:0.3.0",
+      "image": "ghcr.io/hattimon/dcc-web:0.3.1",
       "category": "Administracja 🛠",
       "category_en": "Administration 🛠",
       "description": "Przeglądarkowy panel DCC do zarządzania kontenerami, profilami i hostami Docker.",
@@ -290,7 +290,8 @@
         "Opcjonalne lokalne HTTPS przez Caddy, prywatny adres IP, automatyczny wybór portu i pobranie certyfikatu CA.",
         "DCC Remote Access instalujesz i konfigurujesz w panelu DCC Web przez Sklep aplikacji → DCC lub przez ustawienia dostępu do panelu.",
         "Wspólny katalog aplikacji DCC, wyszukiwanie i podgląd instalacji.",
-        "Interfejs polski i angielski; ustawienie języka jest zapamiętywane."
+        "Interfejs polski i angielski; ustawienie języka jest zapamiętywane.",
+        "Panele kontenerów przez bezpieczne wejście publiczne, z izolacją sesji i cookies usług."
       ],
       "features_en": [
         "Manage containers, images, volumes, networks and Compose projects.",
@@ -299,7 +300,8 @@
         "Optional local HTTPS through Caddy, a private IP address, automatic port selection and downloadable CA certificate.",
         "Install and configure DCC Remote Access in the DCC Web panel through App Store → DCC or panel access settings.",
         "Shared DCC app catalog, search and installation previews.",
-        "Polish and English interface with a saved language preference."
+        "Polish and English interface with a saved language preference.",
+        "Container panels through session-protected public access, with isolated service sessions and cookies."
       ],
       "default_name": "dcc-web",
       "container_port": "8789",
@@ -316,9 +318,9 @@
         "amd64",
         "arm64"
       ],
-      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.0/apps/dcc-web",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.0/apps/dcc-web/docs",
-      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.0/apps/dcc-web",
+      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.1/apps/dcc-web",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.1/apps/dcc-web/docs",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.1/apps/dcc-web",
       "icon_text": "◇",
       "post_install_hints": [
         "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",
@@ -335,8 +337,8 @@
         "The dcc_web_data volume retains profiles and settings."
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "dcc-web-v0.3.0",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.0",
+      "latest_release": "dcc-web-v0.3.1",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1",
       "release_tag_pattern": "dcc-web-v[0-9]+\\.[0-9]+\\.[0-9]+",
       "image_tag_from_release": "strip-prefix:dcc-web-v"
     },
