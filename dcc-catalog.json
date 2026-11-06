@@ -358,11 +358,11 @@
         "arm64"
       ],
       "icon_text": "RA",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.0/apps/dcc-remote-access",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.1/apps/dcc-remote-access",
       "upstream_repo": "hattimon/DCC",
       "release_tag_pattern": "dcc-web-v[0-9]+\\.[0-9]+\\.[0-9]+",
-      "latest_release": "dcc-web-v0.3.0",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.0"
+      "latest_release": "dcc-web-v0.3.1",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1"
     },
     {
       "name": "Beszel Hub",
