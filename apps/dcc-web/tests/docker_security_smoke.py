@@ -210,6 +210,9 @@ def main():
             assert inspected['HostConfig']['PortBindings']['8789/tcp']
             assert next(m for m in mounts if m['Destination']=='/data')['Name']==volume
             mount_verified=True
+            # Docker may assign another host port to the test fixture's
+            # unpinned mapping when the mount helper recreates the container.
+            base='http://127.0.0.1:'+docker('port',name,'8789/tcp').rsplit(':',1)[1]
         inspected=json.loads(docker('inspect',name))[0]
         assert inspected['RestartCount']==0
         https_verified=verify_local_https(docker,name,api,credential)
