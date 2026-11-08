@@ -1962,8 +1962,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v4.5.8",
-      "latest_release_url": "https://github.com/nicolargo/glances/releases/tag/v4.5.8",
+      "latest_release": "v4.5.9",
+      "latest_release_url": "https://github.com/nicolargo/glances/releases/tag/v4.5.9",
       "icon_url": "catalog/media/icons/glances.png"
     },
     {
