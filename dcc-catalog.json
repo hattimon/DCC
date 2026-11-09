@@ -174,8 +174,8 @@
       "homepage_url": "https://dozzle.dev/",
       "icon_text": "🛠",
       "upstream_repo": "amir20/dozzle",
-      "latest_release": "v11.4.1",
-      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.4.1",
+      "latest_release": "v11.4.2",
+      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.4.2",
       "icon_url": "catalog/media/icons/dozzle.png"
     },
     {
@@ -816,8 +816,8 @@
       "homepage_url": "https://openwebui.com/",
       "icon_text": "💬",
       "upstream_repo": "open-webui/open-webui",
-      "latest_release": "v0.13.0",
-      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.13.0",
+      "latest_release": "v0.13.3",
+      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.13.3",
       "icon_url": "catalog/media/icons/open-webui.png"
     },
     {
@@ -2008,8 +2008,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.155.0",
-      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.155.0",
+      "latest_release": "v1.156.0",
+      "latest_release_url": "https://github.com/VictoriaMetrics/VictoriaMetrics/releases/tag/v1.156.0",
       "icon_url": "catalog/media/icons/victoriametrics.png"
     },
     {
