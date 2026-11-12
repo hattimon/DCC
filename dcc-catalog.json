@@ -260,8 +260,8 @@
         }
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "updater-v1.1.7",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/updater-v1.1.7",
+      "latest_release": "updater-v1.1.8",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/updater-v1.1.8",
       "release_tag_pattern": "updater-v[0-9]+\\.[0-9]+\\.[0-9]+"
     },
     {
@@ -276,7 +276,7 @@
         "Administration 🛠",
         "WWW 🌐"
       ],
-      "image": "ghcr.io/hattimon/dcc-web:0.3.2",
+      "image": "ghcr.io/hattimon/dcc-web:0.3.3",
       "category": "Administracja 🛠",
       "category_en": "Administration 🛠",
       "description": "Przeglądarkowy panel DCC do zarządzania kontenerami, profilami i hostami Docker.",
@@ -318,9 +318,9 @@
         "amd64",
         "arm64"
       ],
-      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.2/apps/dcc-web",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.2/apps/dcc-web/docs",
-      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.2/apps/dcc-web",
+      "source_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.3/apps/dcc-web",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.3/apps/dcc-web/docs",
+      "homepage_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.3/apps/dcc-web",
       "icon_text": "◇",
       "post_install_hints": [
         "Otwórz http://<adres-aktywnego-hosta>:<port>/login; jeśli port 8789 jest zajęty, użyj portu wybranego przez DCC.",
@@ -337,8 +337,8 @@
         "The dcc_web_data volume retains profiles and settings."
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "dcc-web-v0.3.2",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.2",
+      "latest_release": "dcc-web-v0.3.3",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.3",
       "release_tag_pattern": "dcc-web-v[0-9]+\\.[0-9]+\\.[0-9]+",
       "image_tag_from_release": "strip-prefix:dcc-web-v"
     },
@@ -358,11 +358,11 @@
         "arm64"
       ],
       "icon_text": "RA",
-      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.2/apps/dcc-remote-access",
+      "docs_url": "https://github.com/hattimon/DCC/tree/dcc-web-v0.3.3/apps/dcc-remote-access",
       "upstream_repo": "hattimon/DCC",
       "release_tag_pattern": "dcc-web-v[0-9]+\\.[0-9]+\\.[0-9]+",
-      "latest_release": "dcc-web-v0.3.2",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.2"
+      "latest_release": "dcc-web-v0.3.3",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.3"
     },
     {
       "name": "Beszel Hub",
@@ -1155,8 +1155,8 @@
       "homepage_url": "https://uptime.kuma.pet/",
       "icon_text": "📊",
       "upstream_repo": "louislam/uptime-kuma",
-      "latest_release": "2.5.9",
-      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.9",
+      "latest_release": "2.5.10",
+      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.10",
       "icon_url": "catalog/media/icons/uptime-kuma.png"
     },
     {
