@@ -1,11 +1,14 @@
 """Manage one opt-in zrok tunnel for the local DCC Web installation."""
 from contextlib import closing
 import hashlib
+import http.client
+import io
 import ipaddress
 import json
 import re
 import secrets
 import subprocess
+import tarfile
 import threading
 import time
 from pathlib import Path
@@ -33,6 +36,8 @@ PANEL_NETWORK_POOL = ipaddress.ip_network("198.18.0.0/15")
 PANEL_NETWORK_PREFIX = 28
 NAME = re.compile(r"[a-z0-9](?:[a-z0-9-]{1,61})[a-z0-9]")
 TOKEN = re.compile(r"[A-Za-z0-9]{8,128}")
+ENVIRONMENT_ID = re.compile(r"[A-Za-z0-9_-]{3,128}")
+PANEL_TARGET = f"http://dcc-remote-panel:{PORT}"
 HOSTED_ZONES = ("share.zrok.io", "shares.zrok.io")
 ENVIRONMENT = {"HOME": "/tmp", "ZROK2_API_ENDPOINT": "https://api-v2.zrok.io",
                "GODEBUG": "http2client=0,http2server=0"}
@@ -46,6 +51,40 @@ class RemoteError(ValueError):
     """A message safe to display without showing zrok's raw output."""
 
 
+class ShareConflict(RemoteError):
+    """The saved name is attached to a share that could not be reclaimed."""
+
+
+def enrollment_credentials(identity_archive):
+    """Read only the fields needed to unshare a verified provider token."""
+    try:
+        with tarfile.open(fileobj=io.BytesIO(identity_archive), mode="r:") as archive:
+            member = archive.getmember(".zrok2/environment.json")
+            if not member.isfile() or member.size > 8192:
+                return None
+            data = json.load(archive.extractfile(member))
+            if not isinstance(data, dict):
+                return None
+            identity, token = data.get("ziti_identity"), data.get("zrok_token")
+            if (isinstance(identity, str) and ENVIRONMENT_ID.fullmatch(identity)
+                    and isinstance(token, str) and TOKEN.fullmatch(token)):
+                return identity, token
+    except (KeyError, OSError, tarfile.TarError, ValueError):
+        return None
+    return None
+
+
+def unshare(identity, account_token, share_token):
+    # The CLI accepts names as well as tokens. Use the exact-token API so a
+    # share disappearing between lookup and deletion cannot match another name.
+    host = urlsplit(ENVIRONMENT["ZROK2_API_ENDPOINT"]).hostname
+    with closing(http.client.HTTPSConnection(host, timeout=10)) as connection:
+        body = json.dumps({"envZId": identity, "shareToken": share_token})
+        connection.request("DELETE", "/api/v2/unshare", body,
+                           {"Content-Type": "application/json", "x-token": account_token})
+        return connection.getresponse().status
+
+
 def name_origin(name, reservation):
     zone = reservation.get("namespaceName")
     if (not isinstance(name, str) or not NAME.fullmatch(name)
@@ -54,25 +93,32 @@ def name_origin(name, reservation):
     return f"https://{name}.{zone}"
 
 
-def public_probe(origin, nonce):
+def public_health(origin, nonce=None):
     # The hostname is taken from a validated hosted reservation. Use a pinned
     # public DNS answer, verify TLS and reject redirects to other destinations.
-    import http.client
     import socket
     import ssl
     host = urlsplit(origin).hostname
     addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
     if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
-        return False
+        return 0, ""
     with socket.create_connection((addresses[0][4][0], 443), timeout=4) as raw:
         connection = http.client.HTTPSConnection(host, timeout=4)
         try:
             connection.sock = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
-            connection.request("GET", "/api/health", headers={"Skip-Zrok-Interstitial": "1", "skip_zrok_interstitial": "1", "X-DCC-Remote-Probe": nonce})
+            headers = {"Skip-Zrok-Interstitial": "1", "skip_zrok_interstitial": "1"}
+            if nonce is not None:
+                headers["X-DCC-Remote-Probe"] = nonce
+            connection.request("GET", "/api/health", headers=headers)
             response = connection.getresponse()
-            return response.status == 200 and secrets.compare_digest(response.headers.get("X-DCC-Remote-Probe", ""), nonce)
+            return response.status, response.headers.get("X-DCC-Remote-Probe", "")
         finally:
             connection.close()
+
+
+def public_probe(origin, nonce):
+    status, echoed = public_health(origin, nonce)
+    return status == 200 and secrets.compare_digest(echoed, nonce)
 
 
 class RemoteAccess:
@@ -409,6 +455,8 @@ class RemoteAccess:
         if config.get("identity"):
             identity = self.state.vault.decrypt(config["identity"].encode())
             self.command(container, ["tar", "-xf", "-", "-C", "/tmp"], data=identity)
+            return identity
+        return None
 
     def reservation(self, container, name):
         raw = self.command(container, ["zrok2", "list", "names", "--json", "-n", "public"],
@@ -459,6 +507,58 @@ class RemoteAccess:
         finally:
             self.stop(container)
 
+    def saved_reservation(self, container, config):
+        reservation = self.reservation(container, config["name"])
+        if not reservation or reservation.get("reserved") is not True or name_origin(config["name"], reservation) != config["origin"]:
+            raise RemoteError("The saved public reservation is unavailable.")
+        return reservation
+
+    def reclaim_stale_share(self, container, config, token, identity_archive, owner, epoch):
+        # The verified managed container has just been stopped and started
+        # with an empty tmpfs. It waits for /tmp/launch, so no local share is live.
+        credentials = enrollment_credentials(identity_archive) if isinstance(identity_archive, bytes) else None
+        conflict = "The reserved name still has a share that DCC could not safely reclaim."
+        if not credentials or not isinstance(token, str) or not TOKEN.fullmatch(token):
+            raise ShareConflict(conflict)
+        identity, account_token = credentials
+        raw = self.command(container, ["zrok2", "list", "shares", "--json", "--env-zid", identity,
+                                       "--share-token", token],
+                           message="The hosted zrok service could not check the existing share.")
+        try:
+            shares = json.loads(raw)["shares"]
+        except (ValueError, KeyError, TypeError):
+            raise ShareConflict(conflict) from None
+        if not isinstance(shares, list):
+            raise ShareConflict(conflict)
+        matches = [share for share in shares if isinstance(share, dict) and share.get("shareToken") == token]
+        if len(matches) != 1:
+            raise ShareConflict(conflict)
+        share = matches[0]
+        if (share.get("envZId"), share.get("shareMode"), share.get("backendMode"), share.get("target")) != (
+                identity, "public", "proxy", PANEL_TARGET):
+            raise ShareConflict(conflict)
+        try:
+            status, _ = public_health(config["origin"])
+        except Exception:
+            raise ShareConflict(conflict) from None
+        if status != 502:
+            raise ShareConflict(conflict)
+        # Do not touch a share that changed while checking its metadata.
+        current = self.saved_reservation(container, config).get("shareToken")
+        if not current:
+            return
+        if current != token:
+            raise ShareConflict(conflict)
+        self.policy(owner)
+        if epoch != self.epoch:
+            raise RemoteError("Public access was disabled during startup.")
+        try:
+            removed = unshare(identity, account_token, token)
+        except (OSError, http.client.HTTPException):
+            removed = None
+        if removed not in {200, 404}:
+            raise ShareConflict("The hosted zrok service could not remove the stale share.")
+
     def enable(self, container, owner, epoch, *, resume_after_update=False):
         self.policy(owner)
         if epoch != self.epoch:
@@ -467,16 +567,22 @@ class RemoteAccess:
         if not config.get("origin") or not config.get("identity"):
             raise RemoteError("Configure a zrok environment and reserve a name first.")
         try:
-            self.restore(container, config)
+            identity_archive = self.restore(container, config)
             attempts = 4 if resume_after_update else 1
             for attempt in range(attempts):
-                reservation = self.reservation(container, config["name"])
-                if not reservation or not reservation.get("reserved") or name_origin(config["name"], reservation) != config["origin"]:
-                    raise RemoteError("The saved public reservation is unavailable.")
-                if not reservation.get("shareToken"):
+                token = self.saved_reservation(container, config).get("shareToken")
+                if not token:
                     break
                 if attempt == attempts - 1:
-                    raise RemoteError("The reserved name still has a share. Release it in the zrok console before enabling again.")
+                    self.reclaim_stale_share(container, config, token, identity_archive, owner, epoch)
+                    for release_check in range(4):
+                        if not self.saved_reservation(container, config).get("shareToken"):
+                            break
+                        if release_check < 3 and epoch == self.epoch:
+                            time.sleep(2)
+                        else:
+                            raise ShareConflict("The hosted zrok service has not released the stale share yet.")
+                    break
                 if epoch != self.epoch:
                     raise RemoteError("Public access was disabled during startup.")
                 time.sleep(3)
@@ -537,7 +643,7 @@ class RemoteAccess:
             if not self.available or self.network_error or self.route or time.monotonic() < self.recovery_next:
                 return False
             # An updater must finish its image-bound, one-use handoff first.
-            if self.state.rows("SELECT data FROM settings WHERE user_id=?", (UPDATE_TICKET,)):
+            if self.pending_update():
                 return False
             with self.intent:
                 recovery = self.recovery
@@ -571,14 +677,15 @@ class RemoteAccess:
                     container.reload()
                     self.validate_container(container)
                     self.enable(container, owner, epoch, resume_after_update=recovery.get("resume_after_update") is True)
-            except Exception:
+            except Exception as error:
                 with self.intent:
                     if epoch != self.epoch:
                         return False
                     self.recovery_failures += 1
                     self.recovery_next = time.monotonic() + min(300, 5 * 2 ** min(self.recovery_failures, 6))
                     self.tunnel = "reconnecting"
-                    self.error = "Automatic tunnel recovery is retrying. Check Internet access, the reservation and the DCC Web image."
+                    self.error = (str(error) if isinstance(error, ShareConflict) else
+                                  "Automatic tunnel recovery is retrying. Check Internet access, the reservation and the DCC Web image.")
                 if self.recovery_failures == 1:
                     self.event(owner, "recovery-retrying", 503)
                 return False
@@ -596,14 +703,41 @@ class RemoteAccess:
                 time.sleep(5)
         threading.Thread(target=recover, name="dcc-remote-recovery", daemon=True).start()
 
-    def update_pause_allowed(self):
+    def pending_update(self):
+        rows = self.state.rows("SELECT data FROM settings WHERE user_id=?", (UPDATE_TICKET,))
+        if not rows:
+            return False
+        saved = rows[0]["data"]
+        ticket = self.state.decode_profile(saved)
+        expires = ticket.get("expires") if isinstance(ticket, dict) else None
+        if type(expires) in {int, float} and expires <= time.time():
+            return not self.state.execute("DELETE FROM settings WHERE user_id=? AND data=?", (UPDATE_TICKET, saved))
+        return True
+
+    def update_owner(self, panel_image=None):
         route = self.route
-        return bool(self.available and route and route["verified"] and route.get("resume_after_update")
-                    and not self.network_error and not self.blocked() and self.owner_can_enable(route["owner"]))
+        if not self.available or self.network_error or self.blocked():
+            return None
+        if self.pending_update():
+            return None
+        if route and route["verified"] and route.get("resume_after_update") and self.owner_can_enable(route["owner"]):
+            return route["owner"]
+        recovery = self.recovery or self.saved().get("recovery")
+        if (isinstance(recovery, dict) and recovery.get("resume_after_update") is True
+                and (panel_image is None or panel_image == recovery.get("panel_image"))
+                and self.owner_can_enable(recovery.get("owner"))):
+            return recovery["owner"]
+        return None
+
+    def update_pause_allowed(self):
+        return self.update_owner() is not None
 
     def maintenance(self, args):
         if args == ["status"]:
             return self.update_pause_allowed()
+        if len(args) == 2 and args[0] == "adopt-recovery" and re.fullmatch(r"[0-9a-f]{64}", args[1]):
+            with self.lock, closing(self.client_factory()) as client:
+                return self.adopt_update_recovery(client, local_container(client), args[1])
         if len(args) not in {2, 3} or not re.fullmatch(r"[0-9a-f]{64}", args[1]):
             return False
         action, nonce = args[:2]
@@ -615,6 +749,45 @@ class RemoteAccess:
             if action == "resume" and len(args) == 2:
                 return self.resume_after_update(client, panel, proof)
         return False
+
+    def adopt_update_recovery(self, client, panel, previous_id):
+        """Transfer an already saved opt-in when an older stopped tunnel cannot issue a ticket."""
+        recovery = self.saved().get("recovery")
+        if (self.route or self.network_error or not isinstance(recovery, dict)
+                or recovery.get("resume_after_restart") is not True
+                or recovery.get("resume_after_update") is not True
+                or self.pending_update()):
+            return False
+        previous = client.containers.get(previous_id)
+        old, new = previous.attrs, panel.attrs
+        backup_name = r"/?dcc-backup-" + previous_id[:10] + r"(?:-[0-9]+)?"
+        if (previous.id != previous_id or previous.id == panel.id
+                or not re.fullmatch(backup_name, str(old.get("Name", "")))
+                or old.get("State", {}).get("Status") != "exited"
+                or recovery.get("panel_image") != old.get("Image")
+                or old.get("Image") == new.get("Image")
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(new.get("Image", "")))):
+            return False
+        for attrs in (old, new):
+            config = attrs.get("Config") or {}
+            if (not str(config.get("Image", "")).startswith(("ghcr.io/hattimon/dcc-web:", "ghcr.io/hattimon/dcc-web@"))
+                    or (config.get("Labels") or {}).get(UPDATE_CONTROL_LABEL) != "1"):
+                return False
+        data_mounts = [next(((item.get("Type"), item.get("Source")) for item in attrs.get("Mounts", [])
+                             if item.get("Destination") == "/data" and item.get("RW") is True), None)
+                       for attrs in (old, new)]
+        if not data_mounts[0] or not data_mounts[0][1] or data_mounts[0] != data_mounts[1]:
+            return False
+        owner = recovery.get("owner")
+        self.policy(owner)
+        # Disable can revoke consent before the next retry; do not recreate
+        # the record if it changed while the old container was inspected.
+        with self.intent:
+            if self.saved().get("recovery") != recovery:
+                return False
+            epoch = self.epoch
+        self.remember_recovery(owner, epoch, new["Image"], resume_after_restart=True, resume_after_update=True)
+        return True
 
     def pause_for_update(self, client, panel, proof, target_image):
         image = client.images.get(target_image)
@@ -629,13 +802,15 @@ class RemoteAccess:
         sidecar.reload()
         self.validate_container(sidecar)
         with self.intent:
-            if not self.update_pause_allowed() or not sidecar.attrs["State"]["Running"]:
+            owner = self.update_owner(panel.attrs.get("Image"))
+            state = sidecar.attrs["State"]
+            if not owner or (not state["Running"] and state.get("Status") not in {"created", "exited"}):
                 return False
-            owner = self.route["owner"]
             ticket = dict(proof=proof, owner=owner, panel=panel.id, target=target_image,
                           expires=time.time() + UPDATE_TICKET_SECONDS)
-            if self.recovery:
-                ticket["recovery"] = dict(self.recovery)
+            recovery = self.recovery or self.saved().get("recovery")
+            if isinstance(recovery, dict) and recovery.get("owner") == owner:
+                ticket["recovery"] = dict(recovery)
             self.state.execute("INSERT OR REPLACE INTO settings VALUES(?,?)",
                                (UPDATE_TICKET, self.state.encode_profile(ticket)))
             self.epoch += 1
@@ -674,10 +849,11 @@ class RemoteAccess:
                 try:
                     self.enable(sidecar, owner, epoch, resume_after_update=True)
                     self.state.audit(owner, "remote-access.update-resume", self.name, 200)
-                except Exception:
+                except Exception as error:
                     if self.epoch == epoch:
                         self.tunnel = "reconnecting"
-                        self.error = "Could not resume the tunnel after updating. Automatic recovery is retrying."
+                        self.error = (str(error) if isinstance(error, ShareConflict) else
+                                      "Could not resume the tunnel after updating. Automatic recovery is retrying.")
                     self.state.audit(owner, "remote-access.update-resume", self.name, 503)
 
         threading.Thread(target=restore, name="dcc-remote-update-resume", daemon=True).start()
@@ -861,10 +1037,14 @@ class RemoteAccess:
                     if epoch != self.epoch:
                         raise RemoteError("Public access was disabled during startup.")
                     self.forget_recovery()
-                self.enable(container, owner, epoch, resume_after_update=data.get("resume_after_update") is True)
-                self.remember_recovery(owner, epoch, panel_image,
-                                       resume_after_restart=data.get("resume_after_restart") is True,
-                                       resume_after_update=data.get("resume_after_update") is True)
+                resume_after_update = data.get("resume_after_update") is True
+                resume_after_restart = data.get("resume_after_restart") is True
+                if resume_after_restart or resume_after_update:
+                    self.remember_recovery(owner, epoch, panel_image, resume_after_restart=resume_after_restart,
+                                           resume_after_update=resume_after_update)
+                self.enable(container, owner, epoch, resume_after_update=resume_after_update)
+                if not resume_after_restart and not resume_after_update:
+                    self.remember_recovery(owner, epoch, panel_image)
             self.state.audit(owner, "remote-access." + action, self.name, 200)
             return {"accepted": True}
 

@@ -1,8 +1,10 @@
 """Remote ingress and controller regressions without hosted zrok credentials."""
 import hashlib
+import io
 import ipaddress
 import json
 import secrets
+import tarfile
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -11,7 +13,17 @@ import unittest
 from test_web import WebTests as WebFixture
 from remote_access import (DIGEST, ENVIRONMENT, IMAGE, LABEL, PANEL_NETWORK_POOL,
                            PANEL_NETWORK_PREFIX, RemoteAccess, RemoteError, SETTINGS, UPDATE_CONTROL_LABEL,
-                           UPDATE_TICKET, WAIT, name_origin)
+                           PANEL_TARGET, ShareConflict, UPDATE_TICKET, WAIT, name_origin, unshare)
+
+
+def enrollment_archive():
+    buffer = io.BytesIO()
+    data = b'{"ziti_identity":"fixture-env","zrok_token":"FixtureAccount123"}'
+    member = tarfile.TarInfo(".zrok2/environment.json")
+    member.size = len(data)
+    with tarfile.open(fileobj=buffer, mode="w:") as archive:
+        archive.addfile(member, io.BytesIO(data))
+    return buffer.getvalue()
 
 
 class RemoteAccessTests(unittest.TestCase):
@@ -242,7 +254,7 @@ class RemoteAccessTests(unittest.TestCase):
             self.assertFalse(self.remote.recover_once())
         enable.assert_not_called()
 
-    def test_manual_enable_records_restart_consent_only_after_successful_launch(self):
+    def test_manual_enable_preserves_explicit_restart_consent_on_provider_failure(self):
         panel, sidecar, client = self.recovery_fixture()
 
         def enabled(*args, **kwargs):
@@ -255,9 +267,50 @@ class RemoteAccessTests(unittest.TestCase):
                 self.remote.perform("enable", {"resume_after_restart": False}, self.user, self.remote.epoch)
             self.assertIsNone(self.remote.recovery)
             self.assertNotIn("recovery", self.remote.saved())
+            with self.assertRaises(RemoteError):
+                self.remote.perform("enable", {"resume_after_restart": True, "resume_after_update": True},
+                                    self.user, self.remote.epoch)
+            self.assertTrue(self.remote.saved()["recovery"]["resume_after_restart"])
+            self.assertTrue(self.remote.saved()["recovery"]["resume_after_update"])
             enable.side_effect = enabled
             self.remote.perform("enable", {"resume_after_restart": True}, self.user, self.remote.epoch)
         self.assertTrue(self.remote.saved()["recovery"]["resume_after_restart"])
+
+    def test_stopped_tunnel_can_issue_an_update_ticket_with_existing_consent(self):
+        original, sidecar, client = self.recovery_fixture()
+        target = "sha256:" + "a" * 64
+        client.images.get.return_value.attrs = {
+            "RepoTags": ["ghcr.io/hattimon/dcc-web:0.3.3"],
+            "Config": {"Labels": {UPDATE_CONTROL_LABEL: "1"}},
+        }
+        with patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "validate_container"):
+            self.assertTrue(self.remote.pause_for_update(client, original, "proof", target))
+        sidecar.stop.assert_not_called()
+        ticket = self.state.decode_profile(self.state.rows("SELECT data FROM settings WHERE user_id=?", (UPDATE_TICKET,))[0]["data"])
+        self.assertEqual(ticket["target"], target)
+        self.assertTrue(ticket["recovery"]["resume_after_restart"])
+
+    def test_legacy_update_adopts_only_persisted_consent_from_matching_backup(self):
+        original, _, client = self.recovery_fixture()
+        original.id = "b" * 64
+        original.attrs.update(
+            Name="/dcc-backup-" + original.id[:10], State={"Status": "exited"},
+            Config={"Image": "ghcr.io/hattimon/dcc-web:0.3.2", "Labels": {UPDATE_CONTROL_LABEL: "1"}},
+            Mounts=[{"Destination": "/data", "Type": "volume", "Source": "/volumes/web", "RW": True}])
+        replacement = SimpleNamespace(id="c" * 64, attrs=dict(
+            original.attrs, Image="sha256:" + "c" * 64,
+            Config={"Image": "ghcr.io/hattimon/dcc-web:0.3.3", "Labels": {UPDATE_CONTROL_LABEL: "1"}}))
+        client.containers.get.return_value = original
+        matching_mounts = replacement.attrs.pop("Mounts")
+        self.assertFalse(self.remote.adopt_update_recovery(client, replacement, original.id))
+        replacement.attrs["Mounts"] = matching_mounts
+        self.assertTrue(self.remote.adopt_update_recovery(client, replacement, original.id))
+        self.assertEqual(self.remote.saved()["recovery"]["panel_image"], replacement.attrs["Image"])
+        self.assertIsNone(self.remote.route)
+        with self.remote.intent:
+            self.remote.forget_recovery()
+        self.assertFalse(self.remote.adopt_update_recovery(client, replacement, original.id))
 
     def test_reconfiguration_cancels_recovery_and_leaves_access_disabled(self):
         panel, sidecar, client = self.recovery_fixture()
@@ -695,6 +748,57 @@ class RemoteAccessTests(unittest.TestCase):
         self.state.execute("DELETE FROM mfa WHERE user_id=?", (self.user,))
         self.assertEqual(self.tunnel("/login").status_code, 503)
         self.assertEqual(self.client.get("/api/health").status_code, 200)
+
+    def test_stale_share_recovery_releases_exact_token_and_reopens_existing_name(self):
+        panel, sidecar, client = self.recovery_fixture()
+        sidecar.attrs["NetworkSettings"] = {"Networks": {self.remote.ingress: {"IPAddress": self.peer}}}
+        reserved = {"reserved": True, "namespaceName": "shares.zrok.io", "namespaceToken": "public"}
+        token = "StaleShare123"
+        occupied = dict(reserved, shareToken=token)
+        listed = {"shares": [dict(shareToken=token, envZId="fixture-env", shareMode="public",
+                                   backendMode="proxy", target=PANEL_TARGET)]}
+        with patch("remote_access.local_container", return_value=panel), \
+                patch.object(self.remote, "container", return_value=sidecar), \
+                patch.object(self.remote, "validate_container"), \
+                patch.object(self.remote, "restore", return_value=enrollment_archive()), \
+                patch.object(self.remote, "reservation", side_effect=[occupied] * 5 + [reserved]), \
+                patch.object(self.remote, "command", side_effect=[json.dumps(listed).encode(), b""]) as command, \
+                patch("remote_access.time.sleep"), patch("remote_access.threading.Thread"), \
+                patch("remote_access.public_health", return_value=(502, "")), \
+                patch("remote_access.unshare", return_value=200) as remove:
+            self.assertTrue(self.remote.recover_once())
+        remove.assert_called_once_with("fixture-env", "FixtureAccount123", token)
+        self.assertIn(b"fixture-dcc " + self.host.encode(), command.call_args.kwargs["data"])
+        self.assertEqual(self.remote.route["origin"], self.origin)
+        self.assertFalse(self.remote.route["verified"])
+
+    def test_reclaim_does_not_remove_foreign_reachable_or_changed_share(self):
+        self.enable_fixture_mfa()
+        token = "StaleShare123"
+        config = {"name": "fixture-dcc", "origin": self.origin}
+        listed = dict(shareToken=token, envZId="fixture-env", shareMode="public", backendMode="proxy", target=PANEL_TARGET)
+        for share, status, current in ((dict(listed, envZId="foreign-env"), 502, token),
+                                       (dict(listed, target="http://other:8080"), 502, token),
+                                       (listed, 200, token), (listed, 502, "NewShare123")):
+            with self.subTest(share=share, status=status, current=current), \
+                    patch.object(self.remote, "command", return_value=json.dumps({"shares": [share]}).encode()), \
+                    patch.object(self.remote, "saved_reservation", return_value={"shareToken": current}), \
+                    patch("remote_access.public_health", return_value=(status, "")), \
+                    patch("remote_access.unshare") as remove:
+                with self.assertRaises(ShareConflict):
+                    self.remote.reclaim_stale_share(Mock(), config, token, enrollment_archive(), self.user, self.remote.epoch)
+                remove.assert_not_called()
+
+    def test_unshare_uses_exact_provider_request(self):
+        with patch("remote_access.http.client.HTTPSConnection") as https:
+            connection = https.return_value
+            connection.getresponse.return_value.status = 200
+            self.assertEqual(unshare("fixture-env", "FixtureAccount123", "StaleShare123"), 200)
+            https.assert_called_once_with("api-v2.zrok.io", timeout=10)
+            method, path, payload, headers = connection.request.call_args.args
+            self.assertEqual((method, path), ("DELETE", "/api/v2/unshare"))
+            self.assertEqual(json.loads(payload), {"envZId": "fixture-env", "shareToken": "StaleShare123"})
+            self.assertEqual(headers["x-token"], "FixtureAccount123")
 
     def test_probe_rechecks_reconnection_and_blocklist_fails_closed(self):
         self.enable_fixture_mfa()

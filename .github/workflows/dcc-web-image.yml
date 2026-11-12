@@ -56,6 +56,8 @@ jobs:
           web_pid=$!
           trap 'status=$?; kill "$web_pid" "$updater_pid" 2>/dev/null || true; if ((status)); then tail -n 80 "$RUNNER_TEMP"/dcc-*-fixture.log; fi' EXIT
           NODE_PATH="$RUNNER_TEMP/dcc-browser/node_modules" node apps/dcc-web/tests/run_panel_browser_smoke.cjs
+      - name: Verify Container Updater compatibility
+        run: python -m unittest discover -s apps/container-updater/tests -v
       - name: Validate the multi-architecture image and socket permissions
         run: |
           docker build -f apps/dcc-web/Dockerfile -t dcc-web:release-candidate .
@@ -69,14 +71,15 @@ jobs:
           python apps/container-updater/tests/docker_web_https_smoke.py \
             --target-image dcc-web:release-candidate --expected-version "$(cat apps/dcc-web/VERSION)" \
             --local-target --with-tunnel-resume
-      - name: Upgrade published Web 0.3.1 with Updater, preserve a running project and open its panel
+      - name: Upgrade published Web 0.3.2, recover its stopped tunnel and preserve a running project
         run: |
           version="$(tr -d '\r\n' < apps/dcc-web/VERSION)"
           target="ghcr.io/hattimon/dcc-web:$version"
           docker tag dcc-web:release-candidate "$target"
           python apps/container-updater/tests/docker_web_https_smoke.py \
-            --old-image ghcr.io/hattimon/dcc-web:0.3.1 --target-image "$target" \
-            --expected-version "$version" --local-target --expect-remote-access --verify-release-candidate
+            --old-image ghcr.io/hattimon/dcc-web:0.3.2 --target-image "$target" \
+            --expected-version "$version" --local-target --expect-remote-access --verify-release-candidate \
+            --with-legacy-stopped-tunnel
 
   publish:
     if: startsWith(github.ref, 'refs/tags/dcc-web-v')
