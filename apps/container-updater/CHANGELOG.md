@@ -1,3 +1,11 @@
+# DCC Container Updater 1.1.8
+
+During compatible DCC Web updates, the updater transfers saved tunnel recovery consent even when zrok is already stopped. After the replacement becomes healthy it can recover consent from a verified older Web container before removing the backup.
+
+Podczas zgodnej aktualizacji DCC Web Updater przenosi zapisaną zgodę na wznowienie także wtedy, gdy tunel zrok jest już zatrzymany. Po sprawdzeniu nowego kontenera może przenieść zgodę ze zweryfikowanej starszej instalacji Web przed usunięciem kopii.
+
+Linux amd64 / arm64 · `ghcr.io/hattimon/dcc-container-updater:1.1.8` · `latest`
+
 # DCC Container Updater 1.1.7
 
 When the old container uses its image's default command or entrypoint, the replacement now uses the target image's defaults. Explicit runtime overrides remain intact. This fixes updates where an image removed or renamed its default startup script, including Cinema Hub 1.3.5 to 1.3.15. The updater also waits through Docker's `restarting` state and includes bounded, sanitized startup logs if rollback is still needed. Existing data mounts remain attached to the replacement and are never deleted during rollback.

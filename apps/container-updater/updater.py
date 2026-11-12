@@ -1984,7 +1984,7 @@ class UpdateService:
             attachments, remote = self._dcc_web_attachments(container, all_containers)
         reason = self._unsupported_reason(container, all_containers)
         pause_tunnel = bool(
-            remote and reason == DCC_REMOTE_STOP_REQUIRED
+            remote and reason in {None, DCC_REMOTE_STOP_REQUIRED}
             and normalized_repository(target_image) == normalized_repository(DCC_WEB_IMAGE)
             and self._remote_update_control(container, "status")
         )
@@ -2070,6 +2070,8 @@ class UpdateService:
             if nonce:
                 tunnel_result = (DCC_REMOTE_RESUMING if self._remote_update_control(replacement, "resume", nonce)
                                  else DCC_REMOTE_RESUME_FAILED)
+            elif remote and was_running and self._remote_update_control(replacement, "adopt-recovery", container.id):
+                tunnel_result = DCC_REMOTE_RESUMING
             try:
                 container.remove(v=False)
                 return f"Zaktualizowano do {target_image}; wolumeny i konfiguracja zostały zachowane.{tunnel_result}"

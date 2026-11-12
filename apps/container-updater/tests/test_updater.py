@@ -1053,7 +1053,7 @@ class ContainerConfigurationTests(unittest.TestCase):
 
 
 class DccWebHttpsUpdateTests(unittest.TestCase):
-    def _run_update(self, fail_replacement_start=False, active_tunnel=False):
+    def _run_update(self, fail_replacement_start=False, active_tunnel=False, stopped_tunnel=False):
         web, proxy, network_name = ContainerSafetyTests()._dcc_web_https_pair()
         events = []
 
@@ -1114,14 +1114,16 @@ class DccWebHttpsUpdateTests(unittest.TestCase):
         service = UpdateService(client, wait_seconds=1)
         with ExitStack() as stack:
             stack.enter_context(patch.object(service, "_wait_until_healthy", side_effect=lambda item: events.append(("healthy", item.id))))
-            if active_tunnel:
-                stack.enter_context(patch.object(service, "_unsupported_reason", return_value=DCC_REMOTE_STOP_REQUIRED))
+            if active_tunnel or stopped_tunnel:
+                reason = DCC_REMOTE_STOP_REQUIRED if active_tunnel else None
+                stack.enter_context(patch.object(service, "_unsupported_reason", return_value=reason))
                 stack.enter_context(patch.object(service, "_dcc_web_attachments", return_value=(
                     {network_name: ("dcc-web", "dcc-web-upstream")}, (network_name, Mock(), ()),
                 )))
                 stack.enter_context(patch.object(service, "_verify_remote_networks"))
                 stack.enter_context(patch.object(service, "_remote_update_control", side_effect=(
-                    lambda item, operation, *args: events.append((operation, item.id, args)) or True
+                    lambda item, operation, *args: events.append((operation, item.id, args))
+                    or not (stopped_tunnel and operation == "status")
                 )))
             if fail_replacement_start:
                 with self.assertRaisesRegex(RuntimeError, "przywrócono poprzedni kontener"):
@@ -1158,6 +1160,14 @@ class DccWebHttpsUpdateTests(unittest.TestCase):
                 self.assertEqual(resume[1], pause[1] if rollback else "replacement-id")
                 self.assertLess(events.index(pause), next(i for i, event in enumerate(events) if event[0] == "stop-old"))
                 self.assertLess(events.index(("healthy", resume[1])), events.index(resume))
+
+    def test_legacy_stopped_tunnel_transfers_saved_consent_before_deleting_backup(self):
+        message, events = self._run_update(stopped_tunnel=True)
+        transfer = next(event for event in events if event[0] == "adopt-recovery")
+        self.assertEqual(transfer[1], "replacement-id")
+        self.assertLess(events.index(("healthy", "replacement-id")), events.index(transfer))
+        self.assertLess(events.index(transfer), events.index(("remove-old", False)))
+        self.assertIn("wznawia tunel zrok", message)
 
 class UpdateRollbackTests(unittest.TestCase):
     class DockerNotFound(Exception):

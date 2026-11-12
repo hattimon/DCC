@@ -31,34 +31,79 @@ from updater import UpdateService, load_catalog
 # zrok's account and hosted HTTPS calls so the fixture needs no public domain.
 SYNTHETIC_PROVIDER = """
 from contextlib import closing
+import io
+import json
+import tarfile
+import time
+import remote_access
 import remote_maintenance
 import web
 from host_setup import local_container
 
 start_control = remote_maintenance.start_control
 def start_fixture(remote):
+    token, identity, account = 'FixtureShare123', 'fixture-env', 'FixtureAccount123'
+    occupied = True
+    data = json.dumps({'ziti_identity': identity, 'zrok_token': account}).encode()
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode='w') as archive:
+        member = tarfile.TarInfo('.zrok2/environment.json')
+        member.size = len(data)
+        archive.addfile(member, io.BytesIO(data))
     def restore(sidecar, config):
         remote.stop(sidecar)
         sidecar.start()
+        return buffer.getvalue()
     remote.restore = restore
-    remote.reservation = lambda sidecar, name: {
-        'reserved': True, 'namespaceToken': 'public', 'namespaceName': 'shares.zrok.io'
-    }
-    remote.command = lambda *args, **kwargs: b''
+    def reservation(sidecar, name):
+        assert name == 'qa-fixture'
+        value = {'reserved': True, 'namespaceToken': 'public', 'namespaceName': 'shares.zrok.io'}
+        if occupied:
+            value['shareToken'] = token
+        return value
+    remote.reservation = reservation
+    def command(sidecar, args, **kwargs):
+        if args[:3] == ['zrok2', 'list', 'shares']:
+            return json.dumps({'shares': [{'shareToken': token, 'envZId': identity,
+                'shareMode': 'public', 'backendMode': 'proxy', 'target': 'http://dcc-remote-panel:8791'}]}).encode()
+        assert args[:2] == ['/bin/sh', '-c'] and kwargs['data'].startswith(b'qa-fixture ')
+        assert not occupied
+        return b''
+    remote.command = command
+    def unshare(env, api_token, share):
+        nonlocal occupied
+        assert (env, api_token, share) == (identity, account, token) and occupied
+        occupied = False
+        return 200
+    remote_access.unshare = unshare
+    remote_access.public_health = lambda origin: (502, '')
     def verify(route):
+        assert not occupied
         route['verified'] = True
         remote.tunnel = 'active'
     remote.monitor = verify
     handle = remote.maintenance
     def maintenance(args):
-        if args != ['seed']:
+        nonlocal occupied
+        if args == ['fixture-ready']:
+            return bool(remote.route and remote.route['verified'] and not occupied)
+        if args == ['fixture-stop']:
+            with remote.lock, closing(remote.client_factory()) as client:
+                remote.recovery_next = time.monotonic() + 3600
+                remote.stop(remote.container(client))
+            return True
+        if args not in (['seed'], ['seed-stopped']):
             return handle(args)
         owner = 'fixture-tunnel-owner'
         remote.state.execute('INSERT INTO users VALUES(?,?,?,?)', (owner, owner, 'unused', 'admin'))
         remote.state.execute('INSERT INTO mfa VALUES(?,?,?,?,?,?,?)', (owner, b'fixture', 1, -1, '[]', 0, ''))
         remote.save({'name': 'qa-fixture', 'origin': 'https://qa-fixture.shares.zrok.io', 'identity': 'fixture'})
         with closing(remote.client_factory()) as client:
-            remote.enable(remote.container(client), owner, remote.epoch, resume_after_update=True)
+            if args == ['seed']:
+                occupied = False
+                remote.enable(remote.container(client), owner, remote.epoch, resume_after_update=True)
+            else:
+                remote.recovery_next = time.monotonic() + 3600
             remote.remember_recovery(owner, remote.epoch, local_container(client).attrs['Image'],
                                      resume_after_restart=True, resume_after_update=True)
         return True
@@ -103,7 +148,7 @@ def archive_file(container, path):
 
 
 def assert_tunnel_ready(service, panel):
-    assert service._remote_update_control(panel, 'status')
+    assert service._remote_update_control(panel, 'fixture-ready')
     return True
 
 
@@ -116,15 +161,20 @@ def main():
     parser.add_argument('--expect-remote-access', action='store_true')
     parser.add_argument('--with-remote-access', action='store_true', help='Attach a stopped managed zrok sidecar')
     parser.add_argument('--with-tunnel-resume', action='store_true', help='Exercise active tunnel handoff with a synthetic provider and local target image')
+    parser.add_argument('--with-legacy-stopped-tunnel', action='store_true',
+                        help='Upgrade a released Web image with saved consent and a stopped tunnel')
     parser.add_argument('--verify-catalog', action='store_true', help='Require the official catalog to offer the target')
     parser.add_argument('--verify-release-candidate', action='store_true',
                         help='Use the checked-out catalog and exercise a running loopback-only project panel')
     args = parser.parse_args()
     if args.with_tunnel_resume and not args.local_target:
         parser.error('--with-tunnel-resume requires a local target')
+    if args.with_legacy_stopped_tunnel and (not args.local_target or args.with_tunnel_resume):
+        parser.error('--with-legacy-stopped-tunnel needs a local target and its own run')
     if args.verify_release_candidate and not (args.local_target and args.expect_remote_access):
         parser.error('--verify-release-candidate needs --local-target and --expect-remote-access')
-    args.with_remote_access = args.with_remote_access or args.with_tunnel_resume
+    synthetic_tunnel = args.with_tunnel_resume or args.with_legacy_stopped_tunnel
+    args.with_remote_access = args.with_remote_access or synthetic_tunnel
     args.expect_remote_access = args.expect_remote_access or args.with_remote_access
     client = docker.from_env()
     suffix = secrets.token_hex(5)
@@ -156,6 +206,7 @@ def main():
             client.images.get(target).tag(new_image)
             qa_images.append(new_image)
             target = new_image
+        if synthetic_tunnel:
             command = ['python', '-c', SYNTHETIC_PROVIDER, '--host', '0.0.0.0', '--allow-lan', '--data', '/data']
         for ending in ('data', 'certs', 'config'):
             volumes.append(client.volumes.create(name=name+'-'+ending, labels=labels))
@@ -278,6 +329,9 @@ with closing(remote.client_factory()) as client:
             if args.with_tunnel_resume:
                 assert service._remote_update_control(web, 'seed')
                 wait_for(lambda: assert_tunnel_ready(service, web), 'Synthetic tunnel was not authorized')
+            elif args.with_legacy_stopped_tunnel:
+                assert service._remote_update_control(web, 'seed-stopped')
+                assert not service._remote_update_control(web, 'status')
         web.reload()
         inventory = client.containers.list(all=True, ignore_removed=True)
         assert service.update_blocker(web, inventory) is None
@@ -320,6 +374,9 @@ with closing(remote.client_factory()) as client:
         wait_for(login_page, 'HTTPS did not recover after rollback')
         if args.with_tunnel_resume:
             wait_for(lambda: assert_tunnel_ready(service, web), 'Tunnel did not resume after rollback')
+        if synthetic_tunnel:
+            assert service._remote_update_control(web, 'fixture-stop')
+            assert client.containers.get(remote_name).attrs['State']['Status'] in {'exited', 'created'}
         service.update_one(web, target, _image_already_pulled=True)
         web = client.containers.get(name)
         assert web.id != old_id and web.attrs['Config']['Image'] == target
@@ -331,7 +388,7 @@ with closing(remote.client_factory()) as client:
             assert 'dcc-remote-panel' in web.attrs['NetworkSettings']['Networks'][remote_panel]['Aliases']
             sidecar = client.containers.get(remote_name)
             assert sidecar.id == remote_id
-            if args.with_tunnel_resume:
+            if synthetic_tunnel:
                 wait_for(lambda: assert_tunnel_ready(service, web), 'Tunnel did not resume after successful replacement')
                 web.restart(timeout=12)
                 service._wait_until_healthy(web)
@@ -373,9 +430,9 @@ with closing(remote.client_factory()) as client:
         if args.expect_remote_access:
             status, _, body = request('/api/admin/remote-access', headers={'Cookie':cookie})
             remote = json.loads(body)
-            expected_state = 'active' if args.with_tunnel_resume else 'configure' if remote_name else 'not-installed'
+            expected_state = 'active' if synthetic_tunnel else 'configure' if remote_name else 'not-installed'
             assert status == 200 and remote['available'] and remote['state'] == expected_state, remote
-            if args.with_tunnel_resume:
+            if synthetic_tunnel:
                 assert remote['restart_resume_allowed'], remote
             status, _, body = request('/static/views/remote_access.js')
             assert status == 200 and 'Zdalny dostęp przez Internet'.encode() in body
@@ -410,7 +467,8 @@ with closing(remote.client_factory()) as client:
             'same_caddy_container':True,'same_ca_and_port':True,'web_volume_preserved':True,
             'same_http_port':True,'managed_alias_preserved':True,'automatic_update_eligible':True,
             'remote_access_verified':args.expect_remote_access,'remote_network_preserved':bool(remote_name),
-            'synthetic_tunnel_resumed':args.with_tunnel_resume,
+            'synthetic_tunnel_resumed':synthetic_tunnel,
+            'legacy_stopped_tunnel_recovered':args.with_legacy_stopped_tunnel,
             'official_catalog_verified':args.verify_catalog}))
     finally:
         if project:
