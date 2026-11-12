@@ -534,8 +534,8 @@
       "homepage_url": "https://nodejs.org/",
       "icon_text": "💻",
       "upstream_repo": "nodejs/node",
-      "latest_release": "v26.13.0",
-      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.13.0",
+      "latest_release": "v26.13.1",
+      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.13.1",
       "icon_url": "catalog/media/icons/nodejs.png"
     },
     {
@@ -1236,8 +1236,8 @@
       ],
       "icon_url": "catalog/media/icons/pi-hole.png",
       "upstream_repo": "pi-hole/docker-pi-hole",
-      "latest_release": "2026.10.1",
-      "latest_release_url": "https://github.com/pi-hole/docker-pi-hole/releases/tag/2026.10.1"
+      "latest_release": "2026.11.0",
+      "latest_release_url": "https://github.com/pi-hole/docker-pi-hole/releases/tag/2026.11.0"
     },
     {
       "name": "Home Assistant",
