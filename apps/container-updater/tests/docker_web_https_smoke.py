@@ -35,9 +35,9 @@ import io
 import json
 import tarfile
 import time
-import remote_access
 import remote_maintenance
 import web
+import remote_access
 from host_setup import local_container
 
 start_control = remote_maintenance.start_control
@@ -222,7 +222,12 @@ def main():
             volumes=web_mounts, ports={'8789/tcp': ('127.0.0.1', web_port)},
             read_only=True, tmpfs={'/tmp': 'size=64m,mode=1777'},
             cap_drop=['ALL'], cap_add=['SETUID', 'SETGID'])
-        service._wait_until_healthy(web)
+        try:
+            service._wait_until_healthy(web)
+        except RuntimeError as error:
+            failures = re.findall(rb'(?m)^([A-Za-z]+(?:Error|Exception)):', web.logs(tail=30))
+            kind = failures[-1].decode() if failures else 'unknown'
+            raise RuntimeError(f'Fixture Web failed at startup ({kind})') from error
         old_id = web.id
         credential = re.search(rb'DCC_WEB_INITIAL_CREDENTIALS username=(\S+) password=(\S+)', web.logs())
         assert credential, 'Synthetic bootstrap account was not created'
