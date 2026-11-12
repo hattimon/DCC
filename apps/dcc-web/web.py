@@ -193,6 +193,15 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             code, message = 503, 'SSH connection failed. Check the username, key, passphrase or SSH agent and trusted known_hosts in Profiles.'
         else:
             code, message = 500, "The request could not be completed"
+            if request.path.startswith('/api/panels/'):
+                reference = secrets.token_hex(5)
+                # Only exception class names enter logs; exceptions can contain
+                # upstream credentials, cookies or URLs in their text.
+                cause = getattr(error, '__cause__', None)
+                app.logger.error('Panel failure ref=%s type=%s cause=%s',
+                                 reference, type(error).__name__,
+                                 type(cause).__name__ if cause else 'none')
+                message += ' (panel reference: ' + reference + ')'
         if request.path.startswith(("/api/","/mcp","/.well-known/")) or request.path in {'/authorize','/token','/register','/revoke'}:
             return jsonify(error=message), code
         if g.get("user"):

@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import socket
+import paramiko
 import sys
 import tempfile
 import threading
@@ -33,6 +34,13 @@ class PanelFixture(BaseHTTPRequestHandler):
         for k,v in (headers or {}).items():self.send_header(k,v)
         self.end_headers();self.wfile.write(raw)
     def do_GET(self):
+        if self.path=='/chunked':
+            self.send_response(200)
+            self.send_header('Transfer-Encoding','chunked')
+            self.send_header('Content-Type','text/plain')
+            self.end_headers()
+            self.wfile.write(b'5\r\nhello\r\n0\r\n\r\n')
+            return
         if self.path=='/ws':
             import websocket
             accept=base64.b64encode(hashlib.sha1((self.headers['Sec-WebSocket-Key']+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest()).decode()
@@ -65,7 +73,7 @@ class PanelFixture(BaseHTTPRequestHandler):
         if self.path=='/image.svg':return self.respond(b'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" fill="teal"/></svg>',content_type='image/svg+xml')
         if self.path=='/app.js':return self.respond(b"document.querySelector('#api').textContent='loading';fetch('/echo').then(r=>r.json()).then(v=>document.querySelector('#api').textContent=v.path);const s=new WebSocket('ws://'+JSON.parse(document.getElementById('dcc-panel-config').textContent).origin.split('://')[1]+'/ws');s.onopen=()=>s.send('live-echo');s.onmessage=e=>document.querySelector('#ws').textContent=e.data;const events=new EventSource('/events');events.onmessage=e=>document.querySelector('#sse').textContent=e.data;document.querySelector('#isolation').textContent=(()=>{try{return parent.document.title}catch{return 'isolated'}})();",content_type='text/javascript')
         if self.path=='/':
-            return self.respond(b'<!doctype html><html><head><title>Isolated live panel</title><link rel="stylesheet" href="/style.css"></head><body><h1>Panel fixture</h1><img src="/image.svg"><div id="api"></div><div id="ws"></div><div id="sse"></div><div id="isolation"></div><form method="post" action="/form"><input name="value" value="sample"><button>Submit panel</button></form><script src="/app.js" defer></script></body></html>',content_type='text/html; charset=utf-8')
+            return self.respond(b'<!doctype html><html lang="pl" data-theme="fixture-theme"><head><title>Isolated live panel</title><link rel="stylesheet" href="/style.css"></head><body data-fixture-body="preserved"><h1>Panel fixture</h1><img src="/image.svg"><div id="api"></div><div id="ws"></div><div id="sse"></div><div id="isolation"></div><form method="post" action="/form"><input name="value" value="sample"><button>Submit panel</button></form><script src="/app.js" defer></script></body></html>',content_type='text/html; charset=utf-8')
         return self.respond({'path':self.path,'cookie':self.headers.get('Cookie',''),'authorization':self.headers.get('Authorization',''),'origin':self.headers.get('Origin',''),'dcc_marker':self.headers.get('X-DCC-Web-Internal-TLS','')})
     def do_POST(self):
         raw=self.rfile.read(int(self.headers.get('Content-Length','0')))
@@ -76,6 +84,168 @@ class PanelFixture(BaseHTTPRequestHandler):
     do_DELETE=do_POST
 
 
+class SimulatedSSHChannel:
+    """In-memory SSH transport with Paramiko's read1-less ChannelFile."""
+    def __init__(self, response):
+        self.response=response
+        self.position=0
+        self.closed=False
+
+    def makefile(self, mode='r', bufsize=-1):
+        return paramiko.ChannelFile(self,mode,bufsize)
+
+    def sendall(self, value):pass
+    def recv(self, size):
+        value=self.response[self.position:self.position+size]
+        self.position+=len(value)
+        return value
+    def settimeout(self, value):pass
+    def shutdown(self, value):self.closed=True
+    def close(self):self.closed=True
+
+
+class InMemoryPanelSocket:
+    """HTTP/SSE/WebSocket fixture for Windows runners that forbid loopback TCP.
+
+    The real socket integration is still exercised whenever the OS permits it.
+    This fixture models the upstream byte protocol, leaving the gateway's
+    http.client, header, cookie, redirect and websocket code under test.
+    """
+
+    def __init__(self):
+        self.cv = threading.Condition()
+        self.incoming = bytearray()
+        self.outgoing = bytearray()
+        self.timeout = 8
+        self.closed = False
+        self.websocket = False
+
+    def settimeout(self, value):
+        self.timeout = value
+
+    def gettimeout(self):
+        return self.timeout
+
+    def send(self, data):
+        self.sendall(data)
+        return len(data)
+
+    def sendall(self, data):
+        with self.cv:
+            self.incoming.extend(data)
+            if self.websocket:
+                self._ws_frames()
+            elif b'\r\n\r\n' in self.incoming:
+                header, remainder = self.incoming.split(b'\r\n\r\n', 1)
+                lines = header.decode('iso-8859-1').split('\r\n')
+                method, path, _ = lines[0].split(' ', 2)
+                headers = dict(line.split(': ', 1) for line in lines[1:] if ': ' in line)
+                length = int(headers.get('Content-Length', '0'))
+                if len(remainder) >= length:
+                    self.incoming = bytearray(remainder[length:])
+                    self._handle(method, path, headers, remainder[:length])
+            self.cv.notify_all()
+
+    def _reply(self, body=b'', status=200, content_type='application/json', headers=None):
+        if not isinstance(body, bytes):
+            body = json.dumps(body).encode()
+        reason = {200: 'OK', 302: 'Found', 101: 'Switching Protocols'}[status]
+        fields = {'Content-Type': content_type, 'Content-Length': str(len(body))}
+        fields.update(headers or {})
+        payload = f'HTTP/1.1 {status} {reason}\r\n'.encode()
+        payload += b''.join(f'{key}: {value}\r\n'.encode() for key, value in fields.items())
+        self.outgoing.extend(payload + b'\r\n' + body)
+
+    def _handle(self, method, path, headers, data):
+        if path == '/ws':
+            import hashlib
+            key = headers['Sec-WebSocket-Key']
+            accept = base64.b64encode(hashlib.sha1(
+                (key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest()).decode()
+            self.outgoing.extend(('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n'
+                                  'Connection: Upgrade\r\nSec-WebSocket-Accept: ' + accept +
+                                  '\r\n\r\n').encode())
+            self.websocket = True
+            self._ws_frames()
+        elif path == '/events':
+            self.outgoing.extend(b'HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n'
+                                 b'Connection: close\r\n\r\ndata: tick-0\n\n')
+        elif path == '/chunked':
+            self.outgoing.extend(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n'
+                                 b'Content-Type: text/plain\r\n\r\n5\r\nhello\r\n0\r\n\r\n')
+        elif path == '/redirect':
+            self._reply(b'', 302, headers={'Location': '/echo'})
+        elif path == '/external':
+            self._reply(b'', 302, headers={'Location': 'http://169.254.169.254/latest/meta-data/'})
+        elif path == '/cookie':
+            self._reply({'ok': True}, headers={'Set-Cookie': 'service_login=fixture-cookie; Path=/; HttpOnly'})
+        elif path == '/large':
+            self._reply(b'x' * 1024, content_type='application/octet-stream')
+        elif path == '/':
+            self._reply(b'<html lang="pl"><body>Fixture</body></html>', content_type='text/html')
+        elif path == '/form':
+            self._reply(b'<h1>Form saved</h1>', content_type='text/html')
+        elif method != 'GET':
+            self._reply({'method': method, 'body': base64.b64encode(data).decode(),
+                         'type': headers.get('content-type', headers.get('Content-Type'))})
+        else:
+            self._reply({'path': path, 'cookie': headers.get('Cookie', ''),
+                         'authorization': headers.get('authorization', headers.get('Authorization', '')),
+                         'origin': headers.get('Origin', ''),
+                         'dcc_marker': headers.get('X-DCC-Web-Internal-TLS', '')})
+
+    def _ws_frames(self):
+        while len(self.incoming) >= 2:
+            kind = self.incoming[0] & 15
+            length = self.incoming[1] & 127
+            at = 2
+            if length == 126:
+                if len(self.incoming) < 4:
+                    return
+                length = int.from_bytes(self.incoming[2:4], 'big')
+                at = 4
+            elif length == 127:
+                if len(self.incoming) < 10:
+                    return
+                length = int.from_bytes(self.incoming[2:10], 'big')
+                at = 10
+            masked = bool(self.incoming[1] & 128)
+            if len(self.incoming) < at + (4 if masked else 0) + length:
+                return
+            mask = self.incoming[at:at + 4] if masked else b''
+            at += 4 if masked else 0
+            payload = bytes(self.incoming[at + i] ^ mask[i % 4] if masked else self.incoming[at + i]
+                            for i in range(length))
+            del self.incoming[:at + length]
+            if kind == 8:
+                self.closed = True
+                return
+            size = (bytes([length]) if length < 126 else
+                    b'\x7e' + length.to_bytes(2, 'big') if length < 65536 else
+                    b'\x7f' + length.to_bytes(8, 'big'))
+            self.outgoing.extend(bytes([0x80 | kind]) + size + payload)
+
+    def recv(self, size):
+        with self.cv:
+            if not self.outgoing and not self.closed:
+                notified = self.cv.wait(timeout=self.timeout)
+                if not notified and not self.closed and not self.outgoing:
+                    raise socket.timeout('In-memory panel timed out')
+            if not self.outgoing:
+                return b''
+            data = bytes(self.outgoing[:size])
+            del self.outgoing[:size]
+            return data
+
+    def shutdown(self, _how):
+        self.close()
+
+    def close(self):
+        with self.cv:
+            self.closed = True
+            self.cv.notify_all()
+
+
 class PanelBackend(FakeBackend):
     panel_entries=[]
     def containers(self):return copy.deepcopy(self.panel_entries)
@@ -84,12 +254,28 @@ class PanelBackend(FakeBackend):
 class PanelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.server=ThreadingHTTPServer(('127.0.0.1',0),PanelFixture)
-        threading.Thread(target=cls.server.serve_forever,daemon=True).start()
-        cls.port=cls.server.server_port
+        cls.server = None
+        cls.port = 33789
+        try:
+            server = ThreadingHTTPServer(('127.0.0.1', 0), PanelFixture)
+            cls.port = server.server_port
+            with socket.create_connection(('127.0.0.1', cls.port), timeout=1):
+                pass
+            cls.server = server
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+        except OSError:
+            if 'server' in locals():
+                server.server_close()
     @classmethod
-    def tearDownClass(cls):cls.server.shutdown();cls.server.server_close()
+    def tearDownClass(cls):
+        if cls.server:
+            cls.server.shutdown()
+            cls.server.server_close()
     def setUp(self):
+        if not self.server:
+            virtual = patch('panel_proxy._socket', side_effect=lambda profile, link: (InMemoryPanelSocket(), None))
+            virtual.start()
+            self.addCleanup(virtual.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.config={'TESTING':True,'DATA_DIR':self.temp.name,'MASTER_KEY':Fernet.generate_key(),
                      'ALLOWED_HOSTS':{'localhost','dcc.example.com','8.8.4.4','192.168.1.3'}}
@@ -206,12 +392,45 @@ class PanelTests(unittest.TestCase):
             channel,owner=_socket(profile,link)
             connect.assert_called_once_with(client.return_value,profile)
             client.return_value.get_transport.return_value.open_channel.assert_called_once_with('direct-tcpip',('127.0.0.1',8788),('127.0.0.1',0),timeout=8)
-        with patch('panel_proxy.os.environ',{'DCC_WEB_CONTAINER_NAME':'fixture'}):
-            with self.assertRaisesRegex(Exception,'loopback-only'):_socket({'kind':'local'},{'url':'http://127.0.0.1:8788','bind_ip':'127.0.0.1','loopback_only':True})
+        local_link={'url':'http://127.0.0.1:8788','bind_ip':'127.0.0.1',
+                    'loopback_only':True,'container_port':80,'container_id':CONTAINER}
+        with patch.dict('panel_proxy.os.environ',{'DCC_WEB_CONTAINER_NAME':'fixture'}), \
+                patch('panel_proxy.open_local_panel') as bridge:
+            bridge.return_value=(MagicMock(),MagicMock())
+            channel,owner=_socket({'kind':'local'},local_link)
+            bridge.assert_called_once_with({'kind':'local'},CONTAINER,80)
+            self.assertIs(channel,bridge.return_value[0])
+        with patch('panel_proxy.open_local_panel') as bridge:
+            with patch.dict('panel_proxy.os.environ',{'DCC_WEB_CONTAINER_NAME':'fixture'}):
+                with self.assertRaisesRegex(Exception,'verified'):_socket({'kind':'local'},
+                    {**local_link,'container_id':None})
+            # Invalid targets must be rejected before any helper is started.
+            bridge.assert_not_called()
     def test_http_timeout_is_safe_and_reports_route_failure(self):
         with patch('panel_proxy._socket',side_effect=TimeoutError('fixture-private-detail')):
             response=self.call('/')
         self.assertEqual(response.status_code,503);self.assertNotIn('fixture-private-detail',response.get_data(as_text=True))
+    def test_paramiko_channel_without_read1_handles_regular_chunked_and_sse(self):
+        regular=json.dumps({'path':'/echo'}).encode()
+        responses=[
+            b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: '+str(len(regular)).encode()+b'\r\n\r\n'+regular,
+            b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n5\r\nhello\r\n0\r\n\r\n',
+            b'HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: tick-1\n\n',
+        ]
+        self.assertFalse(hasattr(SimulatedSSHChannel(responses[0]).makefile('rb'),'read1'))
+        def transport(_profile,_link):
+            return SimulatedSSHChannel(responses.pop(0)),MagicMock()
+        with patch('panel_proxy._socket',side_effect=transport):
+            self.assertEqual(self.decoded(self.call('/echo'))['path'],'/echo')
+            chunked=self.call('/chunked')
+            self.assertEqual(chunked.status_code,200,chunked.json)
+            self.assertEqual(base64.b64decode(chunked.json['body']),b'hello')
+            stream=self.call('/events')
+            self.assertEqual(stream.status_code,200,stream.json)
+            event=self.app.extensions['dcc_panels'].streams[stream.json['stream']]
+            self.wait_for(lambda:bool(event.events))
+            self.assertIn(b'tick-',base64.b64decode(self.live(stream.json['stream'],'read').json['events'][0]['data']))
+            self.live(stream.json['stream'],'close')
     def test_sse_closes_after_logout(self):
         response=self.call('/events');self.assertEqual(response.status_code,200,response.json)
         key=response.json['stream'];value=self.app.extensions['dcc_panels'].streams[key]

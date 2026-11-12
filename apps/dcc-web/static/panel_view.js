@@ -28,6 +28,36 @@ function stop(message){
  for(const stream of streams)api('live/'+stream+'/close',{}).catch(()=>{});streams.clear();
 }
 async function asset(url,base){const response=await request(pathOf(url,base));if(response.status>=400)throw Error('Panel resource: '+response.status);return response;}
+function openingTag(source,name){
+ const lower=source.toLowerCase(),needle='<'+name;let cursor=0,start;
+ while((start=lower.indexOf(needle,cursor))>=0){
+  const next=source[start+needle.length];cursor=start+needle.length;
+  if(next!=='>'&&next!=='/'&&next!==undefined&&next.trim()!=='')continue;
+  if(source.lastIndexOf('<!--',start)>source.lastIndexOf('-->',start))continue;
+  let quote='';
+  for(let i=start;i<source.length;i++){
+   const char=source[i];
+   if(quote){if(char===quote)quote='';continue;}
+   if(char==='"'||char==="'"){quote=char;continue;}
+   if(char==='>')return{start,end:i+1,value:source.slice(start,i+1)};
+  }
+ }
+ return null;
+}
+function safeRootTag(source){
+ const found=openingTag(source,'html');
+ if(!found)return `<html lang="${document.documentElement.lang||'en'}">`;
+ const holder=document.createElement('template');
+ holder.innerHTML=found.value.replace(/^<html/i,'<span')+'</span>';
+ const parsed=holder.content.firstElementChild;
+ if(!parsed)return `<html lang="${document.documentElement.lang||'en'}">`;
+ const lang=parsed.getAttribute('lang')||'';let valid=false;
+ try{valid=!!lang&&Intl.getCanonicalLocales(lang).length===1;}catch{}
+ if(!valid)parsed.setAttribute('lang',document.documentElement.lang||'en');
+ const attributes=[...parsed.attributes].filter(attribute=>!attribute.name.toLowerCase().startsWith('on'))
+  .map(attribute=>`${attribute.name}="${attribute.value.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;')}"`);
+ return `<html${attributes.length?' '+attributes.join(' '):''}>`;
+}
 async function css(source,base,depth=0){
  if(depth>4)throw Error('CSS import depth exceeded');
  const pattern=/url\(\s*(['"]?)([^)'"\s]+)\1\s*\)|@import\s+(['"])([^'"]+)\3\s*;/gi;
@@ -45,7 +75,10 @@ const bridgeSource=await (await fetch('/static/panel_bridge.js',{credentials:'sa
 async function prepare(response){
  // Template parsing is inert, including images/frames. Never parse upstream
  // markup into a document that could initiate requests with DCC credentials.
- const template=document.createElement('template');template.innerHTML=text(response.body);const doc=template.content;
+ const source=text(response.body),rootTag=safeRootTag(source),bodyTag=openingTag(source,'body');
+ const boundary='dcc-panel-body-'+crypto.randomUUID(),marker=`<!--${boundary}-->`;
+ const marked=bodyTag?source.slice(0,bodyTag.end)+marker+source.slice(bodyTag.end):source;
+ const template=document.createElement('template');template.innerHTML=marked;const doc=template.content;
  const base=response.path;
  doc.querySelectorAll('base,meta[http-equiv],iframe,object,embed').forEach(el=>el.remove());
  doc.querySelectorAll('[autofocus]').forEach(el=>el.removeAttribute('autofocus'));
@@ -112,7 +145,16 @@ async function prepare(response){
  const policy=document.createElement('meta');policy.httpEquiv='Content-Security-Policy';
  policy.content="default-src 'none'; script-src data: blob: 'unsafe-inline'; style-src 'unsafe-inline' data: blob:; img-src data: blob:; font-src data: blob:; media-src data: blob:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
  doc.prepend(policy,config,bootstrap);
- return '<!doctype html>'+template.innerHTML;
+ const serialized=template.innerHTML,index=serialized.indexOf(marker);
+ if(index<0){
+  // A fragment without an explicit <body> has no boundary marker. Keep the
+  // security policy in <head>; placing it in <body> causes browsers to ignore it.
+  policy.remove();config.remove();bootstrap.remove();
+  return '<!doctype html>'+rootTag+'<head>'+policy.outerHTML+config.outerHTML+bootstrap.outerHTML+'</head><body>'+template.innerHTML+'</body></html>';
+ }
+ const head=serialized.slice(0,index),body=serialized.slice(index+marker.length);
+ const safeBodyTag=bodyTag?.value||'<body>';
+ return '<!doctype html>'+rootTag+'<head>'+head+'</head>'+safeBodyTag+body+'</body></html>';
 }
 async function navigate(path='/',options={}){
  const mine=++generation;

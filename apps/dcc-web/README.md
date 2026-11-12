@@ -1,12 +1,12 @@
-# DCC Web 0.3.1
+# DCC Web 0.3.2
 
-Web 0.3.1 preserves original container panel addresses and opens them through a session-protected gateway on public entry. It adds isolated service cookies, forms, ES modules and SSE/WebSocket bridging. [Configuration, security model and limitations](docs/panels.md).
+Web 0.3.2 preserves original container panel addresses and opens them through a session-protected gateway on public entry. It adds isolated service cookies, forms, ES modules and SSE/WebSocket bridging. [Configuration, security model and limitations](docs/panels.md).
 
 Monitoring now sorts CPU, RAM, RAM %, network, disk I/O and process counts with the same descending → ascending → default cycle as Containers. Network and disk sorting use the sum of both displayed directions.
 
 Web 0.3.0 keeps retrying after Internet/DNS/zrok outages and recovers an unexpectedly stopped tunnel. When enabling access locally, select **Resume the tunnel after restarting DCC Web or the computer** to save restart consent. Select the separate Updater option as well to cover image updates. Disable access cancels recovery; public traffic remains blocked until HTTPS is verified again.
 
-When enabling zrok from the local panel, administrators can allow DCC Container Updater 1.1.4 or newer to pause and resume the tunnel during compatible Web updates. Both Web images must support the handoff. The first upgrade from an older Web version uses the manual steps shown next to the blocker. [Release notes](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1)
+When enabling zrok from the local panel, administrators can allow DCC Container Updater 1.1.4 or newer to pause and resume the tunnel during compatible Web updates. Both Web images must support the handoff. The first upgrade from an older Web version uses the manual steps shown next to the blocker. [Release notes](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.2)
 
 [English](README.md) · [Polski](README.pl.md) · [GitHub repository](https://github.com/hattimon/DCC)
 
@@ -42,7 +42,7 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 
 ## Install on Windows, macOS or Linux
 
-Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.1/DCC-Web-0.3.1-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.3.1` directory:
+Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.2/DCC-Web-0.3.2-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.3.2` directory:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py

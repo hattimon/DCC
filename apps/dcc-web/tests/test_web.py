@@ -493,6 +493,125 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.request('mcp/grants/'+grant['id'], {'confirmation': token}, method='DELETE').status_code, 200)
         with self.assertRaises(PermissionError):service.call('list_containers',{'profile':'local'})
 
+    def test_mcp_container_reads_allowlist_untrusted_docker_metadata(self):
+        secret='MCP-METADATA-SECRET-42'
+        class LeakyBackend(FakeBackend):
+            def containers(self):
+                rows=super().containers()
+                rows[0].update(Command='server --password='+secret,
+                    Args=['--password',secret], Entrypoint=['sh','-c',secret],
+                    Labels='credential='+secret, Extra={'secret':secret})
+                return rows
+
+            def inspect(self, target):
+                row=super().inspect(target)
+                row.update(Path=secret, Args=[secret], ProcessLabel=secret,
+                           Mounts=[{'Type':'bind','Source':'/srv/'+secret,
+                                    'Destination':'/app','RW':False,'Name':'test'}],
+                           NetworkSettings={'Networks':{'safe-net':{'IPAddress':'172.17.0.2',
+                                                                    'Secret':secret}}})
+                row['Config'].update(Cmd=['--token',secret], Entrypoint=['program',secret],
+                                     Env=['TOKEN='+secret], Labels={'key':secret},
+                                     Healthcheck={'Test':['CMD-SHELL',secret]})
+                row['State']['Health'].update(Log=[{'Output':secret}], Status='healthy')
+                row['HostConfig'].update(Binds=['/'+secret+':/data'], Devices=[secret],
+                                         RestartPolicy={'Name':'always','Password':secret})
+                return row
+
+        grant=self.request('mcp/grants',{
+            'profiles':['local'], 'tools':['list_containers','inspect_container']}).json
+        service=MCPService(self.state,grant['token'],LeakyBackend)
+        listing=json.loads(service.call('list_containers',{'profile':'local'})['content'][0]['text'])
+        self.assertEqual(listing[0]['Names'],'dcc-container-updater')
+        self.assertNotIn('Command',listing[0])
+        self.assertNotIn('Labels',listing[0])
+        inspected=json.loads(service.call('inspect_container',{
+            'profile':'local','container':'a'*64})['content'][0]['text'])
+        self.assertEqual(inspected['State']['Health']['Status'],'healthy')
+        self.assertEqual(inspected['NetworkNames'],['safe-net'])
+        self.assertEqual(inspected['Mounts'][0]['Destination'],'/app')
+        for payload in (listing,inspected):
+            output=json.dumps(payload)
+            self.assertNotIn(secret,output)
+            for field in ('Args','Entrypoint','Cmd','Env','Labels','Healthcheck','Source','Binds'):
+                self.assertNotIn('"'+field+'":',output)
+
+        # The stdio transport uses the same MCPService projection.
+        messages=[
+            {'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-11-25'}},
+            {'jsonrpc':'2.0','method':'notifications/initialized'},
+            {'jsonrpc':'2.0','id':2,'method':'tools/call',
+             'params':{'name':'inspect_container','arguments':{'profile':'local','container':'a'*64}}},
+        ]
+        with patch('mcp_preview.DockerBackend',LeakyBackend), \
+                patch.dict('os.environ',{'DCC_MCP_TOKEN':grant['token']}):
+            out=io.StringIO()
+            stdio(self.state,io.StringIO('\n'.join(json.dumps(m) for m in messages)+'\n'),out)
+        self.assertEqual(json.loads(out.getvalue().splitlines()[-1])['result']['isError'],False)
+        self.assertNotIn(secret,out.getvalue())
+
+    def test_mcp_resource_stats_and_host_reads_project_untrusted_fields(self):
+        secret='MCP-RESOURCE-METADATA-SECRET-66'
+        class LeakyBackend(FakeBackend):
+            def stats(self):
+                rows=super().stats()
+                rows[0].update(Labels={'PASSWORD':secret}, Command='--token='+secret,
+                               Mountpoint='/private/'+secret, Extra=[secret])
+                return rows
+
+            def resources(self,kind):
+                rows=super().resources(kind)
+                rows[0].update(Labels='token='+secret, Mountpoint='/private/'+secret,
+                               Options={'password':secret}, Extra=[secret])
+                return rows
+
+            def info(self):
+                return {**super().info(), 'RegistryAuth':secret, 'Labels':{'secret':secret}}
+
+        names=('host_info','container_stats','list_images','list_volumes','list_networks')
+        grant=self.request('mcp/grants',{'profiles':['local'],'tools':list(names)}).json
+        service=MCPService(self.state,grant['token'],LeakyBackend)
+        for name in names:
+            payload=json.loads(service.call(name,{'profile':'local'})['content'][0]['text'])
+            output=json.dumps(payload)
+            self.assertNotIn(secret,output,name)
+            self.assertNotIn('Labels',output,name)
+            self.assertNotIn('Mountpoint',output,name)
+            self.assertNotIn('Command',output,name)
+            if name=='container_stats':
+                self.assertIn('CPUPerc',payload[0])
+            elif name=='list_images':
+                self.assertEqual(payload[0]['Repository'],'alpine')
+            elif name=='list_volumes':
+                self.assertEqual(payload[0]['Name'],'protected-data')
+            elif name=='list_networks':
+                self.assertEqual(payload[0]['Driver'],'bridge')
+            else:
+                self.assertIn('docker_version',payload)
+
+        messages=[
+            {'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-11-25'}},
+            {'jsonrpc':'2.0','method':'notifications/initialized'},
+            *({'jsonrpc':'2.0','id':n+2,'method':'tools/call',
+                'params':{'name':name,'arguments':{'profile':'local'}}}
+              for n,name in enumerate(names)),
+        ]
+        with patch('mcp_preview.DockerBackend',LeakyBackend), \
+                patch.dict('os.environ',{'DCC_MCP_TOKEN':grant['token']}):
+            output=io.StringIO()
+            stdio(self.state,io.StringIO('\n'.join(map(json.dumps,messages))+'\n'),output)
+        replies=[json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(len(replies),len(names)+1)
+        self.assertTrue(all(not reply['result']['isError'] for reply in replies[1:]))
+        self.assertNotIn(secret,output.getvalue())
+
+        for name,bad in [('container_stats',{'Message':secret}),
+                         ('list_images','not an array'),
+                         ('list_volumes',[{'Name':'safe'},secret])]:
+            with self.assertRaises(ValueError):
+                from mcp_preview import _mcp_docker_rows
+                _mcp_docker_rows(name,bad)
+
     def test_mcp_profile_names_and_host_addresses_resolve_only_within_grant(self):
         self.state.save_profile('local',{'name':'Review Docker','kind':'local','host':'192.168.1.20','port':2376,'permissions':sorted(CAPABILITIES)})
         grant=self.request('mcp/grants',{'profiles':['local']}).json

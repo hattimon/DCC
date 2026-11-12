@@ -1,10 +1,10 @@
-# Instalacja DCC Web 0.3.1
+# Instalacja DCC Web 0.3.2
 
 DCC Web działa w Windows, macOS i Linux z rodziny Debian. Wymaga Docker Engine/Docker Desktop z Compose v2 albo Python 3.12 w instalacji natywnej.
 
 ## Instalator Docker Compose
 
-Pobierz i rozpakuj [archiwum źródłowe DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.1/DCC-Web-0.3.1-source.zip), otwórz terminal w katalogu DCC-Web-0.3.1 i uruchom:
+Pobierz i rozpakuj [archiwum źródłowe DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.2/DCC-Web-0.3.2-source.zip), otwórz terminal w katalogu DCC-Web-0.3.2 i uruchom:
 
 ```
 py -3.12 apps/dcc-web/install.py
@@ -34,6 +34,6 @@ Na macOS/Linux ścieżka interpretera to .venv-dcc-web/bin/python. Domyślne dan
 
 ## Dostęp zdalny
 
-Kontenerowa wersja 0.3.1 zawiera opcjonalny DCC Remote Access z zrok. Po aktualizacji istniejącego kontenera przez DCC Container Updater odśwież panel pod dotychczasowym adresem. Otwórz **Ustawienia → Administracja i bezpieczeństwo → Dostęp do panelu i HTTPS (TLS) → Zdalny dostęp przez Internet**. Tunel jest domyślnie wyłączony, a aktywacja wymaga MFA administratora. Lokalny profil Dockera musi mieć uprawnienie **Instalowanie aplikacji**. [Konfiguracja Remote Access](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-remote-access/README.pl.md)
+Kontenerowa wersja 0.3.2 zawiera opcjonalny DCC Remote Access z zrok. Po aktualizacji istniejącego kontenera przez DCC Container Updater odśwież panel pod dotychczasowym adresem. Otwórz **Ustawienia → Administracja i bezpieczeństwo → Dostęp do panelu i HTTPS (TLS) → Zdalny dostęp przez Internet**. Tunel jest domyślnie wyłączony, a aktywacja wymaga MFA administratora. Lokalny profil Dockera musi mieć uprawnienie **Instalowanie aplikacji**. [Konfiguracja Remote Access](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.2/apps/dcc-remote-access/README.pl.md)
 
 Lokalne HTTPS włączysz w **Ustawienia → Administracja i bezpieczeństwo → Domena lokalna i publiczna**. Podaj prywatny adres IP hosta (zalecane) albo nazwę z lokalnego DNS, zapisz ustawienia i wybierz **Dostęp HTTPS → Włącz lokalne HTTPS**. Zarządzane rozszerzenie Caddy zachowuje obecny adres HTTP i wolumen danych, wiąże port tylko z tym prywatnym/loopback adresem oraz wybiera wolny port z zakresu 9443–9499. Otwórz wyświetlony adres HTTPS, pobierz lokalny certyfikat CA i zainstaluj/zaufaj mu na urządzeniu klienckim. Publiczne HTTPS jest osobną opcją wymagającą domeny oraz osiągalnych portów 80/443.

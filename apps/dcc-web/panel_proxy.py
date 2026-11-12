@@ -12,6 +12,7 @@ from http.client import HTTPConnection, HTTPSConnection, HTTPException
 from http.cookiejar import Cookie, CookieJar
 from http.cookies import SimpleCookie, CookieError
 from email.utils import parsedate_to_datetime
+import io
 import ipaddress
 import os
 import re
@@ -29,6 +30,7 @@ import paramiko
 from flask import abort, g, jsonify, render_template, request, session
 
 from engine import EngineError, _connect_ssh
+from panel_transport import open_local_panel
 from ports import enrich_containers
 from profile_facts import signature
 from security import ROLES, trusted_https_request
@@ -109,32 +111,157 @@ def _target(factory, profile, container_id, panel_id, domains, host_panels):
     link=next((v for v in links if v['panel_id']==panel_id and v['likely_panel']),None)
     if not link:
         abort(404,'Published web panel not found')
+    link['container_id']=container_id
+    link['host_network']=not any(
+        port['protocol']=='tcp' and port['container_port']==link['container_port']
+        and port['host_port']==link['host_port'] and port['host_ip']==link['bind_ip']
+        for port in matched['PublishedPorts'])
     return link
+
+
+class _SSHSocketOwner:
+    """Adapt a Paramiko channel to a real socket for the standard TLS verifier."""
+    def __init__(self, client, upstream):
+        self.client, self.upstream = client, upstream
+        self.socket, self.peer = socket.socketpair()
+        self.socket.settimeout(8)
+        threading.Thread(target=self._copy, args=(self.peer, upstream),
+                         daemon=True, name='dcc-panel-tls-up').start()
+        threading.Thread(target=self._copy, args=(upstream, self.peer),
+                         daemon=True, name='dcc-panel-tls-down').start()
+
+    def _copy(self, source, destination):
+        try:
+            while True:
+                try:
+                    data = source.recv(65536)
+                except socket.timeout:
+                    continue
+                if not data:
+                    break
+                destination.sendall(data)
+        except (OSError, EOFError, paramiko.SSHException):
+            pass
+        finally:
+            try:
+                destination.shutdown(socket.SHUT_WR)
+            except (OSError, EOFError, paramiko.SSHException):
+                pass
+
+    def close(self):
+        try:
+            self.peer.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        self.peer.close()
+        self.upstream.close()
+        self.client.close()
 
 
 def _socket(profile, link):
     url=urlsplit(link['url'])
     host=url.hostname
     client=None
+    channel=None
     try:
         if profile.get('kind') in {'ssh','balena'}:
             client=paramiko.SSHClient()
             _connect_ssh(client,profile)
-            destination='127.0.0.1' if link['bind_ip'] in {'0.0.0.0','::','*'} else link['bind_ip']
+            destination={'0.0.0.0':'127.0.0.1','*':'127.0.0.1','::':'::1'}.get(link['bind_ip'],link['bind_ip'])
             channel=client.get_transport().open_channel('direct-tcpip',(destination,url.port),('127.0.0.1',0),timeout=8)
             channel.settimeout(8)
+            if url.scheme=='https':
+                client=_SSHSocketOwner(client,channel)
+                channel=client.socket
         else:
-            if link['loopback_only'] and (profile.get('kind') in {'tcp','tunnel'} or os.environ.get('DCC_WEB_CONTAINER_NAME')):
+            containerized_local=(profile.get('kind','local')=='local'
+                                 and os.environ.get('DCC_WEB_CONTAINER_NAME'))
+            if containerized_local and not profile.get('context') and not link.get('host_network'):
+                identity=link.get('container_id')
+                port=link.get('container_port')
+                if (not isinstance(identity,str) or not re.fullmatch('[a-f0-9]{64}',identity) or
+                        type(port) is not int or not 1 <= port <= 65535):
+                    raise EngineError('The selected Docker panel target cannot be verified')
+                channel,client=open_local_panel(profile,identity,port)
+            elif link['loopback_only'] and (containerized_local or profile.get('kind') in {'tcp','tunnel'}):
                 raise EngineError('A loopback-only panel needs an SSH profile for its Docker host')
-            if profile.get('kind') in {'tunnel','wsl'} and not profile.get('panel_host'):
+            elif profile.get('kind') in {'tunnel','wsl'} and not profile.get('panel_host'):
                 raise EngineError('Configure a reachable panel host address for this profile')
-            channel=socket.create_connection((host,url.port),timeout=8)
+            else:
+                channel=socket.create_connection((host,url.port),timeout=8)
         if url.scheme=='https':
             channel=ssl.create_default_context().wrap_socket(channel,server_hostname=host)
         return channel,client
     except Exception:
+        if channel:
+            channel.close()
         if client:client.close()
         raise
+
+
+class _PanelRawReader(io.RawIOBase):
+    """Read one available transport chunk, including from a Paramiko channel.
+
+    Paramiko's ChannelFile does not implement read1(), which http.client
+    requires for finite responses and chunked/SSE streams. Its read(size)
+    also waits for the full size, preventing timely SSE delivery.
+    """
+    def __init__(self, channel, release):
+        self.channel = channel
+        self.release = release
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        received = self.channel.recv(len(buffer))
+        buffer[:len(received)] = received
+        return len(received)
+
+    def close(self):
+        if not self.closed:
+            try:
+                self.release()
+            finally:
+                super().close()
+
+
+class _PanelHTTPSocket:
+    """Give http.client a buffered reader over TCP or SSH direct-tcpip."""
+    def __init__(self, channel):
+        self.channel = channel
+        self.lock = threading.Lock()
+        self.readers = 0
+        self.closing = False
+
+    def makefile(self, mode='rb', buffering=None):
+        if mode != 'rb':
+            raise ValueError('Unsupported panel transport mode')
+        with self.lock:
+            if self.closing:
+                raise OSError('Panel transport is closed')
+            self.readers += 1
+        return io.BufferedReader(_PanelRawReader(self.channel,self._release))
+
+    def _release(self):
+        with self.lock:
+            self.readers -= 1
+            should_close = self.closing and self.readers == 0
+        if should_close:
+            self.channel.close()
+
+    def close(self):
+        # http.client closes its socket once it sees Connection: close, even
+        # though HTTPResponse must keep reading the body (including live SSE).
+        # Match socket.makefile's lifetime semantics for SSH channels as well.
+        with self.lock:
+            self.closing = True
+            should_close = self.readers == 0
+        if should_close:
+            self.channel.close()
+
+    def __getattr__(self, name):
+        return getattr(self.channel, name)
 
 
 def _close(connection,client=None):
@@ -403,13 +530,16 @@ def register_panels(app,factory,profile,domains,host_panels,state):
         if len(payload)>MAX_BODY:abort(413,'Panel upload exceeds gateway limit')
         headers=_headers(data,link['url'])
         connection=ssh=None
+        result=None
+        streaming=False
         try:
             for attempt in range(6):
                 if not ctx.active():abort(401,'Login required')
                 url=link['url']+path
+                result=None
                 channel,ssh=_socket(selected,link)
                 connection=HTTPConnection(urlsplit(link['url']).hostname,timeout=8)
-                connection.sock=channel
+                connection.sock=_PanelHTTPSocket(channel)
                 cookie=ctx.cookies(url)
                 outgoing=dict(headers)
                 if cookie:outgoing['Cookie']=cookie
@@ -424,8 +554,10 @@ def register_panels(app,factory,profile,domains,host_panels,state):
                     path=safe_path(location.path+('?' + location.query if location.query else ''))
                     if result.status==303 or result.status in {301,302} and method=='POST':
                         method='GET';payload=b''
+                    result.close()
                     connection.close()
                     if ssh:ssh.close()
+                    result=connection=ssh=None
                     continue
                 content_type=result.getheader('Content-Type','application/octet-stream')
                 if 'text/event-stream' in content_type:
@@ -436,6 +568,7 @@ def register_panels(app,factory,profile,domains,host_panels,state):
                         stream.close()
                         _close(conn,client)
                     value=panels.add_stream(ctx,result,close,'sse')
+                    streaming=True
                     return jsonify(**value,status=result.status,headers={'content-type':content_type},path=path)
                 chunks=[];size=0;started=time.monotonic()
                 while True:
@@ -457,12 +590,12 @@ def register_panels(app,factory,profile,domains,host_panels,state):
                 return jsonify(status=result.status,headers={k.lower():v for k,v in received if k.lower() in RESPONSE_HEADERS},
                                body=base64.b64encode(raw).decode(),path=path,cookies=ctx.visible_cookies(url))
             abort(502,'Too many panel redirects')
-        except (OSError,HTTPException,paramiko.SSHException,zlib.error) as error:
+        except (OSError,EOFError,HTTPException,paramiko.SSHException,zlib.error) as error:
             raise EngineError('Panel is unreachable from DCC Web. Check the panel host, published port and SSH forwarding.') from error
         finally:
             # Streams transfer ownership of the socket to the bounded manager.
-            if connection and not ('value' in locals() and 'stream' in value):
-                if 'result' in locals():result.close()
+            if connection and not streaming:
+                if result:result.close()
                 connection.close()
                 if ssh:ssh.close()
 

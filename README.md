@@ -15,13 +15,13 @@ A cross-platform desktop control panel for managing Docker on Windows and Debian
 
 [![Windows EXE v1.3.12](https://img.shields.io/badge/Windows-EXE%20v1.3.12-blue)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter-Setup-1.3.12.exe)
 [![Linux DEB v1.3.12](https://img.shields.io/badge/Linux-DEB%20v1.3.12-orange)](https://github.com/hattimon/DCC/releases/download/v1.3.12/DockerControlCenter_1.3.12_amd64.deb)
-[![DCC Web v0.3.1](https://img.shields.io/badge/DCC%20Web-v0.3.1-20bfc8?logo=docker&logoColor=white)](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.1/DCC-Web-0.3.1-source.zip)
+[![DCC Web v0.3.2](https://img.shields.io/badge/DCC%20Web-v0.3.2-20bfc8?logo=docker&logoColor=white)](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.2/DCC-Web-0.3.2-source.zip) [Download / Pobierz DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.2/DCC-Web-0.3.2-source.zip)
 
 DCC Web: Windows, macOS, Linux · Docker Compose.
 
-[Install DCC Web (EN)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/installation.md) · [Instalacja DCC Web (PL)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/installation.pl.md)
+[Install DCC Web (EN)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.2/apps/dcc-web/docs/installation.md) · [Instalacja DCC Web (PL)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.2/apps/dcc-web/docs/installation.pl.md)
 
-Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.3.1](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1) · [DCC Container Updater 1.1.7](https://github.com/hattimon/DCC/releases/tag/updater-v1.1.7) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
+Release notes / Opisy wydań: [DCC Desktop 1.3.12](https://github.com/hattimon/DCC/releases/tag/v1.3.12) · [DCC Web 0.3.2](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.2) · [DCC Container Updater 1.1.7](https://github.com/hattimon/DCC/releases/tag/updater-v1.1.7) · [All releases / Wszystkie wydania](https://github.com/hattimon/DCC/releases)
 
 ### Automatic DCC Web updates / Automatyczne aktualizacje DCC Web
 
@@ -202,17 +202,17 @@ Materiały podmiotów trzecich podlegają ich własnym licencjom lub prawom wła
 
 ## DCC Web
 
-DCC Web **0.3.1** preserves original container-panel addresses and opens them through a session-protected gateway on public ingress. It adds isolated service cookies, forms, ES modules, SSE and WebSocket bridging. / Wersja **0.3.1** zachowuje oryginalne adresy paneli kontenerów i otwiera je przez bramę chronioną sesją DCC. Dodaje izolację cookies usług oraz obsługę formularzy, modułów ES, SSE i WebSocket. [Release / Wydanie 0.3.1](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1)
+DCC Web **0.3.2** improves panels opened through the existing public DCC Web address, including local Docker projects, SSH profiles and Container Updater rendering. / **0.3.2** poprawia panele otwierane pod publicznym adresem DCC Web, w tym lokalne projekty Docker, profile SSH i widok Container Updater. [Release / Wydanie 0.3.2](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.2)
 
 Monitoring in **0.3.0** supports descending → ascending → default sorting for CPU, RAM, RAM %, network, disk I/O and processes. / Monitoring w **0.3.0** obsługuje sortowanie malejące → rosnące → domyślne dla CPU, RAM, RAM %, sieci, dysku I/O i procesów.
 
 DCC Web **0.3.0** keeps reconnecting after Internet outages and adds optional tunnel recovery after a Web/computer restart. Enable both restart recovery and Updater handoff in the local Remote Internet Access dialog to cover both cases. / DCC Web **0.3.0** ponawia połączenie po przerwie w Internecie i dodaje opcjonalne wznowienie tunelu po restarcie panelu/komputera. Zaznacz obie zgody na wznowienie w lokalnych ustawieniach zdalnego dostępu. [Release / Wydanie 0.3.0](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.0)
 
-DCC Web is the browser-based counterpart to DCC Desktop and runs as a separate service. See the [product overview](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/README.md) and the [GitHub repository](https://github.com/hattimon/DCC).
+DCC Web is the browser-based counterpart to DCC Desktop and runs as a separate service. See the [product overview](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.2/apps/dcc-web/README.md) and the [GitHub repository](https://github.com/hattimon/DCC).
 
-DCC Web provides container management, profiles with visible profile IDs, logs, monitoring, Compose and the shared App Store, along with themes, local audio, English and Polish, clickable panel links, an AI configuration assistant and scoped MCP tools for authorized read and write operations. Its Docker image is published in GHCR and listed in the App Store catalog. [Installation guide](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/installation.md) · [Feature matrix](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/feature-matrix.md)
+DCC Web provides container management, profiles with visible profile IDs, logs, monitoring, Compose and the shared App Store, along with themes, local audio, English and Polish, clickable panel links, an AI configuration assistant and scoped MCP tools for authorized read and write operations. Its Docker image is published in GHCR and listed in the App Store catalog. [Installation guide](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.2/apps/dcc-web/docs/installation.md) · [Feature matrix](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.2/apps/dcc-web/docs/feature-matrix.md)
 
-DCC Web 0.2.4 adds grant-scoped agent instructions and project ZIPs for seven MCP clients, including an optional ChatGPT Web variant for Codex. [MCP guide (EN)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/mcp.md) · [Instrukcja MCP (PL)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.1/apps/dcc-web/docs/mcp.pl.md)
+DCC Web 0.2.4 adds grant-scoped agent instructions and project ZIPs for seven MCP clients, including an optional ChatGPT Web variant for Codex. [MCP guide (EN)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.2/apps/dcc-web/docs/mcp.md) · [Instrukcja MCP (PL)](https://github.com/hattimon/DCC/blob/dcc-web-v0.3.2/apps/dcc-web/docs/mcp.pl.md)
 
 DCC Web 0.2.6 accepts hosted zrok reservations on `shares.zrok.io` and can resume a pending reservation using the saved environment. After updating through DCC Container Updater, open **Settings → Administration and security → Panel access and HTTPS (TLS) → Remote Internet Access** to finish setup.
 

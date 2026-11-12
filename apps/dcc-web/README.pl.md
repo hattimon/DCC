@@ -1,12 +1,12 @@
-# DCC Web 0.3.1
+# DCC Web 0.3.2
 
-Wersja 0.3.1 zachowuje oryginalne adresy paneli kontenerów i otwiera je przez chronioną sesję DCC przy wejściu publicznym. Dodaje izolację, cookies usług oraz obsługę formularzy, modułów JS i połączeń SSE/WebSocket. [Konfiguracja, bezpieczeństwo i ograniczenia](docs/panels.pl.md).
+Wersja 0.3.2 zachowuje oryginalne adresy paneli kontenerów i otwiera je przez chronioną sesję DCC przy wejściu publicznym. Dodaje izolację, cookies usług oraz obsługę formularzy, modułów JS i połączeń SSE/WebSocket. [Konfiguracja, bezpieczeństwo i ograniczenia](docs/panels.pl.md).
 
 Monitoring sortuje CPU, RAM, RAM %, sieć, dysk I/O i liczbę procesów tak jak zakładka Kontenery: malejąco → rosnąco → kolejność domyślna. Sieć i dysk są porządkowane według sumy obu wyświetlanych kierunków.
 
 Wersja 0.3.0 ponawia połączenie po awarii Internetu/DNS/zrok i odtwarza nieoczekiwanie zatrzymany tunel. Przy lokalnym włączaniu dostępu zaznacz **Wznawiaj tunel po restarcie DCC Web lub komputera**, aby zapisać zgodę na wznowienie. Osobno zaznacz zgodę dla Updatera, aby objąć aktualizacje obrazu. Wyłączenie dostępu anuluje wznowienie; publiczny panel pozostaje zamknięty do ponownej weryfikacji HTTPS.
 
-Przy włączaniu zrok z lokalnego panelu administrator może zezwolić DCC Container Updaterowi 1.1.4 lub nowszemu na zatrzymanie i wznowienie tunelu podczas zgodnych aktualizacji Web. Oba obrazy DCC Web muszą obsługiwać przekazanie zgody. Przy pierwszej aktualizacji ze starszego Web wykonaj kroki wskazane obok blokady. [Opis wydania](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.1)
+Przy włączaniu zrok z lokalnego panelu administrator może zezwolić DCC Container Updaterowi 1.1.4 lub nowszemu na zatrzymanie i wznowienie tunelu podczas zgodnych aktualizacji Web. Oba obrazy DCC Web muszą obsługiwać przekazanie zgody. Przy pierwszej aktualizacji ze starszego Web wykonaj kroki wskazane obok blokady. [Opis wydania](https://github.com/hattimon/DCC/releases/tag/dcc-web-v0.3.2)
 
 Wersja 0.2.7 ustawia dla profili BalenaOS standardowy port SSH 22222 i migruje profile ze starym domyślnym portem 22. Błędy SSH wskazują teraz typowe przyczyny, np. brak łączności, błąd uwierzytelniania lub weryfikacji klucza hosta. Przenosi też starszą sieć panelu DCC Remote Access do sprawdzonej puli podsieci, aby izolowana sieć nie przejmowała tras do zdalnych profili. Podczas migracji sidecar tunelu zostaje zatrzymany i po aktualizacji trzeba go ponownie włączyć. [Konfiguracja profili](docs/configuration.pl.md)
 
@@ -42,7 +42,7 @@ Przy instalacji ze Sklepu DCC świeży kontener tworzy konto `admin` z silnym, l
 
 ### Instalacja na Windows, macOS lub Linux
 
-Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.1/DCC-Web-0.3.1-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.3.1`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
+Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.2/DCC-Web-0.3.2-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.3.2`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
@@ -60,7 +60,7 @@ Dostęp do `/var/run/docker.sock` daje panelowi administracyjną kontrolę nad h
 
 [Instalacja](docs/installation.md) · [Bezpieczeństwo](docs/security.md) · [Profile](docs/configuration.md) · [Sklep](docs/catalogs.md) · [Funkcje i ograniczenia](docs/feature-matrix.md)
 
-Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.3.1/apps/dcc-web).
+Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.3.2/apps/dcc-web).
 
 
 ## Klucze SSH po imporcie profili

@@ -5,6 +5,7 @@ unique QA resources only. No existing containers, keys or volumes are modified.
 """
 import argparse
 import base64
+from contextlib import closing
 import http.client
 import io
 import json
@@ -67,6 +68,24 @@ remote_maintenance.start_control = start_fixture
 web.main()
 """
 
+PROJECT_PANEL = """
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import socket
+
+class Panel(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = Path('/data/marker').read_bytes()
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/plain')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+# Deliberately not on container localhost: Docker publishes the interface IP.
+ThreadingHTTPServer((socket.gethostbyname(socket.gethostname()), 3000), Panel).serve_forever()
+"""
+
 
 def wait_for(check, description):
     for _ in range(120):
@@ -98,9 +117,13 @@ def main():
     parser.add_argument('--with-remote-access', action='store_true', help='Attach a stopped managed zrok sidecar')
     parser.add_argument('--with-tunnel-resume', action='store_true', help='Exercise active tunnel handoff with a synthetic provider and local target image')
     parser.add_argument('--verify-catalog', action='store_true', help='Require the official catalog to offer the target')
+    parser.add_argument('--verify-release-candidate', action='store_true',
+                        help='Use the checked-out catalog and exercise a running loopback-only project panel')
     args = parser.parse_args()
     if args.with_tunnel_resume and not args.local_target:
         parser.error('--with-tunnel-resume requires a local target')
+    if args.verify_release_candidate and not (args.local_target and args.expect_remote_access):
+        parser.error('--verify-release-candidate needs --local-target and --expect-remote-access')
     args.with_remote_access = args.with_remote_access or args.with_tunnel_resume
     args.expect_remote_access = args.expect_remote_access or args.with_remote_access
     client = docker.from_env()
@@ -110,7 +133,7 @@ def main():
     network_name = proxy_name + '-network'
     labels = {'dcc.qa': 'updater-https', 'io.dcc.web.proxy': name}
     volumes = []
-    proxy = network = None
+    proxy = network = project = project_network = project_data = None
     remote_name = None
     runner = client.containers.get(os.environ['HOSTNAME']) if os.getenv('DCC_QA_IN_CONTAINER') else None
     old_image, target = args.old_image, args.target_image
@@ -153,7 +176,8 @@ def main():
         credential = re.search(rb'DCC_WEB_INITIAL_CREDENTIALS username=(\S+) password=(\S+)', web.logs())
         assert credential, 'Synthetic bootstrap account was not created'
         code = ('import base64;from state import State;from host_setup import Domains;'
-                'd=Domains(State("/data"));d.save({"local":"127.0.0.1","public":""});'
+                'd=Domains(State("/data"));d.save({"local":"127.0.0.1","public":"",'
+                '"panel_proxy_enabled":True});'
                 'print(base64.b64encode(d._proxy_config(d.saved(),True,False,d.proxy_token())).decode())')
         result = web.exec_run(['python', '-c', code], user='10001:10001')
         assert result.exit_code == 0, 'Cannot prepare synthetic HTTPS settings'
@@ -209,6 +233,27 @@ def main():
             return headers, body
 
         wait_for(login_page, 'Old Web HTTPS does not respond')
+        if args.verify_release_candidate:
+            project_network = client.networks.create(name+'-project', driver='bridge')
+            project_data = client.volumes.create(name=name+'-project-data')
+            project = client.containers.run(target, name=name+'-project-panel', detach=True,
+                entrypoint=['python'], command=['-u','-c',
+                    "from pathlib import Path; Path('/data/marker').write_text('preserved-project-data')\n"
+                    + PROJECT_PANEL],
+                network=project_network.name, ports={'3000/tcp':('127.0.0.1',None)},
+                volumes={project_data.name:{'bind':'/data','mode':'rw'}},
+                healthcheck={'test':['NONE']})
+            project.reload()
+            project_started = project.attrs['State']['StartedAt']
+            project_port = project.attrs['NetworkSettings']['Ports']['3000/tcp'][0]['HostPort']
+
+            def project_ready():
+                with closing(http.client.HTTPConnection('127.0.0.1',int(project_port),timeout=3)) as conn:
+                    conn.request('GET','/')
+                    assert conn.getresponse().read()==b'preserved-project-data'
+                return True
+
+            wait_for(project_ready, 'Original project panel did not respond on host loopback')
         if args.with_remote_access:
             code = """import sys
 sys.path.insert(0, "/opt/dcc")
@@ -245,6 +290,12 @@ with closing(remote.client_factory()) as client:
             if args.expect_remote_access:
                 entries = [app for app in apps if app['name'] == 'DCC Remote Access']
                 assert len(entries) == 1 and entries[0]['category'] == 'DCC', entries
+        if args.verify_release_candidate:
+            catalog_file = Path(__file__).resolve().parents[3] / 'dcc-catalog.json'
+            apps = json.loads(catalog_file.read_text(encoding='utf-8'))['apps']
+            candidate = service.inspect_container(web, apps, all_containers=inventory)
+            assert candidate['update_available'] and candidate['supported'], candidate
+            assert candidate['target_image'] == target, candidate
         # Inject an unhealthy replacement once and verify the real Docker
         # rollback restores the old container and the HTTPS DNS alias.
         wait_for_health = service._wait_until_healthy
@@ -299,6 +350,26 @@ with closing(remote.client_factory()) as client:
         status, _, body = request('/api/bootstrap', headers={'Cookie':cookie})
         bootstrap = json.loads(body)
         assert status == 200 and bootstrap['user']['role'] == 'admin' and bootstrap['version'] == args.expected_version
+        if args.verify_release_candidate:
+            status, _, page = request('/', headers={'Cookie':cookie})
+            assert status == 200
+            csrf = re.search(rb'name="csrf-token" content="([^"]+)"', page)[1].decode()
+            status, _, body = request('/api/containers', headers={'Cookie':cookie})
+            assert status == 200
+            entry = next(row for row in json.loads(body)['containers'] if row['ID']==project.id)
+            link = next(link for link in entry['PanelLinks'] if link['container_port']==3000)
+            assert link['url']==f'http://127.0.0.1:{project_port}' and link['loopback_only']
+            endpoint = f'/api/panels/local/{project.id}/{link["panel_id"]}/request'
+            status, _, body = request(endpoint, 'POST', '{"path":"/"}',
+                {'Content-Type':'application/json','Origin':origin,'Cookie':cookie,'X-CSRF-Token':csrf})
+            assert status==200, (status,body)
+            assert base64.b64decode(json.loads(body)['body'])==b'preserved-project-data'
+            assert client.containers.get(project.name).id==project.id
+            project.reload()
+            assert project.attrs['State']['Running'] and project.attrs['State']['StartedAt']==project_started
+            assert project_network.name not in web.attrs['NetworkSettings']['Networks']
+            assert proxy.attrs['State']['Running']
+            print('Catalog offered the release and the preserved project panel opened over the isolated relay.')
         if args.expect_remote_access:
             status, _, body = request('/api/admin/remote-access', headers={'Cookie':cookie})
             remote = json.loads(body)
@@ -342,6 +413,12 @@ with closing(remote.client_factory()) as client:
             'synthetic_tunnel_resumed':args.with_tunnel_resume,
             'official_catalog_verified':args.verify_catalog}))
     finally:
+        if project:
+            project.remove(force=True, v=False)
+        if project_network:
+            project_network.remove()
+        if project_data:
+            project_data.remove()
         if runner and network:
             try: network.disconnect(runner)
             except docker.errors.APIError: pass

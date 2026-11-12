@@ -29,7 +29,7 @@ CLIENTS = ["OpenAI Codex", "Claude Desktop", "Claude Code", "Cursor", "Windsurf"
 READ_TOOLS = {
     "host_info": "Read allowlisted Docker-engine OS, architecture and version facts; the SSH host OS may differ",
     "list_containers": "List containers in an authorized Docker profile",
-    "inspect_container": "Inspect a container, with secret values redacted",
+    "inspect_container": "Inspect selected container metadata; commands, environment and secrets are omitted",
     "container_logs": "Read a bounded range of container logs",
     "container_stats": "Read current CPU, memory, network and I/O",
     "list_images": "List Docker images",
@@ -54,6 +54,95 @@ TERMINAL_TOOLS = {
     "host_terminal_close": "Close this MCP connection's authorized terminal",
 }
 TOOLS = {**READ_TOOLS, **WRITE_TOOLS, **TERMINAL_TOOLS}
+
+
+# Docker ps/inspect can contain credentials in arbitrary fields (Command,
+# Args, Entrypoint, labels, bind mount sources and health-check output). A
+# name-based redactor cannot safely sanitize positional command arguments.
+# Build the MCP response from a small allowlist instead of passing the raw
+# Docker payload to redact(). This projection applies to every MCP transport.
+_CONTAINER_LIST_FIELDS = (
+    "ID", "Names", "Image", "State", "Status", "Ports", "Networks",
+    "RestartPolicy", "CreatedAt", "RunningFor",
+)
+
+# Docker CLI resource and statistics JSON includes arbitrary extra keys. Some
+# versions/plugins expose Labels, Mountpoint, custom metadata and other values
+# that are not safe to send to MCP clients. Keep only UI-relevant scalar facts.
+_MCP_DOCKER_ROW_FIELDS = {
+    "container_stats": (
+        "ID", "Container", "Name", "CPUPerc", "MemUsage", "MemPerc",
+        "NetIO", "BlockIO", "PIDs",
+    ),
+    "list_images": ("Repository", "Tag", "ID", "Digest", "CreatedSince", "CreatedAt", "Size"),
+    "list_volumes": ("Name", "Driver", "Scope"),
+    "list_networks": ("Name", "ID", "Driver", "Scope", "IPv6", "Internal"),
+}
+
+
+def _mcp_fields(source, fields):
+    if not isinstance(source, dict):
+        return {}
+    return {key: source[key] for key in fields
+            if key in source and (source[key] is None or type(source[key]) in (str, int, float, bool))}
+
+
+def _mcp_container_list(rows):
+    if not isinstance(rows, list):
+        raise ValueError("Invalid Docker container list")
+    if any(not isinstance(row, dict) for row in rows):
+        raise ValueError("Invalid Docker container entry")
+    return [_mcp_fields(row, _CONTAINER_LIST_FIELDS) for row in rows]
+
+
+def _mcp_docker_rows(tool, rows):
+    """Project Docker CLI rows onto a bounded, transport-independent schema."""
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise ValueError("Invalid Docker resource or statistics list")
+    fields = _MCP_DOCKER_ROW_FIELDS[tool]
+    result = []
+    for row in rows[:1000]:
+        values = _mcp_fields(row, fields)
+        result.append({key: value for key, value in values.items()
+                       if not isinstance(value, str) or (len(value) <= 512
+                       and all(char.isprintable() for char in value))})
+    return result
+
+
+def _mcp_container_inspect(row):
+    if not isinstance(row, dict):
+        raise ValueError("Invalid Docker inspection result")
+    result = _mcp_fields(row, ("Id", "Name", "Created", "RestartCount"))
+    config = _mcp_fields(row.get("Config"), ("Image", "User"))
+    if config:
+        result["Config"] = config
+    state = row.get("State")
+    if isinstance(state, dict):
+        visible = _mcp_fields(state, (
+            "Status", "Running", "Paused", "Restarting", "OOMKilled", "Dead",
+            "Pid", "ExitCode", "StartedAt", "FinishedAt",
+        ))
+        health = _mcp_fields(state.get("Health"), ("Status", "FailingStreak"))
+        if health:
+            visible["Health"] = health  # Never include Health.Log.Output.
+        result["State"] = visible
+    host = row.get("HostConfig")
+    if isinstance(host, dict):
+        visible = _mcp_fields(host, ("NetworkMode", "Memory", "NanoCpus", "PidsLimit"))
+        policy = _mcp_fields(host.get("RestartPolicy"), ("Name", "MaximumRetryCount"))
+        if policy:
+            visible["RestartPolicy"] = policy
+        result["HostConfig"] = visible
+    mounts = row.get("Mounts")
+    if isinstance(mounts, list):
+        # Source, Driver options and propagation metadata can expose secrets.
+        result["Mounts"] = [_mcp_fields(item, ("Type", "Name", "Destination", "RW"))
+                            for item in mounts[:128] if isinstance(item, dict)]
+    networks = row.get("NetworkSettings")
+    if isinstance(networks, dict) and isinstance(networks.get("Networks"), dict):
+        result["NetworkNames"] = [name for name in networks["Networks"]
+                                  if isinstance(name, str) and re.fullmatch(r"[a-zA-Z0-9_.-]{1,128}", name)][:128]
+    return result
 MUTATING_TOOLS = set(WRITE_TOOLS) | set(TERMINAL_TOOLS)
 ACTION_TOOLS = {
     "container_start": ("start", {"containers.write"}),
@@ -240,7 +329,9 @@ def _create_args(arguments, engine):
 
 
 class MCPService:
-    def __init__(self, state, token, backend_factory=DockerBackend, terminal_factory=None, command_factory=SSHCommand):
+    def __init__(self, state, token, backend_factory=None, terminal_factory=None, command_factory=SSHCommand):
+        if backend_factory is None:
+            backend_factory = DockerBackend
         self.state, self.digest, self.factory = state, hashlib.sha256(token.encode()).hexdigest(), backend_factory
         self.negotiated = False
         self.initialized = False
@@ -424,16 +515,16 @@ class MCPService:
             elif name == "host_info":
                 result = profile_facts.remember(self.state, profile, engine.info())
             elif name == "list_containers":
-                result = engine.containers()
+                result = _mcp_container_list(engine.containers())
             elif name == "inspect_container":
-                result = engine.inspect(_container_id(arguments.get("container")))
+                result = _mcp_container_inspect(engine.inspect(_container_id(arguments.get("container"))))
             elif name == "container_logs":
                 target = _container_id(arguments.get("container"))
                 result = engine.logs(target, max(1, min(int(arguments.get("tail", 200)), 2000)))
             elif name == "container_stats":
-                result = engine.stats()
+                result = _mcp_docker_rows(name, engine.stats())
             elif name in {"list_images", "list_volumes", "list_networks"}:
-                result = engine.resources(name.removeprefix("list_"))
+                result = _mcp_docker_rows(name, engine.resources(name.removeprefix("list_")))
             elif name in ACTION_TOOLS:
                 target = _container_id(arguments.get("container"))
                 action = ACTION_TOOLS[name][0]

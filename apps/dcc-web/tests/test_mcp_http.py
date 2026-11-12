@@ -64,7 +64,9 @@ class PublicMCPTests(unittest.TestCase):
 
     def new_grant(self):
         response=self.admin('/api/mcp/grants',{'client':'OpenAI Codex','name':'Public QA','profiles':['ssh-fixture'],
-            'tools':['list_containers','host_terminal_open','host_terminal_read','host_terminal_write','host_terminal_close'],
+            'tools':['host_info','list_containers','inspect_container','container_logs','container_stats',
+                     'list_images','list_volumes','list_networks',
+                     'host_terminal_open','host_terminal_read','host_terminal_write','host_terminal_close'],
             'mode':'write','allow_host_terminal':True,'terminal_profiles':['ssh-fixture'],'allow_public':True,'public_session_minutes':30},'POST')
         self.assertEqual(response.status_code,201,response.json)
         return response.json
@@ -162,6 +164,60 @@ class PublicMCPTests(unittest.TestCase):
         stored=json.dumps([dict(row) for row in self.state.rows('SELECT * FROM mcp_oauth_sessions')])
         self.assertNotIn(token,stored)
         self.assertNotIn(code,json.dumps([dict(row) for row in self.state.rows('SELECT * FROM mcp_oauth_codes')]))
+
+    def test_public_mcp_container_reads_strip_untrusted_metadata(self):
+        secret='HTTP-MCP-DOCKER-SECRET-42'
+        token=self.session_token()
+        entry={'ID':'a'*64,'Names':'safe-container','Image':'safe/image:1',
+               'State':'running','Ports':'127.0.0.1:8080->80/tcp',
+               'Command':'--api-key='+secret,'Labels':'token='+secret,
+               'Args':['--token',secret]}
+        inspected={'Id':'a'*64,'Name':'/safe-container','Config':{
+            'Image':'safe/image:1','Env':['TOKEN='+secret],
+            'Cmd':['--secret',secret],'Entrypoint':['sh','-c',secret],
+            'Labels':{'secret':secret}},
+            'State':{'Status':'running','Health':{'Status':'healthy','Log':[{'Output':secret}]}},
+            'HostConfig':{'Binds':['/'+secret+':/app']},
+            'Mounts':[{'Type':'bind','Source':'/'+secret,'Destination':'/app','RW':True}]}
+        with patch.object(FakeBackend,'containers',return_value=[entry]), \
+             patch.object(FakeBackend,'inspect',return_value=inspected):
+            listing=self.rpc_call(token,self.grant['token'])
+            details=self.rpc_call(token,self.grant['token'],name='inspect_container',container='a'*64)
+        for response in (listing,details):
+            self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+            self.assertFalse(response.json['result']['isError'])
+            self.assertNotIn(secret,response.get_data(as_text=True))
+        self.assertEqual(json.loads(listing.json['result']['content'][0]['text'])[0]['Names'],'safe-container')
+        self.assertEqual(json.loads(details.json['result']['content'][0]['text'])['State']['Health'],{'Status':'healthy'})
+
+    def test_public_mcp_other_docker_reads_strip_untrusted_metadata(self):
+        secret='HTTP-MCP-RESOURCE-SECRET-52'
+        token=self.session_token()
+        baseline=FakeBackend({'kind':'local'})
+        bad_stats=baseline.stats()
+        bad_stats[0].update(Labels={'token':secret}, ProcessLabel=secret,
+                            Extra=['--credential',secret])
+        bad_resources={kind:baseline.resources(kind) for kind in ('images','volumes','networks')}
+        for rows in bad_resources.values():
+            rows[0].update(Labels={'token':secret}, Mountpoint='/private/'+secret,
+                           Options={'credential':secret})
+        bad_info={**baseline.info(),'RegistryAuth':secret,'Labels':{'token':secret}}
+        with patch.object(FakeBackend,'stats',return_value=bad_stats), \
+             patch.object(FakeBackend,'resources',side_effect=lambda kind:bad_resources[kind]), \
+             patch.object(FakeBackend,'info',return_value=bad_info):
+            for name in ('host_info','container_stats','list_images','list_volumes','list_networks'):
+                response=self.rpc_call(token,self.grant['token'],name=name)
+                self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+                self.assertFalse(response.json['result']['isError'])
+                self.assertNotIn(secret,response.get_data(as_text=True),name)
+                self.assertNotIn('Labels',response.get_data(as_text=True),name)
+                self.assertNotIn('Mountpoint',response.get_data(as_text=True),name)
+        # Log output has no universal secret schema, but well-known key/value
+        # secrets are redacted before either MCP transport returns it.
+        with patch.object(FakeBackend,'logs',return_value='2026-11-09 password='+secret):
+            response=self.rpc_call(token,self.grant['token'],name='container_logs',container='a'*64)
+        self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+        self.assertNotIn(secret,response.get_data(as_text=True))
 
     def test_shared_totp_replay_expiry_and_wrong_browser_binding(self):
         client,verifier,path=self.pending()

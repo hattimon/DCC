@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import tempfile
 import threading
+import time
 
 APP=Path(__file__).resolve().parents[1]
 ROOT=APP.parents[1]
@@ -32,9 +33,13 @@ def main():
                 def infrastructure(self):return {'name':'Synthetic updater host','operating_system':'Test Linux','architecture':'amd64','docker_version':'fixture'}
                 def scan(self,*args,**kwargs):return []
                 def check_self_update(self,*args,**kwargs):return {'checked':True,'update_available':False,'supported':True,'message':'Synthetic fixture'}
-            app=module.create_app(directory,service_factory=Service,print_credentials=False)
             from werkzeug.security import generate_password_hash
             (Path(directory)/'admin_password_hash').write_text(generate_password_hash('Fixture-updater-4433'),encoding='utf-8')
+            (Path(directory)/'language').write_text('pl',encoding='utf-8')
+            stamp=time.time()
+            fixture_container={'id':'fixture-container-id','name':'fixture-container','current_image':'fixture/app:1','target_image':'','status':'running','is_panel':False,'is_compose':False,'supported':False,'auto_update_supported':False,'update_available':False,'check_error':False,'scan_pending':True,'checked_at':stamp,'message':'Synthetic browser fixture'}
+            (Path(directory)/'last_scan.json').write_text(json.dumps({'containers':[fixture_container],'scanned_at':stamp}),encoding='utf-8')
+            app=module.create_app(directory,service_factory=Service,print_credentials=False)
             server=make_server('127.0.0.1',args.updater_port,app,threaded=True)
         else:
             sys.path.insert(0,str(APP));sys.path.insert(0,str(APP/'tests'))
