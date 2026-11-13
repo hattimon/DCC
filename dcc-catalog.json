@@ -388,8 +388,8 @@
       "homepage_url": "https://beszel.dev/",
       "icon_text": "📊",
       "upstream_repo": "henrygd/beszel",
-      "latest_release": "v0.21.1",
-      "latest_release_url": "https://github.com/henrygd/beszel/releases/tag/v0.21.1",
+      "latest_release": "v0.21.2",
+      "latest_release_url": "https://github.com/henrygd/beszel/releases/tag/v0.21.2",
       "icon_url": "catalog/media/icons/beszel-hub.png"
     },
     {
@@ -534,8 +534,8 @@
       "homepage_url": "https://nodejs.org/",
       "icon_text": "💻",
       "upstream_repo": "nodejs/node",
-      "latest_release": "v26.13.1",
-      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v26.13.1",
+      "latest_release": "v27.0.0-alpha.0.1.0",
+      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v27.0.0-alpha.0.1.0",
       "icon_url": "catalog/media/icons/nodejs.png"
     },
     {
