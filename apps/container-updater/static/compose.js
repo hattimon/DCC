@@ -33,6 +33,16 @@ function composeReview(title, content) {
   $('compose-review-body').replaceChildren(content);
   if (!$('compose-review').open) $('compose-review').showModal();
 }
+async function downloadWindowsCinema(project) {
+  const base = `/api/compose/projects/${encodeURIComponent(project)}`;
+  const data=await api(base+'/windows-cinema');
+  const url=URL.createObjectURL(new Blob([data.script],{type:'text/plain;charset=utf-8'}));
+  const download=element('a');download.href=url;download.download=data.filename;download.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const content=element('div','access-plan');content.append(element('p','',t('compose_windows_instructions')),
+    element('pre','','pwsh -NoProfile -File .\\dcc-cinema-windows.ps1\npwsh -NoProfile -File .\\dcc-cinema-windows.ps1 -Apply'));
+  composeReview(t('compose_windows_prepare'),content);
+}
 function composeOperationView(operation) {
   const box = element('div', 'compose-operation');
   box.append(element('p', '', `${operation.id} · ${composeMessage(operation.state)}`));
@@ -119,15 +129,7 @@ async function loadCompose() {
     actions.append(composeButton('compose_history',async()=>{const data=await api(base+'/history');const content=element('div');for(const entry of data.operations)content.append(composeOperationView(entry));composeReview(t('compose_history'),content);}));
     if(project.windows_manual_update){
       card.append(element('p','hint',t('compose_windows_hint')));
-      actions.append(composeButton('compose_windows_prepare',async()=>{
-        const data=await api(base+'/windows-cinema');
-        const url=URL.createObjectURL(new Blob([data.script],{type:'text/plain;charset=utf-8'}));
-        const download=element('a');download.href=url;download.download=data.filename;download.click();
-        setTimeout(()=>URL.revokeObjectURL(url),1000);
-        const content=element('div','access-plan');content.append(element('p','',t('compose_windows_instructions')),
-          element('pre','','pwsh -NoProfile -File .\\dcc-cinema-windows.ps1\npwsh -NoProfile -File .\\dcc-cinema-windows.ps1 -Apply'));
-        composeReview(t('compose_windows_prepare'),content);
-      }));
+      actions.append(composeButton('compose_windows_prepare',()=>downloadWindowsCinema(project.name)));
     }
     card.append(actions);
     for(const code of operation?.blockers || project.blockers || [])card.append(element('p','status error',composeMessage(code)));

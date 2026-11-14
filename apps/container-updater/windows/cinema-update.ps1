@@ -169,8 +169,11 @@ try {
     $serviceModel = $model.services[$Plan.service]
     $runtimeEnv = @{}
     foreach ($entry in $Original.Config.Env) { $parts=$entry -split '=',2; $runtimeEnv[$parts[0]]=$parts[1] }
-    foreach ($name in $serviceModel.environment.Keys) {
-        if (-not $runtimeEnv.ContainsKey($name) -or $runtimeEnv[$name] -cne [string]$serviceModel.environment[$name]) { throw 'Compose environment differs from the running application.' }
+    $composeEnvironment = $serviceModel['environment']
+    if ($composeEnvironment) {
+        foreach ($name in $composeEnvironment.Keys) {
+            if (-not $runtimeEnv.ContainsKey($name) -or $runtimeEnv[$name] -cne [string]$composeEnvironment[$name]) { throw 'Compose environment differs from the running application.' }
+        }
     }
     foreach ($field in @('command','entrypoint','depends_on','profiles','privileged','devices','cap_add','volumes_from','links','external_links','network_mode','secrets','configs','pre_start','post_start','pre_stop','post_stop','provider','use_api_socket')) {
         if ($serviceModel.ContainsKey($field) -and $serviceModel[$field]) { throw ('Unsupported Compose field: '+$field) }

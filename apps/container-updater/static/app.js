@@ -117,12 +117,12 @@ function addAdvanced(cell, item) {
     item.persistent_mounts.forEach(path => { const li = element('li'); li.append(element('code', '', path)); list.append(li); });
     details.append(list);
   }
-  if (item.is_compose) {
+  if (item.is_compose && !item.windows_cinema_project) {
     details.append(element('p', '', t('compose_alternative')), element('p', '', t('compose_commands')), element('pre', '', 'docker compose pull\ndocker compose up -d'));
   }
   if (item.check_error) details.append(element('p', '', t('registry_alternative')));
   if (item.auto_update_reason) details.append(element('p', '', item.auto_update_reason));
-  if (!item.supported && !item.is_panel) details.append(element('p', '', t('runtime_alternative')));
+  if (!item.supported && !item.is_panel && !item.windows_cinema_project) details.append(element('p', '', t('runtime_alternative')));
   details.append(element('p', '', t('backup')));
   cell.append(details);
 }
@@ -139,7 +139,7 @@ function render(items = allItems) {
   $('available-count').textContent = eligible.length;
   $('auto-count').textContent = items.filter(item => item.auto_update_on_startup).length;
   const query = $('filter').value.trim().toLocaleLowerCase();
-  const filtered = items.filter(item => (preferences.show_unavailable || item.is_panel || item.scan_pending || recentChecks.has(item.id) || (item.supported && !item.check_error)) && `${item.name} ${item.current_image} ${item.target_image || ''}`.toLocaleLowerCase().includes(query));
+  const filtered = items.filter(item => (preferences.show_unavailable || item.is_panel || item.scan_pending || recentChecks.has(item.id) || item.windows_cinema_project || (item.supported && !item.check_error)) && `${item.name} ${item.current_image} ${item.target_image || ''}`.toLocaleLowerCase().includes(query));
   const rows = $('rows');
   rows.replaceChildren();
   if (!filtered.length) {
@@ -166,7 +166,7 @@ function render(items = allItems) {
         finally { setBusy(false); }
       }); cells[2].append(toggle);
     } else cells[2].append(element('span', 'manual-label', t(item.is_compose ? 'manual_compose' : 'unavailable')));
-    const status = scanning.has(item.id) ? 'checking' : item.is_panel ? 'self' : item.scan_pending ? 'pending' : !item.supported ? 'blocked' : item.update_available ? 'available' : item.check_error ? 'unchecked' : 'current';
+    const status = scanning.has(item.id) ? 'checking' : item.is_panel ? 'self' : item.scan_pending ? 'pending' : item.windows_cinema_project ? 'available' : !item.supported ? 'blocked' : item.update_available ? 'available' : item.check_error ? 'unchecked' : 'current';
     const statusCell = element('div', 'container-check');
     statusCell.append(element('span', `badge ${status}`, t(`${status}_badge`)));
     if (!item.is_panel) {
@@ -186,6 +186,13 @@ function render(items = allItems) {
     cells[4].textContent = item.current_image || '—'; cells[5].textContent = item.target_image || '—';
     cells[6].append(element('div', 'detail', [item.source, item.message].filter(Boolean).join(' · ')));
     if (item.last_update_result) cells[6].append(element('div', `detail update-result ${item.last_update_ok ? 'ok' : 'error'}`, item.last_update_result));
+    if (item.windows_cinema_project) {
+      const button = element('button','row-scan',t('compose_windows_prepare'));
+      button.type = 'button';
+      button.dataset.composeAction = 'windows-cinema';
+      button.addEventListener('click', () => action(() => downloadWindowsCinema(item.windows_cinema_project)));
+      cells[6].append(button);
+    }
     if (item.has_update_instructions) cells[6].append(element('div', 'detail', t('instructions')));
     addAdvanced(cells[6], item);
     rows.append(row);

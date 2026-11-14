@@ -41,12 +41,43 @@ class WindowsCinemaPlanTests(unittest.TestCase):
         encoded=re.search(r"FromBase64String\('([^']+)'\)",script).group(1)
         plan=json.loads(base64.b64decode(encoded))
         self.assertEqual(plan['target_tag'],'ghcr.io/hattimon/cinema-hub:1.3.10')
-        self.assertEqual(plan['target_image'],'ghcr.io/hattimon/cinema-hub@sha256:'+'d'*64)
+        self.assertEqual(plan['target_image'],'ghcr.io/hattimon/cinema-hub:1.3.10@sha256:'+'d'*64)
         self.assertEqual(plan['volume'],'cinema-state-existing')
         self.assertEqual(plan['files'][1],'D:\\CODEX\\Cinema Hub\\.private\\local.json')
         self.assertNotIn('PRIVATE_TEST_VALUE',script)
         self.assertNotIn('__DCC_',script)
         self.assertIn('param([switch]$Apply',script)
+
+    def test_container_scan_offers_the_windows_workflow_without_reading_linux_paths(self):
+        service = self.fixture.service
+        apps = [{'image': 'ghcr.io/hattimon/cinema-hub:1.3.10'}]
+        with patch.object(service, '_load_compose_project', side_effect=AssertionError('Windows path')):
+            item = service.scan(container_ids=[self.container.id])[0]
+            self.assertEqual(item['windows_cinema_project'], 'demo')
+            self.assertEqual(item['target_image'], apps[0]['image'])
+            self.assertTrue(item['update_available'])
+            self.assertFalse(item['supported'])
+            self.assertFalse(item['auto_update_supported'])
+
+            self.container.attrs['Config']['Image'] = apps[0]['image'] + '@sha256:' + 'd'*64
+            with patch.object(service, '_registry_digest', return_value=(False, '')) as check_digest:
+                installed = service.inspect_container(self.container, apps)
+                self.assertFalse(installed['update_available'])
+                self.assertNotIn('windows_cinema_project', installed)
+                self.assertEqual(check_digest.call_args.args[0], apps[0]['image'])
+
+            newer = [{'image': 'ghcr.io/hattimon/cinema-hub:1.3.11'}]
+            item = service.inspect_container(self.container, newer)
+            self.assertEqual(item['target_image'], newer[0]['image'])
+            self.assertEqual(item['windows_cinema_project'], 'demo')
+            self.assertFalse(item['auto_update_supported'])
+
+    def test_same_tag_replacement_offers_the_windows_workflow(self):
+        service = self.fixture.service
+        item = service.inspect_container(self.container, [{'image': self.container.attrs['Config']['Image']}])
+        self.assertTrue(item['update_available'])
+        self.assertEqual(item['windows_cinema_project'], 'demo')
+        self.assertFalse(item['supported'])
 
     def test_shared_volume_blocks_export(self):
         peer=copy.deepcopy(self.container);peer.id='e'*64

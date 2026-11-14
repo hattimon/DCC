@@ -1,3 +1,11 @@
+# DCC Container Updater 1.1.9
+
+Cinema Hub started with Docker Compose on Windows shows an update action in its container row. The local PowerShell procedure verifies an isolated copy of the existing SQLite database before deployment. The updater recognizes the pinned version on later scans.
+
+Cinema Hub uruchomiony przez Docker Compose na Windows pokazuje akcję aktualizacji przy kontenerze. Procedura PowerShell sprawdza kopię SQLite w izolowanym kontenerze przed wdrożeniem. Przy kolejnych skanach aktualizator rozpoznaje przypiętą wersję.
+
+Linux amd64 / arm64 · `ghcr.io/hattimon/dcc-container-updater:1.1.9` · `latest`
+
 # DCC Container Updater 1.1.8
 
 During compatible DCC Web updates, the updater transfers saved tunnel recovery consent even when zrok is already stopped. After the replacement becomes healthy it can recover consent from a verified older Web container before removing the backup.
