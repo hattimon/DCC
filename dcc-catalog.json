@@ -174,8 +174,8 @@
       "homepage_url": "https://dozzle.dev/",
       "icon_text": "🛠",
       "upstream_repo": "amir20/dozzle",
-      "latest_release": "v11.4.2",
-      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.4.2",
+      "latest_release": "v11.4.3",
+      "latest_release_url": "https://github.com/amir20/dozzle/releases/tag/v11.4.3",
       "icon_url": "catalog/media/icons/dozzle.png"
     },
     {
@@ -260,8 +260,8 @@
         }
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "updater-v1.1.8",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/updater-v1.1.8",
+      "latest_release": "updater-v1.1.9",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/updater-v1.1.9",
       "release_tag_pattern": "updater-v[0-9]+\\.[0-9]+\\.[0-9]+"
     },
     {
@@ -1462,8 +1462,8 @@
       "homepage_url": "https://ntfy.sh/",
       "icon_text": "🔔",
       "upstream_repo": "binwiederhier/ntfy",
-      "latest_release": "v2.37.2",
-      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.37.2",
+      "latest_release": "v2.38.0",
+      "latest_release_url": "https://github.com/binwiederhier/ntfy/releases/tag/v2.38.0",
       "icon_url": "catalog/media/icons/ntfy.png"
     },
     {
@@ -1793,8 +1793,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.20.0",
-      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.20.0",
+      "latest_release": "v1.20.1",
+      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.20.1",
       "icon_url": "catalog/media/icons/qdrant.png"
     },
     {
