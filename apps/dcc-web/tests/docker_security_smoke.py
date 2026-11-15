@@ -110,6 +110,8 @@ def main():
         result=subprocess.run(['docker',*parts],capture_output=True,text=True)
         if result.returncode:raise RuntimeError(result.stderr[:1500])
         return result.stdout.strip()
+    def web_origin():
+        return 'http://'+docker('port',name,'8789/tcp')
     def start(image):
         nonlocal running
         docker('run','-d','--name',name,'--label','dcc.qa=security-smoke','-p','127.0.0.1::8789',
@@ -118,7 +120,7 @@ def main():
         running=True
         for _ in range(60):
             try:
-                base='http://127.0.0.1:'+docker('port',name,'8789/tcp').rsplit(':',1)[1]
+                base=web_origin()
                 with urllib.request.urlopen(base+'/api/health',timeout=2):return base
             except Exception:time.sleep(.5)
         details=re.sub(r'(password=)\S+',r'\1[REDACTED]',docker('logs',name))
@@ -209,6 +211,9 @@ def main():
             docker('exec','--user','10001:10001',name,'python','-c','from pathlib import Path;assert (Path("/mnt/dcc-ssh")/"qa-marker.txt").read_text()=="synthetic mount fixture"')
             assert inspected['HostConfig']['PortBindings']['8789/tcp']
             assert next(m for m in mounts if m['Destination']=='/data')['Name']==volume
+            # Docker can assign a different ephemeral host port to the replacement.
+            base=web_origin()
+            assert api('bootstrap')['user']['id']==user
             mount_verified=True
         inspected=json.loads(docker('inspect',name))[0]
         assert inspected['RestartCount']==0

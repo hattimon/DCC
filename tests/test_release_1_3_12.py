@@ -44,9 +44,10 @@ class Release1312Tests(unittest.TestCase):
         with patch.object(dcc.sys,'platform','linux'),patch.object(dcc.platform,'machine',return_value='aarch64'):
             self.assertIsNone(dcc.MainWindow.select_update_installer_asset(None,assets))
 
-    def test_canonical_catalog_keeps_all_68_entries_and_updater_configuration(self):
+    def test_canonical_catalog_keeps_69_entries_and_updater_configuration(self):
         entries=json.loads((ROOT/'dcc-catalog.json').read_text(encoding='utf-8'))['apps']
-        self.assertEqual(len(entries),68)
+        self.assertEqual(len(entries),69)
+        self.assertIn('DCC Remote Access',{app['name'] for app in entries})
         updater=next(app for app in entries if app['name']=='DCC Container Updater')
         self.assertEqual(updater['image'],'ghcr.io/hattimon/dcc-container-updater:latest')
         self.assertEqual(updater['default_name'],'dcc-container-updater')
