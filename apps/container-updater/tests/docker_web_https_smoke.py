@@ -87,11 +87,6 @@ def start_fixture(remote):
         nonlocal occupied
         if args == ['fixture-ready']:
             return bool(remote.route and remote.route['verified'] and not occupied)
-        if args == ['fixture-stop']:
-            with remote.lock, closing(remote.client_factory()) as client:
-                remote.recovery_next = time.monotonic() + 3600
-                remote.stop(remote.container(client))
-            return True
         if args not in (['seed'], ['seed-stopped']):
             return handle(args)
         owner = 'fixture-tunnel-owner'
@@ -379,11 +374,8 @@ with closing(remote.client_factory()) as client:
             assert 'dcc-remote-panel' in web.attrs['NetworkSettings']['Networks'][remote_panel]['Aliases']
         service._wait_until_healthy(web)
         wait_for(login_page, 'HTTPS did not recover after rollback')
-        if args.with_tunnel_resume:
-            wait_for(lambda: assert_tunnel_ready(service, web), 'Tunnel did not resume after rollback')
         if synthetic_tunnel:
-            assert service._remote_update_control(web, 'fixture-stop')
-            assert client.containers.get(remote_name).attrs['State']['Status'] in {'exited', 'created'}
+            wait_for(lambda: assert_tunnel_ready(service, web), 'Tunnel did not resume after rollback')
         service.update_one(web, target, _image_already_pulled=True)
         web = client.containers.get(name)
         assert web.id != old_id and web.attrs['Config']['Image'] == target
