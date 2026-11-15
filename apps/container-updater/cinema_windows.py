@@ -9,19 +9,18 @@ import re
 from pathlib import Path, PureWindowsPath
 
 from compose_config import ComposeBlocked
-from updater import COMPOSE_CONFIG_FILES_LABEL, COMPOSE_PROJECT_LABEL, COMPOSE_SERVICE_LABEL, COMPOSE_WORKING_DIR_LABEL, normalized_repository
+from updater import (
+    COMPOSE_CONFIG_FILES_LABEL, COMPOSE_PROJECT_LABEL, COMPOSE_SERVICE_LABEL,
+    COMPOSE_WORKING_DIR_LABEL, WINDOWS_CINEMA_REPOSITORY, normalized_repository,
+    windows_cinema_project,
+)
 
-REPOSITORY = 'ghcr.io/hattimon/cinema-hub'
+REPOSITORY = WINDOWS_CINEMA_REPOSITORY
 RESOURCES = Path(__file__).parent / 'windows'
 
 
 def eligible(members):
-    if len(members) != 1:
-        return False
-    attrs = members[0].attrs
-    labels = (attrs.get('Config') or {}).get('Labels') or {}
-    return (normalized_repository(str((attrs.get('Config') or {}).get('Image') or '')) == REPOSITORY
-            and bool(re.match(r'^[A-Za-z]:[\\/]', str(labels.get(COMPOSE_WORKING_DIR_LABEL) or ''))))
+    return len(members) == 1 and bool(windows_cinema_project(members[0].attrs))
 
 
 def windows_path(value):
@@ -59,7 +58,7 @@ def export_script(service, project):
     if catalog_error:
         raise ComposeBlocked('windows_catalog_unavailable')
     candidate = service._catalog_candidate(current, apps)
-    target = candidate.target_image if candidate and candidate.available else current
+    target = candidate.target_image if candidate and candidate.available else current.split('@', 1)[0]
     if normalized_repository(target) != REPOSITORY or '@' in target:
         raise ComposeBlocked('windows_target_unavailable')
     distribution = service.client.api.inspect_distribution(target)
@@ -68,7 +67,7 @@ def export_script(service, project):
         raise ComposeBlocked('windows_target_unavailable')
     plan = {'schema': 1, 'project': project, 'service': labels.get(COMPOSE_SERVICE_LABEL), 'root': root,
             'files': files, 'container_id': str(container.id), 'source_image_id': str(container.attrs.get('Image') or ''),
-            'volume': volume, 'target_tag': target, 'target_image': REPOSITORY + '@' + checksum}
+            'volume': volume, 'target_tag': target, 'target_image': target + '@' + checksum}
     for field in ('project', 'service'):
         if not re.fullmatch(r'[a-z0-9][a-z0-9_.-]{0,127}', str(plan[field] or '')):
             raise ComposeBlocked('windows_cinema_scope')

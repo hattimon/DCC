@@ -322,8 +322,8 @@ its local image metadata; that service is shown with a diagnostic instead of
 hiding every project. Inventory reads also tolerate a container removed between
 Docker's list and inspect calls. Self-update checks reuse one inventory.
 
-For a single Cinema Hub service launched from Windows Compose paths, the project
-card offers **Windows: prepare a database-preserving update**. The Linux web
+For a single Cinema Hub service launched from Windows Compose paths, the container
+row and project card offer **Windows: prepare a database-preserving update**. The Linux web
 panel exports a PowerShell 7 workflow for the Windows Docker Desktop host. Its
 existing deployment gates remain in effect: this is a manually run host workflow,
 not permission to schedule database updates from the web container.

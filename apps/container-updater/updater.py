@@ -47,6 +47,18 @@ SUPPORTED_NETWORK_MODES = {"default", "bridge", "host", "none"}
 COMPOSE_PROJECT_LABEL = "com.docker.compose.project"
 COMPOSE_SERVICE_LABEL = "com.docker.compose.service"
 COMPOSE_WORKING_DIR_LABEL = "com.docker.compose.project.working_dir"
+WINDOWS_CINEMA_REPOSITORY = "ghcr.io/hattimon/cinema-hub"
+
+
+def windows_cinema_project(attrs: dict[str, Any]) -> str | None:
+    config = attrs.get("Config") or {}
+    labels = config.get("Labels") or {}
+    project = str(labels.get(COMPOSE_PROJECT_LABEL) or "")
+    if (normalized_repository(str(config.get("Image") or "")) == WINDOWS_CINEMA_REPOSITORY
+            and re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,127}", project)
+            and re.match(r"^[A-Za-z]:[\\/]", str(labels.get(COMPOSE_WORKING_DIR_LABEL) or ""))):
+        return project
+    return None
 COMPOSE_CONFIG_FILES_LABEL = "com.docker.compose.project.config_files"
 COMPOSE_CONFIG_ROOTS = ("/home", "/opt", "/srv", "/mnt", "/media", "/root")
 REGISTRY_RETRY_DELAYS = (2, 5)
@@ -1379,7 +1391,8 @@ class UpdateService:
         compose = self._is_compose(container)
         compose_project: ComposeProject | None = None
         compose_error: str | None = None
-        if compose:
+        windows_project = windows_cinema_project(attrs)
+        if compose and not windows_project:
             compose_project, compose_error = self._load_compose_project(container)
             if compose_project:
                 service_config = compose_project.config["services"][compose_project.service]
@@ -1420,7 +1433,12 @@ class UpdateService:
             )
             return result
 
-        candidate = self._catalog_candidate(current, apps)
+        registry_image = current
+        if windows_project:
+            name = current.split("@", 1)[0]
+            if version_tuple(image_reference(name)[1]):
+                registry_image = name
+        candidate = self._catalog_candidate(registry_image, apps)
         if compose and compose_project:
             service_config = compose_project.config["services"][compose_project.service]
             compose_image = str(service_config.get("image") or "").strip()
@@ -1437,7 +1455,10 @@ class UpdateService:
 
         if candidate and candidate.available:
             blocker = runtime_blocker
-            if compose:
+            if windows_project and not blocker:
+                result["windows_cinema_project"] = windows_project
+                blocker = "Compose z Windows wymaga lokalnej procedury aktualizacji."
+            elif compose:
                 _project, compose_blocker = self._compose_update_blocker(container, candidate.target_image, all_containers)
                 blocker = blocker or compose_blocker
             else:
@@ -1463,9 +1484,9 @@ class UpdateService:
             return result
         if candidate:
             result.update(source=candidate.source, message=candidate.message)
-        available, digest_message = self._registry_digest(current, local_image)
+        available, digest_message = self._registry_digest(registry_image, local_image)
         if available is True:
-            target = current
+            target = registry_image
             source = "digest rejestru"
             message = "Ten sam tag wskazuje w rejestrze nowszy obraz."
             if compose and compose_project:
@@ -1474,7 +1495,10 @@ class UpdateService:
                 file_candidate = self._compose_candidate(current, file_image)
                 if file_candidate and file_candidate.available:
                     target, source, message = file_candidate.target_image, file_candidate.source, file_candidate.message
-            if compose:
+            if windows_project and not runtime_blocker and not catalog_error:
+                result["windows_cinema_project"] = windows_project
+                blocker = "Compose z Windows wymaga lokalnej procedury aktualizacji."
+            elif compose:
                 _project, blocker = self._compose_update_blocker(container, target, all_containers)
             else:
                 instructions = self._catalog_update_instructions(current, apps)
