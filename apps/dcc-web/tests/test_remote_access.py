@@ -280,7 +280,7 @@ class RemoteAccessTests(unittest.TestCase):
         original, sidecar, client = self.recovery_fixture()
         target = "sha256:" + "a" * 64
         client.images.get.return_value.attrs = {
-            "RepoTags": ["ghcr.io/hattimon/dcc-web:0.3.3"],
+            "RepoTags": ["ghcr.io/hattimon/dcc-web:0.3.4"],
             "Config": {"Labels": {UPDATE_CONTROL_LABEL: "1"}},
         }
         with patch.object(self.remote, "container", return_value=sidecar), \
@@ -300,7 +300,7 @@ class RemoteAccessTests(unittest.TestCase):
             Mounts=[{"Destination": "/data", "Type": "volume", "Source": "/volumes/web", "RW": True}])
         replacement = SimpleNamespace(id="c" * 64, attrs=dict(
             original.attrs, Image="sha256:" + "c" * 64,
-            Config={"Image": "ghcr.io/hattimon/dcc-web:0.3.3", "Labels": {UPDATE_CONTROL_LABEL: "1"}}))
+            Config={"Image": "ghcr.io/hattimon/dcc-web:0.3.4", "Labels": {UPDATE_CONTROL_LABEL: "1"}}))
         client.containers.get.return_value = original
         matching_mounts = replacement.attrs.pop("Mounts")
         self.assertFalse(self.remote.adopt_update_recovery(client, replacement, original.id))
@@ -798,6 +798,7 @@ class RemoteAccessTests(unittest.TestCase):
             method, path, payload, headers = connection.request.call_args.args
             self.assertEqual((method, path), ("DELETE", "/api/v2/unshare"))
             self.assertEqual(json.loads(payload), {"envZId": "fixture-env", "shareToken": "StaleShare123"})
+            self.assertEqual(headers["Content-Type"], "application/zrok.v1+json")
             self.assertEqual(headers["x-token"], "FixtureAccount123")
 
     def test_probe_rechecks_reconnection_and_blocklist_fails_closed(self):

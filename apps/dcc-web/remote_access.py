@@ -81,7 +81,7 @@ def unshare(identity, account_token, share_token):
     with closing(http.client.HTTPSConnection(host, timeout=10)) as connection:
         body = json.dumps({"envZId": identity, "shareToken": share_token})
         connection.request("DELETE", "/api/v2/unshare", body,
-                           {"Content-Type": "application/json", "x-token": account_token})
+                           {"Content-Type": "application/zrok.v1+json", "x-token": account_token})
         return connection.getresponse().status
 
 
