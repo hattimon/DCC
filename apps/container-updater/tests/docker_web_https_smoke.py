@@ -336,7 +336,9 @@ with closing(remote.client_factory()) as client:
                 wait_for(lambda: assert_tunnel_ready(service, web), 'Synthetic tunnel was not authorized')
             elif args.with_legacy_stopped_tunnel:
                 assert service._remote_update_control(web, 'seed-stopped')
-                assert not service._remote_update_control(web, 'status')
+                # Released Web 0.3.3 supports a verified handoff even when its
+                # saved tunnel is already stopped; the updater must use it.
+                assert service._remote_update_control(web, 'status')
         web.reload()
         inventory = client.containers.list(all=True, ignore_removed=True)
         assert service.update_blocker(web, inventory) is None
