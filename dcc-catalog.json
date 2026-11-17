@@ -534,8 +534,8 @@
       "homepage_url": "https://nodejs.org/",
       "icon_text": "💻",
       "upstream_repo": "nodejs/node",
-      "latest_release": "v27.0.0-alpha.0.1.0",
-      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v27.0.0-alpha.0.1.0",
+      "latest_release": "v27.0.0-alpha.0.1.1",
+      "latest_release_url": "https://github.com/nodejs/node/releases/tag/v27.0.0-alpha.0.1.1",
       "icon_url": "catalog/media/icons/nodejs.png"
     },
     {
@@ -1793,8 +1793,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.20.1",
-      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.20.1",
+      "latest_release": "v1.20.2",
+      "latest_release_url": "https://github.com/qdrant/qdrant/releases/tag/v1.20.2",
       "icon_url": "catalog/media/icons/qdrant.png"
     },
     {
