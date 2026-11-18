@@ -11,7 +11,14 @@ from flask import abort, g, request, session
 CAPABILITIES = {"host.exec","read", "containers.write", "exec", "images.write", "volumes.write", "networks.write", "compose.write", "install", "update", "destructive"}
 ROLES = {"viewer": {"read"}, "operator": {"read", "containers.write", "exec"}, "admin": CAPABILITIES}
 SECRET_WORDS = re.compile(r"password|passwd|passphrase|private.?key|token|secret|authorization|api.?key|credential|setup.?code|recovery.?code", re.I)
-URL_CREDENTIALS = re.compile(r"(?i)(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*://)[^\s/<>\[\]\"':@]+:[^\s/<>\[\]\"']*@")
+URL_AUTHORITY = re.compile(r"://([^\s/<>\[\]\"']+)")
+
+
+def _redact_url_authority(match):
+    userinfo, separator, host = match[1].rpartition("@")
+    if separator and ":" in userinfo:
+        return "://••••@" + host
+    return match[0]
 
 
 def trusted_public_https_request(app):
@@ -56,7 +63,7 @@ def redact(value):
     if isinstance(value, list):
         return ["%s=••••" % item.split("=", 1)[0] if isinstance(item, str) and "=" in item and SECRET_WORDS.search(item.split("=",1)[0]) else redact(item) for item in value]
     if isinstance(value,str):
-        value=URL_CREDENTIALS.sub(r"\1••••@",value)
+        value=URL_AUTHORITY.sub(_redact_url_authority,value)
         value=re.sub(r"(?im)(authorization\s*:\s*)[^\r\n]+",r"\1••••",value)
         return re.sub(r"(?i)((?:password|passwd|token|secret|api[_ -]?key|setup[_ -]?code)\s*(?::|=|\bis\b|->)\s*)\S+",r"\1••••",value)
     return value

@@ -59,7 +59,10 @@ def request_json(connection,path,payload=None):
         else:
             raise OSError('No reachable AI endpoint address')
         if https:
-            client.sock=ssl.create_default_context().wrap_socket(client.sock,server_hostname=parsed.hostname)
+            context = ssl.create_default_context()
+            if context.minimum_version < ssl.TLSVersion.TLSv1_2:
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+            client.sock = context.wrap_socket(client.sock, server_hostname=parsed.hostname)
         client.request('POST' if payload is not None else 'GET',parsed.path or '/',
                        body=json.dumps(payload).encode() if payload is not None else None,
                        headers={'Host':parsed.netloc,**headers})

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import socket
+import ssl
 import sys
 import tempfile
 import time
@@ -1219,6 +1220,32 @@ class WebTests(unittest.TestCase):
         self.assertTrue(self.client.get('/api/ai/connection').json['has_key'])
         with self.assertRaises(ValueError):validate_connection(dict(config,allow_local=False))
         with self.assertRaises(ValueError):validate_connection(dict(config,endpoint='https://user:secret@example.net/v1'))
+
+    def test_ai_https_enforces_tls_1_2_and_preserves_stronger_policy(self):
+        address = ('93.184.216.34', 443)
+        for initial, expected in ((ssl.TLSVersion.TLSv1, ssl.TLSVersion.TLSv1_2),
+                                  (ssl.TLSVersion.TLSv1_3, ssl.TLSVersion.TLSv1_3)):
+            with self.subTest(initial=initial), \
+                 patch('ai_assistant.socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', address)]), \
+                 patch('ai_assistant.socket.socket') as raw, \
+                 patch('ai_assistant.http.client.HTTPConnection') as http, \
+                 patch('ai_assistant.ssl.create_default_context') as create_context:
+                context = create_context.return_value
+                context.minimum_version = initial
+                reply = http.return_value.getresponse.return_value.__enter__.return_value
+                reply.status = 200
+                reply.read.return_value = b'{}'
+                self.assertEqual(request_json({'endpoint': 'https://fixture.invalid'}, '/models'), {})
+                self.assertEqual(context.minimum_version, expected)
+                context.wrap_socket.assert_called_once_with(raw.return_value, server_hostname='fixture.invalid')
+
+    def test_url_redaction_preserves_hosts_and_masks_authorities_in_long_text(self):
+        text = "a" * 8192 + " https://public.example:8443/read "
+        text += "postgresql://name:fixture%3Aopaque@example.invalid/db "
+        text += "https://:fixture@host.invalid/path"
+        expected = "a" * 8192 + " https://public.example:8443/read "
+        expected += "postgresql://••••@example.invalid/db https://••••@host.invalid/path"
+        self.assertEqual(redact(text), expected)
 
     def test_ai_proposes_configuration_only_and_never_executes_docker_commands(self):
         self.request('ai/connection',{'provider':'compatible','endpoint':'https://example.net/v1','model':'coder','enabled':True},method='PUT')
