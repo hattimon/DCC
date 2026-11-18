@@ -18,7 +18,13 @@ SMTP_ID = '__dcc_smtp__'
 
 
 def email_address(value):
-    if not isinstance(value,str) or len(value)>254 or not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}",value):
+    if not isinstance(value, str) or len(value) > 254:
+        raise ValueError('Provide a valid email address')
+    local, _, domain = value.rpartition('@')
+    name, _, suffix = domain.rpartition('.')
+    if not (re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+", local)
+            and re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", name)
+            and re.fullmatch(r"[A-Za-z]{2,63}", suffix)):
         raise ValueError('Provide a valid email address')
     return value
 

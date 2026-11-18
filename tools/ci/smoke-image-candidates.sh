@@ -22,8 +22,9 @@ smoke() (
   for image in "$previous" "$candidate"; do
     [[ "$(docker image inspect --format '{{.Architecture}}' "$image")" == "${platform#linux/}" ]]
   done
-  docker run --rm --network none --entrypoint dpkg-query "$previous" -W > "$reports/$kind-published-packages.txt"
-  docker run --rm --network none --entrypoint dpkg-query "$candidate" -W > "$reports/$kind-candidate-packages.txt"
+  package_format='${binary:Package}\t${Version}\t${source:Package}\n'
+  docker run --rm --network none --entrypoint dpkg-query "$previous" -W -f="$package_format" > "$reports/$kind-published-packages.txt"
+  docker run --rm --network none --entrypoint dpkg-query "$candidate" -W -f="$package_format" > "$reports/$kind-candidate-packages.txt"
   docker image inspect --format '{{.Architecture}} {{.Size}}' "$candidate" > "$reports/$kind-image.txt"
 
   start() {
@@ -62,3 +63,9 @@ smoke() (
 
 smoke web ghcr.io/hattimon/dcc-web:0.3.4 http://127.0.0.1:8789/api/health master-key
 smoke updater ghcr.io/hattimon/dcc-container-updater:1.1.9 http://127.0.0.1:8788/health admin_password_hash
+docker run --rm --network none --entrypoint python \
+  --mount "type=bind,source=$PWD/apps/container-updater/tests,target=/test,readonly" \
+  -e DCC_UPDATER_DATA=/tmp/dcc-test-data -e DCC_UPDATER_AUTO_UPDATE_ON_START=0 \
+  -e DCC_UPDATER_SELF_UPDATE_ON_START=0 dcc-candidate-updater \
+  -m unittest discover -s /test -p test_compose_manager.py -k RealComposeNormalizationTests -q \
+  2>&1 | sed -E 's/(password=)[^[:space:]]+/\1[REDACTED]/g'

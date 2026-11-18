@@ -815,6 +815,30 @@ class WebTests(unittest.TestCase):
         with patch('catalogs.socket.getaddrinfo',return_value=[(2,1,6,'',('127.0.0.1',443))]):
             with self.assertRaises(ValueError):fetch_public('https://internal.example/catalog.json')
 
+    def test_catalog_never_dials_a_multicast_dns_answer(self):
+        for family, address in ((socket.AF_INET, ('224.0.0.1', 443)),
+                                (socket.AF_INET6, ('ff02::1', 443, 0, 0))):
+            with self.subTest(address=address), \
+                 patch('catalogs.socket.getaddrinfo', return_value=[(family, socket.SOCK_STREAM, 6, '', address)]), \
+                 patch('catalogs.socket.create_connection', side_effect=AssertionError('unapproved address')), \
+                 patch('catalogs.socket.socket', side_effect=AssertionError('unapproved address')):
+                with self.assertRaises(ValueError):
+                    fetch_public('https://fixture.invalid/catalog.json')
+
+    def test_catalog_uses_the_validated_address_and_original_tls_name(self):
+        address = ('2606:4700:4700::1111', 443, 0, 0)
+        with patch('catalogs.socket.getaddrinfo', return_value=[(socket.AF_INET6, socket.SOCK_STREAM, 6, '', address)]) as dns, \
+             patch('catalogs.socket.socket') as transport, \
+             patch('catalogs.ssl.create_default_context') as tls, \
+             patch('catalogs.http.client.HTTPSConnection') as https:
+            response = https.return_value.getresponse.return_value
+            response.status = 200
+            response.read.return_value = b'{"apps":[]}'
+            self.assertEqual(fetch_public('https://fixture.invalid/catalog.json'), b'{"apps":[]}')
+            dns.assert_called_once_with('fixture.invalid', 443, type=socket.SOCK_STREAM)
+            transport.return_value.connect.assert_called_once_with(address)
+            tls.return_value.wrap_socket.assert_called_once_with(transport.return_value, server_hostname='fixture.invalid')
+
     def test_partial_profile_edit_retains_permissions_users_and_credentials(self):
         self.state.save_profile('restricted',{'name':'Restricted','kind':'local','permissions':['read'],'users':['one-user']},{'password':'private-value'})
         self.assertEqual(self.request('profiles/restricted',{'name':'Renamed'},method='PUT').status_code,200)

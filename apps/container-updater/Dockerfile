@@ -1,13 +1,13 @@
 FROM python:3.12-slim AS compose-download
 ARG TARGETARCH
-ARG COMPOSE_VERSION=5.6.1
+ARG COMPOSE_VERSION=5.8.0
 RUN set -eu; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl; \
     rm -rf /var/lib/apt/lists/*; \
     case "$TARGETARCH" in \
-      amd64) compose_arch=x86_64; compose_sha=47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0 ;; \
-      arm64) compose_arch=aarch64; compose_sha=42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233ecc1d53e3ff1347d ;; \
+      amd64) compose_arch=x86_64; compose_sha=b8840f5008c447f41fce0a57ae3adeab42c89b1eb6e6012524bcabbfb4ffbaf6 ;; \
+      arm64) compose_arch=aarch64; compose_sha=1a9c918b2fb49b9c87f0018c64b5abd0d30715155e98dc939779fbaee6c414d3 ;; \
       *) echo "Unsupported Docker Compose architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac; \
     curl --proto '=https' --proto-redir '=https' --fail --location --retry 3 --retry-all-errors \

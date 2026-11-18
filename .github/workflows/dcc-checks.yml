@@ -166,6 +166,13 @@ jobs:
           fi
       - name: Validate GitHub Actions definitions
         run: actionlint -shellcheck=
+      - name: Verify publication is off for ordinary tests
+        run: |
+          decision=tools/ci/updater-publish-decision.sh
+          test "$(bash "$decision" workflow_dispatch '' false)" = publish=false
+          test "$(bash "$decision" push "$GITHUB_SHA" false)" = publish=false
+          test "$(bash "$decision" push 0000000000000000000000000000000000000000 false)" = publish=false
+          test "$(bash "$decision" workflow_dispatch '' true)" = publish=true
 
   dependencies:
     needs: scope

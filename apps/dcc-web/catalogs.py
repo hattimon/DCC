@@ -49,12 +49,19 @@ def fetch_public(url, limit=2_000_000):
             raise ValueError("Catalog URLs must use HTTPS without embedded credentials")
         port = parsed.port or 443
         addresses = socket.getaddrinfo(parsed.hostname, port, type=socket.SOCK_STREAM)
-        if not addresses or any(not ipaddress.ip_address(address[4][0]).is_global for address in addresses):
-            raise ValueError("Private, loopback and link-local catalog addresses are blocked; import a local JSON file instead")
-        address = addresses[0][4][0]
-        raw_socket = socket.create_connection((address, port), timeout=8)
+        if not addresses:
+            raise ValueError("The catalog hostname has no usable addresses")
+        for *_, sockaddr in addresses:
+            address = ipaddress.ip_address(sockaddr[0])
+            address = getattr(address, "ipv4_mapped", None) or address
+            if not address.is_global or address.is_multicast:
+                raise ValueError("Catalog connections require a public unicast address; import a local JSON file instead")
+        family, kind, protocol, _, sockaddr = addresses[0]
         connection = http.client.HTTPSConnection(parsed.hostname, port, timeout=8)
+        raw_socket = socket.socket(family, kind, protocol)
         try:
+            raw_socket.settimeout(8)
+            raw_socket.connect(sockaddr)
             connection.sock = ssl.create_default_context().wrap_socket(raw_socket, server_hostname=parsed.hostname)
             connection.request("GET", (parsed.path or "/") + ("?"+parsed.query if parsed.query else ""), headers={"Host":parsed.netloc, "User-Agent":"DCC-Web/0.1", "Accept":"application/json"})
             response = connection.getresponse()

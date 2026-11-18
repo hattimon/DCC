@@ -84,6 +84,18 @@ class SemanticReviewTests(unittest.TestCase):
 
 
 class FileSafetyTests(unittest.TestCase):
+    def test_compose_jobs_are_outside_the_approved_service_plan(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / 'compose.yaml').write_text('{}', encoding='utf-8')
+            result = SimpleNamespace(returncode=0, stderr='', stdout=json.dumps({
+                'services': {'web': {'image': 'example/web:1'}},
+                'jobs': {'periodic': {'image': 'example/job:1'}},
+            }))
+            config = ComposeConfig('fixture', root, ['compose.yaml'], runner=lambda *_a, **_kw: result)
+            with self.assertRaisesRegex(ComposeBlocked, 'input_closure_unknown'):
+                config.model()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

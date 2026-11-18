@@ -68,19 +68,7 @@ jobs:
           EVENT_BEFORE: ${{ github.event.before }}
           PUBLISH_IMAGE: ${{ inputs.publish_image }}
         run: |
-          current="$(tr -d '\r\n' < apps/container-updater/VERSION)"
-          [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          previous=""
-          if [[ "$EVENT_NAME" == push && "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]]; then
-            previous="$(git show "$EVENT_BEFORE:apps/container-updater/VERSION" 2>/dev/null | tr -d '\r\n' || true)"
-          fi
-          if [[ "$EVENT_NAME" == workflow_dispatch && "$PUBLISH_IMAGE" == true ]] ||
-             [[ "$EVENT_NAME" == push && "$previous" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$current" != "$previous" ]]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "No explicit publication or verified version change. Image tags are unchanged."
-          fi
+          bash tools/ci/updater-publish-decision.sh "$EVENT_NAME" "$EVENT_BEFORE" "$PUBLISH_IMAGE" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: test
