@@ -132,6 +132,9 @@ class ComposeConfig:
             raise ComposeBlocked('compose_validation_failed') from None
         if not isinstance(model, dict) or not isinstance(model.get('services'), dict) or not model['services']:
             raise ComposeBlocked('compose_validation_failed')
+        if model.get('jobs'):
+            # A job can introduce new commands and inputs outside the approved service plan.
+            raise ComposeBlocked('input_closure_unknown')
         return model
 
     def snapshot(self):

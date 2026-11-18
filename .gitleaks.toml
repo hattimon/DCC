@@ -1,0 +1,14 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Exact synthetic passwords in the panel fixtures"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^apps/dcc-web/tests/(panel_browser_fixture|test_panel_proxy)\.py$''']
+regexes = ['''^Fixture-pass-4433$''']
+
+[[allowlists]]
+description = "Two generic matches in the checksum-verified xterm 6.0.0 bundle"
+targetRules = ["generic-api-key"]
+paths = ['''^apps/dcc-web/static/vendor/xterm\.js$''']

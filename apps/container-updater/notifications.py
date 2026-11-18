@@ -6,7 +6,6 @@ import copy
 import hashlib
 import json
 import math
-import os
 import queue
 import re
 import smtplib
@@ -18,6 +17,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from email.message import EmailMessage
+
+from file_storage import atomic_write
 
 
 DEFAULTS = {
@@ -165,13 +166,7 @@ class NotificationService:
                         values[secret] = self.config[channel][secret]
             config = self._validate(merged)
             enabled_at = self.enabled_at if self.config['enabled'] else time.time()
-            temporary = self.path.with_suffix('.tmp')
-            temporary.write_text(json.dumps({**config, 'enabled_at': enabled_at}, ensure_ascii=False, indent=2), encoding='utf-8')
-            try:
-                os.chmod(temporary, 0o600)
-            except OSError:
-                pass
-            temporary.replace(self.path)
+            atomic_write(self.path, json.dumps({**config, 'enabled_at': enabled_at}, ensure_ascii=False, indent=2))
             self.config, self.enabled_at = config, enabled_at
         return self.public()
 

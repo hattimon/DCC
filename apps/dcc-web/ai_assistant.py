@@ -1,22 +1,17 @@
 """Explicit, provider-neutral Docker command proposals. No model output is executed."""
+import http.client
 import json
 import re
 import socket
 import ipaddress
 import threading
-import urllib.error
-import urllib.request
+import ssl
 from urllib.parse import urlsplit
 
 from flask import abort,g,jsonify,request
 from security import admin,authorize,redact,ROLES
 from catalogs import install_plan
 from ports import inventory
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self,*args,**kwargs):
-        raise ValueError('AI endpoint redirects are disabled')
 
 
 def validate_connection(data):
@@ -35,25 +30,53 @@ def validate_connection(data):
 
 def request_json(connection,path,payload=None):
     url=connection['endpoint']+path;parsed=urlsplit(url)
-    for value in socket.getaddrinfo(parsed.hostname,parsed.port or (443 if parsed.scheme=='https' else 80),type=socket.SOCK_STREAM):
-        address=ipaddress.ip_address(value[4][0])
-        if address.is_link_local or address.is_multicast or address.is_unspecified:
-            raise ValueError('AI endpoint resolves to a prohibited address')
-        if not address.is_global and not connection.get('allow_local'):
-            raise ValueError('Enable local-network consent for this AI endpoint')
+    https=parsed.scheme=='https'
+    port=parsed.port or (443 if https else 80)
     headers={'Content-Type':'application/json','Accept':'application/json'}
     if connection.get('api_key'):headers['Authorization']='Bearer '+connection['api_key']
-    opener=urllib.request.build_opener(NoRedirect(),urllib.request.ProxyHandler({}))
-    req=urllib.request.Request(url,data=json.dumps(payload).encode() if payload is not None else None,headers=headers,method='POST' if payload is not None else 'GET')
+    client=http.client.HTTPConnection(parsed.hostname,port,timeout=60)
     try:
-        with opener.open(req,timeout=60) as response:
+        addresses=socket.getaddrinfo(parsed.hostname,port,type=socket.SOCK_STREAM)
+        for *_, sockaddr in addresses:
+            address=ipaddress.ip_address(sockaddr[0])
+            address=getattr(address,'ipv4_mapped',None) or address
+            if address.is_link_local or address.is_multicast or address.is_unspecified:
+                raise ValueError('AI endpoint resolves to a prohibited address')
+            if not address.is_global and not connection.get('allow_local'):
+                raise ValueError('Enable local-network consent for this AI endpoint')
+        # Connect to a validated socket address. HTTP Host and TLS verification
+        # still use the original hostname, without a second DNS lookup or proxy.
+        for family,kind,protocol,_,sockaddr in addresses:
+            raw_socket=socket.socket(family,kind,protocol)
+            try:
+                raw_socket.settimeout(60)
+                raw_socket.connect(sockaddr)
+            except OSError:
+                raw_socket.close()
+                continue
+            client.sock=raw_socket
+            break
+        else:
+            raise OSError('No reachable AI endpoint address')
+        if https:
+            context = ssl.create_default_context()
+            if context.minimum_version < ssl.TLSVersion.TLSv1_2:
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+            client.sock = context.wrap_socket(client.sock, server_hostname=parsed.hostname)
+        client.request('POST' if payload is not None else 'GET',parsed.path or '/',
+                       body=json.dumps(payload).encode() if payload is not None else None,
+                       headers={'Host':parsed.netloc,**headers})
+        with client.getresponse() as response:
+            if 300<=response.status<400:raise ValueError('AI endpoint redirects are disabled')
+            if response.status>=400:
+                raise ValueError(f'AI provider returned HTTP {response.status}. Check the endpoint, model and credentials.')
             raw=response.read(1_000_001)
         if len(raw)>1_000_000:raise ValueError('AI response exceeds the limit')
         return json.loads(raw)
-    except urllib.error.HTTPError as error:
-        raise ValueError(f'AI provider returned HTTP {error.code}. Check the endpoint, model and credentials.') from None
-    except (OSError,urllib.error.URLError,json.JSONDecodeError):
+    except (OSError,http.client.HTTPException,UnicodeDecodeError,json.JSONDecodeError):
         raise ValueError('AI provider is unavailable or returned invalid JSON') from None
+    finally:
+        client.close()
 
 
 def proposal(connection,task,configuration,context,language):

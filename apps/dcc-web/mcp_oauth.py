@@ -197,11 +197,12 @@ def register_approval(app, public, reauthenticate):
         if g.user['id'] != grant['public_owner']: abort(403,'Only this grant owner can authorize the session')
         # Bind conscious approval to the browser that reviewed this challenge.
         binding = hashlib.sha256(session['sid'].encode()).hexdigest()
+        reviewed = {'id': pending_id, 'binding': binding, 'revision': grant['revision']}
         if request.method=='GET':
-            session['mcp_approval'] = {'id':pending_id,'binding':binding}
+            session['mcp_approval'] = reviewed
         else:
             approval = session.get('mcp_approval',{})
-            if approval != {'id':pending_id,'binding':binding} or request.form.get('confirm') != 'yes':
+            if approval != reviewed or request.form.get('confirm') != 'yes':
                 abort(403,'Review and explicitly confirm this client request')
             code = request.form.get('otp','')
             if not re.fullmatch(r'[0-9]{6}',code): abort(403,'A fresh six-digit authenticator code is required')

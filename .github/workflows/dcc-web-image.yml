@@ -14,7 +14,9 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Validate release inputs before building
         shell: bash
         run: |
@@ -24,10 +26,10 @@ jobs:
             [[ "$GITHUB_REF_NAME" == "dcc-web-v$version" ]]
           fi
           test -s "apps/dcc-web/RELEASE_NOTES_${version}.md"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: Install Web dependencies and run tests
@@ -60,7 +62,7 @@ jobs:
         run: python -m unittest discover -s apps/container-updater/tests -v
       - name: Validate the multi-architecture image and socket permissions
         run: |
-          docker build -f apps/dcc-web/Dockerfile -t dcc-web:release-candidate .
+          docker build --pull -f apps/dcc-web/Dockerfile -t dcc-web:release-candidate .
           docker run --rm --cap-drop=ALL --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges:true --volume /var/run/docker.sock:/var/run/docker.sock dcc-web:release-candidate python -c 'import os,subprocess; assert os.geteuid()==10001, os.geteuid(); assert os.access("/var/run/docker.sock",os.R_OK|os.W_OK); subprocess.run(["docker","version","--format","{{.Server.Version}}"],check=True,capture_output=True,text=True); subprocess.run(["docker","compose","version"],check=True,capture_output=True,text=True); print("socket group, dropped UID and Compose OK")'
           docker run --rm dcc-web:release-candidate --self-check
           python apps/dcc-web/tests/docker_security_smoke.py --image dcc-web:release-candidate
@@ -90,7 +92,9 @@ jobs:
       packages: write
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Read and check the Web version
         id: version
         shell: bash
@@ -99,17 +103,17 @@ jobs:
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "${GITHUB_REF_NAME#dcc-web-v}" == "$VERSION" ]]
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Prepare image tags
         id: metadata
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ghcr.io/hattimon/dcc-web
           tags: |
@@ -121,11 +125,12 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=https://github.com/hattimon/DCC/tree/${{ github.ref_name }}/apps/dcc-web
       - name: Build and publish Linux amd64 and arm64
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: apps/dcc-web/Dockerfile
           platforms: linux/amd64,linux/arm64
+          pull: true
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
@@ -138,7 +143,7 @@ jobs:
           docker manifest inspect "ghcr.io/hattimon/dcc-web:${{ steps.version.outputs.version }}" >/dev/null
           echo "The public App Store tag is readable without credentials."
       - name: Set up Python for source packaging
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Package the source archive

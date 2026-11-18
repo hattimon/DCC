@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from auth_fixture import authenticated_fixture
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from compose_config import ComposeBlocked, ComposeConfig, ControlledWriter, digest, private_json, safe_path, semantic_merge
@@ -83,6 +84,18 @@ class SemanticReviewTests(unittest.TestCase):
 
 
 class FileSafetyTests(unittest.TestCase):
+    def test_compose_jobs_are_outside_the_approved_service_plan(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / 'compose.yaml').write_text('{}', encoding='utf-8')
+            result = SimpleNamespace(returncode=0, stderr='', stdout=json.dumps({
+                'services': {'web': {'image': 'example/web:1'}},
+                'jobs': {'periodic': {'image': 'example/job:1'}},
+            }))
+            config = ComposeConfig('fixture', root, ['compose.yaml'], runner=lambda *_a, **_kw: result)
+            with self.assertRaisesRegex(ComposeBlocked, 'input_closure_unknown'):
+                config.model()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
@@ -640,7 +653,7 @@ class ComposeWebTests(unittest.TestCase):
         self.client=self.app.test_client()
     def tearDown(self):self.temp.cleanup()
     def login(self):
-        with self.client.session_transaction() as state:state.update(authenticated=True,csrf_token='fixture-token')
+        authenticated_fixture(self.client, 'fixture-token')
 
     def test_compose_api_uses_existing_authentication_and_csrf(self):
         for path in ('/api/compose/projects','/api/compose/projects/demo/history','/api/compose/operations/unknown'):
@@ -711,7 +724,7 @@ class ComposeWebTests(unittest.TestCase):
 class RealComposeNormalizationTests(unittest.TestCase):
     def test_real_multi_file_env_secret_ports_and_resource_model(self):
         with tempfile.TemporaryDirectory() as folder:
-            root=Path(folder)
+            root=Path(folder).resolve()
             (root/'.env').write_text('IMAGE=example/web:1\n',encoding='utf-8')
             (root/'service.env').write_text('PRIVATE_PASSWORD=do-not-export\n',encoding='utf-8')
             (root/'secret.txt').write_text('PRIVATE_SECRET',encoding='utf-8')

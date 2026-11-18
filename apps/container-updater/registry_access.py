@@ -1,11 +1,11 @@
 """Write-only, registry-scoped credentials with one reversible change per registry."""
 import copy
 import json
-import os
 import re
 import threading
 
 from updater import normalized_repository
+from file_storage import atomic_write
 
 
 def registry_name(value):
@@ -70,11 +70,7 @@ class RegistryAccessStore:
                     if not password:raise ValueError('Podaj hasło lub token rejestru.')
                     state['entries'][host] = {'username':username.strip(),'password':password}
             else:raise ValueError('Nieprawidłowa operacja na danych rejestru.')
-            temporary = self.path.with_suffix('.tmp')
-            temporary.write_text(json.dumps(state,ensure_ascii=False),encoding='utf-8')
-            try:os.chmod(temporary,0o600)
-            except OSError:pass
-            temporary.replace(self.path)
+            atomic_write(self.path, json.dumps(state, ensure_ascii=False))
             self.state = state
         return self.public()
 

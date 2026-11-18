@@ -1,4 +1,5 @@
 """Background updates use persisted registry access without a browser session."""
+from auth_fixture import authenticated_fixture
 
 import json
 import os
@@ -77,8 +78,7 @@ class ScheduledRegistryAuthTests(unittest.TestCase):
     def test_persisted_credentials_work_for_logged_out_schedule_and_manual_update(self):
         credentials = {'username': 'registry-user', 'password': 'TEST_REGISTRY_TOKEN'}
         browser = self.app.test_client()
-        with browser.session_transaction() as session:
-            session.update(authenticated=True, csrf_token='test-token')
+        authenticated_fixture(browser, 'test-token')
         headers = {'X-CSRF-Token': 'test-token'}
         response = browser.post('/api/registry-access', headers=headers, json={
             'registry': 'docker.io', **credentials,
@@ -116,8 +116,7 @@ class ScheduledRegistryAuthTests(unittest.TestCase):
             self.assertEqual(self.app.test_client().get('/api/containers').status_code, 401)
 
             manual = self.app.test_client()
-            with manual.session_transaction() as session:
-                session.update(authenticated=True, csrf_token='test-token')
+            authenticated_fixture(manual, 'test-token')
             response = manual.post('/api/update', headers=headers, json={'container_ids': ['n8n-id']})
             self.assertEqual(response.status_code, 202)
             result = self.wait_job()

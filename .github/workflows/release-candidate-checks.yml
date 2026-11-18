@@ -14,28 +14,35 @@ on:
       - "release/**"
       - "tests/**"
       - ".github/workflows/release-candidate-checks.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "DockerControlCenter.py"
-      - "DockerControlCenter.nsi"
-      - "dcc-catalog.json"
-      - "dcc_catalog.py"
-      - "apps/dcc-web/**"
-      - "packaging/**"
-      - "release/**"
-      - "tests/**"
-      - ".github/workflows/release-candidate-checks.yml"
+  workflow_dispatch:
+    inputs:
+      image_audit:
+        description: Only build, exercise and scan the image candidates
+        type: boolean
+        default: false
+      image_component:
+        description: Image candidates to verify in audit mode
+        type: choice
+        options: [all, web, updater]
+        default: all
 
 permissions:
   contents: read
 
+concurrency:
+  group: dcc-candidate-${{ github.ref }}-${{ inputs.image_audit || false }}-${{ inputs.image_component || 'all' }}
+  cancel-in-progress: true
+
 jobs:
   windows-upgrade:
+    if: ${{ !inputs.image_audit }}
     runs-on: windows-latest
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install test and build dependencies
@@ -54,23 +61,31 @@ jobs:
         run: |
           $env:DCC_BUILD_PYTHON = (Get-Command python).Source
           .\packaging\windows\build_installer.ps1
+      - name: Verify packaged restart with stale PyInstaller state
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -p "test_windows_installer_restart.py" -v
       - name: Upgrade v1.3.11 to the candidate in an isolated runner profile
         shell: powershell
         run: .\tests\windows_installer_upgrade_smoke.ps1 -CandidateInstaller .\release\DockerControlCenter-Setup-1.3.12.exe
       - name: Upload tested Windows installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dcc-v1.3.12-windows
           path: release/DockerControlCenter-Setup-1.3.12.exe
           if-no-files-found: error
 
   debian-upgrade:
+    if: ${{ !inputs.image_audit }}
     # Build on the oldest supported Ubuntu LTS so the bundled ELF runtime
     # remains usable on newer Debian-family systems such as MX Linux.
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install Linux build dependencies
@@ -84,7 +99,7 @@ jobs:
       - name: Upgrade v1.3.11, verify desktop launch and compare user data
         run: bash tests/linux_deb_upgrade_smoke.sh
       - name: Upload tested Linux package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dcc-v1.3.12-linux
           path: release/DockerControlCenter_1.3.12_amd64.deb
@@ -93,11 +108,14 @@ jobs:
   debian-stable-compatibility:
     needs: debian-upgrade
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     container: debian:trixie-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Download the tested Debian package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dcc-v1.3.12-linux
           path: release
@@ -113,11 +131,14 @@ jobs:
     # Trixie's fresh install is covered separately above.
     needs: debian-upgrade
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     container: debian:bookworm-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Download the tested Debian package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dcc-v1.3.12-linux
           path: release
@@ -128,13 +149,17 @@ jobs:
           DCC_OLD_VERSION=1.3.10 bash tests/linux_deb_upgrade_smoke.sh
 
   web-tests:
+    if: ${{ !inputs.image_audit }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: Install Web dependencies and test
@@ -149,7 +174,7 @@ jobs:
           python packaging/web/build_source_archive.py
           echo "version=$(tr -d '\r\n' < apps/dcc-web/VERSION)" >> "$GITHUB_OUTPUT"
       - name: Upload DCC Web source package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dcc-web-${{ steps.web-source.outputs.version }}-source
           path: release/DCC-Web-${{ steps.web-source.outputs.version }}-source.zip
@@ -206,8 +231,52 @@ jobs:
           test "$(docker logs "$container" 2>&1 | grep -c 'DCC_WEB_INITIAL_CREDENTIALS username=admin password=')" -eq 1
           echo "Fresh App Store container starts and keeps one generated admin credential across restart."
 
-  pr-gate:
-    if: ${{ always() && github.event_name == 'pull_request' }}
+  image-audit:
+    if: ${{ inputs.image_audit }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      PLATFORM: linux/${{ matrix.arch }}
+      COMPONENT: ${{ inputs.image_component }}
+      DOCKER_BUILDKIT: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Build images and test upgrade, persistence and rollback
+        run: bash tools/ci/smoke-image-candidates.sh "$PLATFORM" "$RUNNER_TEMP/dcc-image-audit" "$COMPONENT"
+      - name: Audit candidate images
+        run: |
+          bash tools/ci/install-scanner.sh grype
+          export PATH="$RUNNER_TEMP/dcc-audit-bin:$PATH"
+          status=0
+          for app in web updater; do
+            if [[ "$COMPONENT" != all && "$COMPONENT" != "$app" ]]; then continue; fi
+            echo "::group::$app ($PLATFORM)"
+            bash tools/ci/audit-image.sh "docker:dcc-candidate-$app" "$PLATFORM" "$RUNNER_TEMP/dcc-image-audit/$app.json" || status=1
+            echo '::endgroup::'
+          done
+          exit "$status"
+      - name: Upload package inventory and audit results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: image-audit-${{ matrix.arch }}
+          path: ${{ runner.temp }}/dcc-image-audit
+          if-no-files-found: ignore
+          retention-days: 7
+
+  release-candidate-gate:
+    if: ${{ always() && !inputs.image_audit }}
     needs:
       - windows-upgrade
       - debian-upgrade
@@ -215,6 +284,7 @@ jobs:
       - debian-bookworm-upgrade-compatibility
       - web-tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 3
     steps:
       - name: Require all release candidate checks to pass
         env:

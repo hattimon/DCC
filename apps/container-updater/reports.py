@@ -6,11 +6,12 @@ import copy
 import json
 import logging
 import math
-import os
 import secrets
 import threading
 import time
 from pathlib import Path
+
+from file_storage import atomic_write
 
 
 def guidance_codes(messages):
@@ -58,13 +59,7 @@ class ReportStore:
     def _write(self):
         if self.storage_error:
             return
-        temporary = self.path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(self.entries, ensure_ascii=False, indent=2), encoding='utf-8')
-        try:
-            os.chmod(temporary, 0o600)
-        except OSError:
-            pass
-        temporary.replace(self.path)
+        atomic_write(self.path, json.dumps(self.entries, ensure_ascii=False, indent=2))
 
     def append(self, kind, status, *, message='', details=None, updated=0, scanned=0, **fields):
         event = {'id': secrets.token_urlsafe(12), 'version': 1, 'occurred_at': time.time(),

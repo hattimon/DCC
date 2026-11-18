@@ -15,6 +15,9 @@ SETTINGS_ID = "__dcc_profile_ssh__"
 WORKSPACE_ACTIONS = {"profiles.transfer", "profiles.ssh.mount", "panel.domains", "panel.proxy", "profiles.ssh.directory", "profiles.ssh.files", "profiles.ssh.remove", "profiles.ssh.apply", "profiles.remove.selected"}
 MAX_FILE = 128 * 1024
 MAX_TOTAL = 1024 * 1024
+_KEY_HEADER = "-----BEGIN {}PRIVATE KEY-----"
+_PKCS8_HEADERS = (_KEY_HEADER.format(""), _KEY_HEADER.format("ENCRYPTED "))
+_PRIVATE_KEY_HEADERS = tuple(_KEY_HEADER.format(f"{kind} ") for kind in ("OPENSSH", "RSA", "EC")) + _PKCS8_HEADERS
 
 
 def key_name(value):
@@ -91,7 +94,7 @@ def connection_options(profile):
                 timeout=12, auth_timeout=12, banner_timeout=12)
     if private_text or key and Path(key).stat().st_size <= MAX_FILE:
         text = (private_text or Path(key).read_text(encoding='utf-8-sig')).lstrip()
-        if text.startswith(('-----BEGIN PRIVATE KEY-----', '-----BEGIN ENCRYPTED PRIVATE KEY-----')):
+        if text.startswith(_PKCS8_HEADERS):
             from cryptography.hazmat.primitives.serialization import load_pem_private_key, Encoding, PrivateFormat, NoEncryption
             password = secret.get('passphrase')
             try:
@@ -157,7 +160,7 @@ def inspect_file(name, content):
         kind = "public key"
     else:
         text = text.lstrip()
-        if not text.startswith(("-----BEGIN OPENSSH PRIVATE KEY-----", "-----BEGIN RSA PRIVATE KEY-----", "-----BEGIN EC PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----", "-----BEGIN ENCRYPTED PRIVATE KEY-----")):
+        if not text.startswith(_PRIVATE_KEY_HEADERS):
             raise ValueError("Only SSH private keys, public keys and known_hosts can be uploaded")
         accepted = False
         encrypted = False
@@ -172,7 +175,7 @@ def inspect_file(name, content):
                 break
             except Exception:
                 continue
-        if not accepted and text.startswith(('-----BEGIN PRIVATE KEY-----', '-----BEGIN ENCRYPTED PRIVATE KEY-----')):
+        if not accepted and text.startswith(_PKCS8_HEADERS):
             from cryptography.hazmat.primitives.serialization import load_pem_private_key
             try:
                 load_pem_private_key(text.encode(), password=None)

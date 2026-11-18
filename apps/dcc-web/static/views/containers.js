@@ -62,7 +62,7 @@ export async function overview(root,ctx){
 
 
 export async function containers(root,ctx){
- const [data,metrics]=await Promise.all([ctx.containerSnapshot||api('containers'),api('monitoring').catch(()=>({stats:[]}))]);if(!ctx.valid())return;
+ const [data,metrics]=await Promise.all([ctx.containerSnapshot||api('containers'),api('monitoring?history=0').catch(()=>({stats:[]}))]);if(!ctx.valid())return;
  state.containers=data.containers;state.containerRevision={profile:state.profile,value:data.revision};state.stats=metrics.stats;ctx.connected(true);
  const groupStorage='dcc-container-grouping-'+state.user.id+'-'+state.profile;
  const sortStorage='dcc-container-sort-'+state.user.id+'-'+state.profile;

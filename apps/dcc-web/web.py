@@ -24,7 +24,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from catalogs import Catalogs, InstalledCatalogScans, app_id, install_plan, validate_catalog
 from markdown_render import render_markdown
-from engine import DockerBackend, EngineError, Jobs
+from engine import DockerBackend, EngineError, Jobs, StatsSampler
 from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES, trusted_https_request
 from state import State
 from ports import container_revision,enrich_containers,inventory
@@ -112,6 +112,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     catalogs = Catalogs(state, ROOT)
     installed_scans = InstalledCatalogScans()
     jobs = Jobs()
+    stats = StatsSampler()
     factory = backend_factory or DockerBackend
     app.extensions.update(dcc_state=state, dcc_catalogs=catalogs, dcc_catalog_scans=installed_scans, dcc_jobs=jobs)
     initialize_security(app, state)
@@ -715,8 +716,18 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     @app.get("/api/monitoring")
     def monitoring():
         p = profile()
-        values = factory(p).stats()
-        state.sample(p["id"],values)
+        # Use the full resolved profile so an edit cannot join a sample started
+        # for the previous connection. Profile access is checked per request.
+        key = hashlib.sha256(json.dumps(p, sort_keys=True).encode()).digest()
+
+        def collect():
+            values = factory(p).stats()
+            state.sample(p["id"],values)
+            return values
+
+        values = stats.collect(key, collect)
+        if request.args.get('history') == '0':
+            return jsonify(stats=values)
         history = state.rows("SELECT at,data FROM samples WHERE profile=? ORDER BY id DESC LIMIT 120",(p["id"],))
         return jsonify(stats=values,history=[{"at":row["at"],"stats":json.loads(row["data"])} for row in reversed(history)])
 

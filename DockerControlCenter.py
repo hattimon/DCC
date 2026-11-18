@@ -22,7 +22,7 @@ from pathlib import Path
 from dcc_catalog import DCC_CATEGORY, category_group, localized_categories, catalog_category_sort_key, catalog_application_key, catalog_image_is_older
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 if os.name == 'nt':
@@ -1894,16 +1894,28 @@ class SecretStore:
         self._data = self._load()
 
     def _load(self) -> Dict[str, str]:
-        if not self.path.exists():
-            return {}
         try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            if os.name == "posix":
+                fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                with os.fdopen(fd, encoding="utf-8") as source:
+                    os.fchmod(source.fileno(), 0o600)
+                    payload = json.load(source)
+            else:
+                payload = json.loads(self.path.read_text(encoding="utf-8"))
             return dict(payload.get("secrets", {}) or {})
         except Exception:
             return {}
 
     def _save(self):
-        self.path.write_text(json.dumps({"secrets": self._data}, indent=2, ensure_ascii=True), encoding="utf-8")
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", dir=self.path.parent, encoding="utf-8", delete=False) as output:
+                temporary = Path(output.name)
+                json.dump({"secrets": self._data}, output, indent=2, ensure_ascii=True)
+            os.replace(temporary, self.path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def _protect(self, value: str) -> str:
         raw = value.encode("utf-8")
@@ -7726,6 +7738,37 @@ class WslDockerClient:
 
 
 
+_ssh_host_keys_lock = threading.Lock()
+
+
+class RememberSshHostKey:
+    """Use TOFU only for a new SSH address; retain the first key across sessions."""
+
+    def __init__(self, path):
+        self.path = path
+
+    def missing_host_key(self, client, hostname, key):
+        with _ssh_host_keys_lock:
+            keys = paramiko.HostKeys()
+            try:
+                keys.load(str(self.path))
+            except FileNotFoundError:
+                pass
+            known = keys.lookup(hostname)
+            if known is not None:
+                if key not in known.values():
+                    raise paramiko.SSHException("SSH host key changed. Verify the host fingerprint before replacing the trusted key.")
+                return
+            keys.add(hostname, key.get_name(), key)
+            fd, filename = tempfile.mkstemp(dir=self.path.parent)
+            os.close(fd)
+            try:
+                keys.save(filename)
+                os.replace(filename, self.path)
+            finally:
+                Path(filename).unlink(missing_ok=True)
+
+
 class SshDockerClient:
     def __init__(self, profile: RemoteProfile, timeout: int = DOCKER_HTTP_TIMEOUT):
         if paramiko is None:
@@ -7749,8 +7792,6 @@ class SshDockerClient:
     def _ensure_client(self):
         if self._client is not None:
             return self._client
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         auth_mode = (self.profile.ssh_auth_mode or "key").strip()
         use_key = auth_mode in {"key", "key_password"}
         use_password = auth_mode == "password"
@@ -7763,6 +7804,7 @@ class SshDockerClient:
             "port": self.profile.resolved_ssh_port(),
             "timeout": self.timeout,
             "banner_timeout": self.timeout,
+            "auth_timeout": self.timeout,
             "look_for_keys": use_key,
             "allow_agent": use_key or use_agent,
         }
@@ -7785,18 +7827,28 @@ class SshDockerClient:
             if not key_file.exists():
                 raise RuntimeError(f"SSH key file not found: {key_path}")
             kwargs["key_filename"] = str(key_file)
-            if passphrase:
-                kwargs["password"] = passphrase
+        if passphrase:
+            kwargs["passphrase"] = passphrase
+        client = paramiko.SSHClient()
+        known_hosts = USER_DATA_DIR / "ssh_known_hosts"
         try:
-            client.connect(**kwargs)
-        except paramiko.ssh_exception.PasswordRequiredException:
-            raise RuntimeError("SSH key requires a passphrase. Provide it in the profile.")
-        except paramiko.ssh_exception.AuthenticationException:
-            if use_key:
+            client.load_system_host_keys()
+            if known_hosts.exists():
+                client.load_host_keys(str(known_hosts))
+            client.set_missing_host_key_policy(RememberSshHostKey(known_hosts))
+            try:
+                client.connect(**kwargs)
+            except paramiko.ssh_exception.PasswordRequiredException:
+                raise RuntimeError("SSH key requires a passphrase. Provide it in the profile.") from None
+            except paramiko.ssh_exception.AuthenticationException:
+                if not use_key:
+                    raise
+                client.close()
                 kwargs["disabled_algorithms"] = {"pubkeys": ["rsa-sha2-256", "rsa-sha2-512"]}
                 client.connect(**kwargs)
-            else:
-                raise
+        except Exception:
+            client.close()
+            raise
         self._client = client
         return self._client
 
@@ -8104,23 +8156,36 @@ class RemoteConnectWorker(QObject):
 class UpdateDownloadWorker(QObject):
     finished = pyqtSignal(bool, str, str)
 
-    def __init__(self, url: str, target_path: str):
+    def __init__(self, url: str, target_path: str, digest: str = ""):
         super().__init__()
         self.url = url
         self.target_path = target_path
+        self.digest = digest
 
     def run(self):
         target = Path(self.target_path)
         part = target.with_suffix(target.suffix + ".part")
         try:
+            expected = re.fullmatch(r"sha256:([0-9a-fA-F]{64})", self.digest)
+            if self.digest and not expected:
+                raise ValueError("The release asset has an invalid SHA-256 digest.")
+            if urlsplit(self.url).scheme != "https":
+                raise ValueError("Update downloads require HTTPS.")
+            checksum = hashlib.sha256() if expected else None
             target.parent.mkdir(parents=True, exist_ok=True)
             request = Request(self.url, headers={"User-Agent": f"DCC/{APP_VERSION}"})
-            with urlopen(request, timeout=60) as response, part.open("wb") as output:
+            with urlopen(request, timeout=60) as response, part.open("xb") as output:
+                if urlsplit(response.geturl()).scheme != "https":
+                    raise ValueError("The update server redirected to an insecure address.")
                 while True:
                     chunk = response.read(1024 * 1024)
                     if not chunk:
                         break
                     output.write(chunk)
+                    if checksum is not None:
+                        checksum.update(chunk)
+            if checksum is not None and checksum.hexdigest() != expected[1].lower():
+                raise ValueError("The downloaded package does not match the release SHA-256 digest.")
             os.replace(part, target)
             self.finished.emit(True, str(target), "")
         except Exception as exc:
@@ -10903,10 +10968,14 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, self.texts["msg_error"], self.texts["info_update_download_failed"])
             return
         release_tag = str(release_info.get("tag_name") or "").strip()
-        target = Path(tempfile.gettempdir()) / "DockerControlCenterUpdates" / name
+        try:
+            target = Path(tempfile.mkdtemp(prefix="dcc-update-")) / name
+        except OSError as error:
+            QMessageBox.warning(self, self.texts["msg_error"], str(error))
+            return
         self.statusBar().showMessage(self.texts["info_update_downloading"].format(release=release_tag))
         self.update_download_thread = QThread(self)
-        self.update_download_worker = UpdateDownloadWorker(url, str(target))
+        self.update_download_worker = UpdateDownloadWorker(url, str(target), str(asset.get("digest") or ""))
         self.update_download_worker.moveToThread(self.update_download_thread)
         self.update_download_thread.started.connect(self.update_download_worker.run)
         self.update_download_worker.finished.connect(self.on_update_download_finished)

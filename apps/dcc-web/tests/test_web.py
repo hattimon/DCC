@@ -1,9 +1,11 @@
 import hashlib
+from concurrent.futures import Future, ThreadPoolExecutor
 import io
 import json
 from pathlib import Path
 import re
 import socket
+import ssl
 import sys
 import tempfile
 import time
@@ -28,13 +30,46 @@ from security import CAPABILITIES,redact,validate_profile
 from catalogs import Catalogs,install_plan,fetch_public,validate_catalog,image_repo
 from mcp_preview import MCPService,stdio
 from client_adapters import _zip_files, export_client
-from engine import DockerBackend,EngineError
+from engine import DockerBackend,EngineError,StatsSampler
 from profile_ssh import connection_options
 from ports import published_ports,enrich_containers,inventory,parse_bindings
 from remote_api import VerifiedProfileAdapter,ssh_docker_client
-from ai_assistant import validate_connection,proposal
+from ai_assistant import validate_connection,proposal,request_json
 from fixtures import FakeBackend
 from dcc_catalog import parse_access_details
+
+
+class StatsSamplerTests(unittest.TestCase):
+    def test_in_flight_sample_shared_by_same_profile_only(self):
+        sampler = StatsSampler()
+        started, joined, release = threading.Event(), threading.Event(), threading.Event()
+
+        class TrackedFuture(Future):
+            def result(self, timeout=None):
+                joined.set()
+                return super().result(timeout)
+
+        def slow_sample():
+            started.set()
+            if not release.wait(3):
+                raise AssertionError('Concurrent sample was not exercised')
+            return ['profile-a']
+
+        def duplicate():
+            raise AssertionError('The same in-flight profile was sampled twice')
+
+        with patch('engine.Future', TrackedFuture), ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(sampler.collect, 'profile-a', slow_sample)
+            try:
+                self.assertTrue(started.wait(3))
+                second = pool.submit(sampler.collect, 'profile-a', duplicate)
+                self.assertTrue(joined.wait(3))
+                self.assertEqual(sampler.collect('profile-b', lambda: ['profile-b']), ['profile-b'])
+            finally:
+                release.set()
+            self.assertEqual(first.result(3), ['profile-a'])
+            self.assertEqual(second.result(3), ['profile-a'])
+            self.assertEqual(sampler.collect('profile-a', lambda: ['fresh']), ['fresh'])
 
 
 class WebTests(unittest.TestCase):
@@ -203,6 +238,34 @@ class WebTests(unittest.TestCase):
         second=self.client.get('/api/monitoring').json
         self.assertEqual(len(first['stats']),3)
         self.assertEqual(len(second['history']),2)
+
+    def test_metrics_only_refresh_omits_history_but_still_records_a_sample(self):
+        response=self.client.get('/api/monitoring?history=0')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(len(response.json['stats']),3)
+        self.assertNotIn('history',response.json)
+        self.assertEqual(len(self.state.rows('SELECT id FROM samples WHERE profile=?',('local',))),1)
+
+    def test_inspect_and_compose_hide_credentials_embedded_in_urls(self):
+        connection='postgresql://fixture-user:synthetic-db-value@db.example/fixture'
+        with patch.object(FakeBackend,'inspect',return_value={'Config':{'Env':['DATABASE_URL='+connection]}}):
+            response=self.client.get('/api/containers/redis')
+            self.assertEqual(response.status_code,200)
+            self.assertNotIn('synthetic-db-value',response.get_data(as_text=True))
+        with patch.object(FakeBackend,'compose',return_value=json.dumps({'services':{'app':{'environment':{'DATABASE_URL':connection}}}})):
+            response=self.request('compose/review-project/config',{})
+            self.assertEqual(response.status_code,200)
+            self.assertNotIn('synthetic-db-value',response.get_data(as_text=True))
+
+    def test_ai_request_does_not_resolve_hostname_again_before_connecting(self):
+        public=(socket.AF_INET,socket.SOCK_STREAM,socket.IPPROTO_TCP,'',('93.184.216.34',8080))
+        private=(socket.AF_INET,socket.SOCK_STREAM,socket.IPPROTO_TCP,'',('169.254.169.254',8080))
+        value={'endpoint':'http://provider.example:8080','allow_local':True}
+        with patch('ai_assistant.socket.getaddrinfo',side_effect=[[public],[private]]) as resolve, patch('ai_assistant.socket.socket') as raw:
+            raw.return_value.makefile.return_value=io.BytesIO(b'HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n{"data":[]}')
+            self.assertEqual(request_json(value,'/models'),{'data':[]})
+            raw.return_value.connect.assert_called_once_with(public[-1])
+            self.assertEqual(resolve.call_count,1)
 
     def test_container_listing_reads_restart_policies_in_one_safe_batch(self):
         backend = DockerBackend({'kind':'local'})
@@ -753,6 +816,30 @@ class WebTests(unittest.TestCase):
         with patch('catalogs.socket.getaddrinfo',return_value=[(2,1,6,'',('127.0.0.1',443))]):
             with self.assertRaises(ValueError):fetch_public('https://internal.example/catalog.json')
 
+    def test_catalog_never_dials_a_multicast_dns_answer(self):
+        for family, address in ((socket.AF_INET, ('224.0.0.1', 443)),
+                                (socket.AF_INET6, ('ff02::1', 443, 0, 0))):
+            with self.subTest(address=address), \
+                 patch('catalogs.socket.getaddrinfo', return_value=[(family, socket.SOCK_STREAM, 6, '', address)]), \
+                 patch('catalogs.socket.create_connection', side_effect=AssertionError('unapproved address')), \
+                 patch('catalogs.socket.socket', side_effect=AssertionError('unapproved address')):
+                with self.assertRaises(ValueError):
+                    fetch_public('https://fixture.invalid/catalog.json')
+
+    def test_catalog_uses_the_validated_address_and_original_tls_name(self):
+        address = ('2606:4700:4700::1111', 443, 0, 0)
+        with patch('catalogs.socket.getaddrinfo', return_value=[(socket.AF_INET6, socket.SOCK_STREAM, 6, '', address)]) as dns, \
+             patch('catalogs.socket.socket') as transport, \
+             patch('catalogs.ssl.create_default_context') as tls, \
+             patch('catalogs.http.client.HTTPSConnection') as https:
+            response = https.return_value.getresponse.return_value
+            response.status = 200
+            response.read.return_value = b'{"apps":[]}'
+            self.assertEqual(fetch_public('https://fixture.invalid/catalog.json'), b'{"apps":[]}')
+            dns.assert_called_once_with('fixture.invalid', 443, type=socket.SOCK_STREAM)
+            transport.return_value.connect.assert_called_once_with(address)
+            tls.return_value.wrap_socket.assert_called_once_with(transport.return_value, server_hostname='fixture.invalid')
+
     def test_partial_profile_edit_retains_permissions_users_and_credentials(self):
         self.state.save_profile('restricted',{'name':'Restricted','kind':'local','permissions':['read'],'users':['one-user']},{'password':'private-value'})
         self.assertEqual(self.request('profiles/restricted',{'name':'Renamed'},method='PUT').status_code,200)
@@ -1133,6 +1220,32 @@ class WebTests(unittest.TestCase):
         self.assertTrue(self.client.get('/api/ai/connection').json['has_key'])
         with self.assertRaises(ValueError):validate_connection(dict(config,allow_local=False))
         with self.assertRaises(ValueError):validate_connection(dict(config,endpoint='https://user:secret@example.net/v1'))
+
+    def test_ai_https_enforces_tls_1_2_and_preserves_stronger_policy(self):
+        address = ('93.184.216.34', 443)
+        for initial, expected in ((ssl.TLSVersion.TLSv1, ssl.TLSVersion.TLSv1_2),
+                                  (ssl.TLSVersion.TLSv1_3, ssl.TLSVersion.TLSv1_3)):
+            with self.subTest(initial=initial), \
+                 patch('ai_assistant.socket.getaddrinfo', return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, '', address)]), \
+                 patch('ai_assistant.socket.socket') as raw, \
+                 patch('ai_assistant.http.client.HTTPConnection') as http, \
+                 patch('ai_assistant.ssl.create_default_context') as create_context:
+                context = create_context.return_value
+                context.minimum_version = initial
+                reply = http.return_value.getresponse.return_value.__enter__.return_value
+                reply.status = 200
+                reply.read.return_value = b'{}'
+                self.assertEqual(request_json({'endpoint': 'https://fixture.invalid'}, '/models'), {})
+                self.assertEqual(context.minimum_version, expected)
+                context.wrap_socket.assert_called_once_with(raw.return_value, server_hostname='fixture.invalid')
+
+    def test_url_redaction_preserves_hosts_and_masks_authorities_in_long_text(self):
+        text = "a" * 8192 + " https://public.example:8443/read "
+        text += "postgresql://name:fixture%3Aopaque@example.invalid/db "
+        text += "https://:fixture@host.invalid/path"
+        expected = "a" * 8192 + " https://public.example:8443/read "
+        expected += "postgresql://••••@example.invalid/db https://••••@host.invalid/path"
+        self.assertEqual(redact(text), expected)
 
     def test_ai_proposes_configuration_only_and_never_executes_docker_commands(self):
         self.request('ai/connection',{'provider':'compatible','endpoint':'https://example.net/v1','model':'coder','enabled':True},method='PUT')

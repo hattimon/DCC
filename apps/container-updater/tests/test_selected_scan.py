@@ -1,4 +1,5 @@
 """Selective checks must never scan or update unselected containers."""
+from auth_fixture import authenticated_fixture
 
 import copy
 import json
@@ -112,8 +113,7 @@ class SelectedWebScanTests(unittest.TestCase):
         )
         self.app = create_app(self.temp.name, service_factory=lambda: self.service, print_credentials=False)
         self.client = self.app.test_client()
-        with self.client.session_transaction() as state:
-            state.update(authenticated=True, csrf_token="test-token")
+        authenticated_fixture(self.client, "test-token")
         self.headers = {"X-CSRF-Token": "test-token"}
 
     def tearDown(self):
@@ -148,8 +148,7 @@ class SelectedWebScanTests(unittest.TestCase):
         self.assertGreater(persisted["containers"][0]["checked_at"], 101)
         restored = create_app(self.temp.name, service_factory=lambda: self.service, print_credentials=False)
         client = restored.test_client()
-        with client.session_transaction() as state:
-            state.update(authenticated=True)
+        authenticated_fixture(client)
         self.assertEqual(client.get("/api/containers").get_json()["containers"][1]["checked_at"], 101)
 
     def test_invalid_selection_does_not_start_full_scan(self):
@@ -167,8 +166,7 @@ class SelectedWebScanTests(unittest.TestCase):
         self.service.inventory.side_effect = service.inventory
         fresh = create_app(self.temp.name, service_factory=lambda: self.service, print_credentials=False)
         client = fresh.test_client()
-        with client.session_transaction() as state:
-            state.update(authenticated=True)
+        authenticated_fixture(client)
         cached = client.get("/api/containers").get_json()
         self.assertIsNone(cached["scanned_at"])
         self.assertEqual(cached["containers"][0]["id"], "cinema")
@@ -220,8 +218,7 @@ class SelectedWebScanTests(unittest.TestCase):
                                   print_credentials=False, startup_auto_updates=True)
         self.app.extensions["dcc_updater_auto_updates"].set("other", "example/other:latest", True)
         self.client = self.app.test_client()
-        with self.client.session_transaction() as state:
-            state.update(authenticated=True, csrf_token="test-token")
+        authenticated_fixture(self.client, "test-token")
         self.assertEqual(self.client.post("/api/self-update/check", json={}, headers=self.headers).status_code, 202)
         self.wait()
         self.assertEqual(self.post({"container_ids": ["cinema"]}).status_code, 409)

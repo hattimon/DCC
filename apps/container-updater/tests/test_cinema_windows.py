@@ -12,6 +12,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+from auth_fixture import authenticated_fixture
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cinema_windows import export_script, eligible, windows_path
@@ -107,7 +108,7 @@ class WindowsCinemaPlanTests(unittest.TestCase):
         client=app.test_client()
         path='/api/compose/projects/demo/windows-cinema'
         self.assertEqual(client.get(path).status_code,401)
-        with client.session_transaction() as state:state['authenticated']=True
+        authenticated_fixture(client)
         response=client.get(path)
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.headers['Cache-Control'],'no-store')

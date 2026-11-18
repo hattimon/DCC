@@ -7,7 +7,8 @@ COPY --from=cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=cli /usr/local/libexec/docker/cli-plugins /usr/local/libexec/docker/cli-plugins
 WORKDIR /opt/dcc
 COPY apps/dcc-web/requirements.txt /tmp/dcc-web-requirements.txt
-RUN pip install --no-cache-dir -r /tmp/dcc-web-requirements.txt
+RUN python -m pip install --no-cache-dir --disable-pip-version-check --upgrade pip==26.3 \
+    && python -m pip install --no-cache-dir --disable-pip-version-check -r /tmp/dcc-web-requirements.txt
 COPY dcc_catalog.py dcc-catalog.json ./
 COPY catalog/media ./catalog/media
 COPY apps/container-updater/updater.py ./apps/container-updater/updater.py
