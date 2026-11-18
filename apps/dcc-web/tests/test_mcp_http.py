@@ -116,6 +116,21 @@ class PublicMCPTests(unittest.TestCase):
         return self.http(self.rpc,'POST',headers=headers,json={'jsonrpc':'2.0','id':1,'method':'tools/call',
             'params':{'name':name,'arguments':{'profile':'ssh-fixture',**arguments}}})
 
+    def test_approval_requires_review_of_the_current_grant_revision(self):
+        _, _, path = self.pending()
+        self.assertEqual(self.http(path).status_code, 200)
+        row = self.state.rows('SELECT id,data FROM grants WHERE id=?', (self.grant['id'],))[0]
+        changed = json.loads(row['data'])
+        changed['revision'] = secrets.token_hex(16)
+        self.state.execute('UPDATE grants SET data=? WHERE id=?', (json.dumps(changed), row['id']))
+        with self.client.session_transaction(base_url=self.origin) as session:
+            csrf = session['csrf']
+        with patch('mfa.time', SimpleNamespace(time=lambda: self.step * 30)):
+            response = self.http(path, 'POST', headers={'Origin': self.origin}, data={
+                'csrf': csrf, 'current_password': self.password, 'otp': self.code(), 'confirm': 'yes', 'duration': '15'})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.approve(path).status_code, 302)
+
     def test_initialize_includes_grant_scoped_safety_instructions(self):
         token=self.session_token()
         response=self.http(self.rpc,'POST',headers={

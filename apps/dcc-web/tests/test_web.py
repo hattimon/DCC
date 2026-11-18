@@ -1,4 +1,5 @@
 import hashlib
+from concurrent.futures import Future, ThreadPoolExecutor
 import io
 import json
 from pathlib import Path
@@ -28,13 +29,46 @@ from security import CAPABILITIES,redact,validate_profile
 from catalogs import Catalogs,install_plan,fetch_public,validate_catalog,image_repo
 from mcp_preview import MCPService,stdio
 from client_adapters import _zip_files, export_client
-from engine import DockerBackend,EngineError
+from engine import DockerBackend,EngineError,StatsSampler
 from profile_ssh import connection_options
 from ports import published_ports,enrich_containers,inventory,parse_bindings
 from remote_api import VerifiedProfileAdapter,ssh_docker_client
-from ai_assistant import validate_connection,proposal
+from ai_assistant import validate_connection,proposal,request_json
 from fixtures import FakeBackend
 from dcc_catalog import parse_access_details
+
+
+class StatsSamplerTests(unittest.TestCase):
+    def test_in_flight_sample_shared_by_same_profile_only(self):
+        sampler = StatsSampler()
+        started, joined, release = threading.Event(), threading.Event(), threading.Event()
+
+        class TrackedFuture(Future):
+            def result(self, timeout=None):
+                joined.set()
+                return super().result(timeout)
+
+        def slow_sample():
+            started.set()
+            if not release.wait(3):
+                raise AssertionError('Concurrent sample was not exercised')
+            return ['profile-a']
+
+        def duplicate():
+            raise AssertionError('The same in-flight profile was sampled twice')
+
+        with patch('engine.Future', TrackedFuture), ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(sampler.collect, 'profile-a', slow_sample)
+            try:
+                self.assertTrue(started.wait(3))
+                second = pool.submit(sampler.collect, 'profile-a', duplicate)
+                self.assertTrue(joined.wait(3))
+                self.assertEqual(sampler.collect('profile-b', lambda: ['profile-b']), ['profile-b'])
+            finally:
+                release.set()
+            self.assertEqual(first.result(3), ['profile-a'])
+            self.assertEqual(second.result(3), ['profile-a'])
+            self.assertEqual(sampler.collect('profile-a', lambda: ['fresh']), ['fresh'])
 
 
 class WebTests(unittest.TestCase):
@@ -203,6 +237,34 @@ class WebTests(unittest.TestCase):
         second=self.client.get('/api/monitoring').json
         self.assertEqual(len(first['stats']),3)
         self.assertEqual(len(second['history']),2)
+
+    def test_metrics_only_refresh_omits_history_but_still_records_a_sample(self):
+        response=self.client.get('/api/monitoring?history=0')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(len(response.json['stats']),3)
+        self.assertNotIn('history',response.json)
+        self.assertEqual(len(self.state.rows('SELECT id FROM samples WHERE profile=?',('local',))),1)
+
+    def test_inspect_and_compose_hide_credentials_embedded_in_urls(self):
+        connection='postgresql://fixture-user:synthetic-db-value@db.example/fixture'
+        with patch.object(FakeBackend,'inspect',return_value={'Config':{'Env':['DATABASE_URL='+connection]}}):
+            response=self.client.get('/api/containers/redis')
+            self.assertEqual(response.status_code,200)
+            self.assertNotIn('synthetic-db-value',response.get_data(as_text=True))
+        with patch.object(FakeBackend,'compose',return_value=json.dumps({'services':{'app':{'environment':{'DATABASE_URL':connection}}}})):
+            response=self.request('compose/review-project/config',{})
+            self.assertEqual(response.status_code,200)
+            self.assertNotIn('synthetic-db-value',response.get_data(as_text=True))
+
+    def test_ai_request_does_not_resolve_hostname_again_before_connecting(self):
+        public=(socket.AF_INET,socket.SOCK_STREAM,socket.IPPROTO_TCP,'',('93.184.216.34',8080))
+        private=(socket.AF_INET,socket.SOCK_STREAM,socket.IPPROTO_TCP,'',('169.254.169.254',8080))
+        value={'endpoint':'http://provider.example:8080','allow_local':True}
+        with patch('ai_assistant.socket.getaddrinfo',side_effect=[[public],[private]]) as resolve, patch('ai_assistant.socket.socket') as raw:
+            raw.return_value.makefile.return_value=io.BytesIO(b'HTTP/1.1 200 OK\r\nContent-Length: 11\r\n\r\n{"data":[]}')
+            self.assertEqual(request_json(value,'/models'),{'data':[]})
+            raw.return_value.connect.assert_called_once_with(public[-1])
+            self.assertEqual(resolve.call_count,1)
 
     def test_container_listing_reads_restart_policies_in_one_safe_batch(self):
         backend = DockerBackend({'kind':'local'})

@@ -14,28 +14,24 @@ on:
       - "release/**"
       - "tests/**"
       - ".github/workflows/release-candidate-checks.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "DockerControlCenter.py"
-      - "DockerControlCenter.nsi"
-      - "dcc-catalog.json"
-      - "dcc_catalog.py"
-      - "apps/dcc-web/**"
-      - "packaging/**"
-      - "release/**"
-      - "tests/**"
-      - ".github/workflows/release-candidate-checks.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: dcc-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-upgrade:
     runs-on: windows-latest
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install test and build dependencies
@@ -54,11 +50,15 @@ jobs:
         run: |
           $env:DCC_BUILD_PYTHON = (Get-Command python).Source
           .\packaging\windows\build_installer.ps1
+      - name: Verify packaged restart with stale PyInstaller state
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -p "test_windows_installer_restart.py" -v
       - name: Upgrade v1.3.11 to the candidate in an isolated runner profile
         shell: powershell
         run: .\tests\windows_installer_upgrade_smoke.ps1 -CandidateInstaller .\release\DockerControlCenter-Setup-1.3.12.exe
       - name: Upload tested Windows installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dcc-v1.3.12-windows
           path: release/DockerControlCenter-Setup-1.3.12.exe
@@ -68,9 +68,12 @@ jobs:
     # Build on the oldest supported Ubuntu LTS so the bundled ELF runtime
     # remains usable on newer Debian-family systems such as MX Linux.
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install Linux build dependencies
@@ -84,7 +87,7 @@ jobs:
       - name: Upgrade v1.3.11, verify desktop launch and compare user data
         run: bash tests/linux_deb_upgrade_smoke.sh
       - name: Upload tested Linux package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dcc-v1.3.12-linux
           path: release/DockerControlCenter_1.3.12_amd64.deb
@@ -93,11 +96,14 @@ jobs:
   debian-stable-compatibility:
     needs: debian-upgrade
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     container: debian:trixie-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Download the tested Debian package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dcc-v1.3.12-linux
           path: release
@@ -113,11 +119,14 @@ jobs:
     # Trixie's fresh install is covered separately above.
     needs: debian-upgrade
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     container: debian:bookworm-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Download the tested Debian package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: dcc-v1.3.12-linux
           path: release
@@ -129,12 +138,15 @@ jobs:
 
   web-tests:
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: Install Web dependencies and test
@@ -149,7 +161,7 @@ jobs:
           python packaging/web/build_source_archive.py
           echo "version=$(tr -d '\r\n' < apps/dcc-web/VERSION)" >> "$GITHUB_OUTPUT"
       - name: Upload DCC Web source package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dcc-web-${{ steps.web-source.outputs.version }}-source
           path: release/DCC-Web-${{ steps.web-source.outputs.version }}-source.zip

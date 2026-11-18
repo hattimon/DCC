@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directories:
+      - /
+      - /apps/dcc-web
+      - /apps/container-updater
+    schedule:
+      interval: weekly
+    # Security PRs are independent of the limit on routine version updates.
+    open-pull-requests-limit: 0
+    groups:
+      python-security:
+        applies-to: security-updates
+        patterns: ['*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major, version-update:semver-minor]
+    groups:
+      action-patches:
+        patterns: ['*']
+        update-types: [patch]

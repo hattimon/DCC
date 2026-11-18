@@ -1,0 +1,258 @@
+name: DCC checks
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dcc-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scope:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      desktop: ${{ steps.paths.outputs.desktop }}
+      web: ${{ steps.paths.outputs.web }}
+      updater: ${{ steps.paths.outputs.updater }}
+      dependencies: ${{ steps.paths.outputs.dependencies }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select suites by changed paths
+        id: paths
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          desktop=false web=false updater=false dependencies=false
+          git diff --name-only --no-renames -z "$BASE_SHA" HEAD > "$RUNNER_TEMP/dcc-changes"
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              .github/workflows/dcc-checks.yml|.github/dependabot.yml|tools/ci/*)
+                desktop=true web=true updater=true dependencies=true ;;
+              DockerControlCenter.py|DockerControlCenter*.spec|DockerControlCenter.nsi|RepoBuilder.*|upstream_assets/*|assets/*|backgrounds/*|images/*|icon.*|repo_builder_icon.*|bg.mp3|requirements-*.txt|packaging/windows/*|packaging/linux/*|tests/*)
+                desktop=true ;;
+            esac
+            case "$path" in
+              apps/dcc-web/*|apps/dcc-remote-access/*|apps/container-updater/updater.py|packaging/web/*|tools/benchmark_web_monitoring.py)
+                web=true ;;
+              dcc-catalog.json|dcc_catalog.py|catalog/*|tools/*catalog*.py)
+                desktop=true web=true ;;
+            esac
+            case "$path" in
+              apps/container-updater/*|.github/workflows/container-updater.yml) updater=true ;;
+            esac
+            case "$path" in
+              requirements-*.txt|apps/*/requirements.txt|apps/*/Dockerfile*) dependencies=true ;;
+            esac
+          done < "$RUNNER_TEMP/dcc-changes"
+          printf 'desktop=%s\nweb=%s\nupdater=%s\ndependencies=%s\n' \
+            "$desktop" "$web" "$updater" "$dependencies" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    needs: scope
+    if: needs.scope.outputs.desktop == 'true'
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-*.txt
+      - name: Install Desktop test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+      - name: Install Qt runtime libraries on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libopengl0 libpulse0
+      - name: Desktop regression suite
+        if: runner.os == 'Windows'
+        run: python -m unittest discover -s tests -q
+      - name: Check Desktop security on Linux
+        if: runner.os == 'Linux'
+        run: python -m unittest discover -s tests -p test_desktop_security.py -q
+
+  web:
+    needs: scope
+    if: needs.scope.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: apps/dcc-web/requirements.txt
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Web, API, MCP and frontend regression suite
+        run: |
+          python -m pip install --disable-pip-version-check -r apps/dcc-web/requirements.txt
+          python -m unittest discover -s apps/dcc-web/tests -q
+          node apps/dcc-web/tests/frontend_unit.mjs
+          python tools/benchmark_web_monitoring.py --check
+          python packaging/web/build_source_archive.py
+          python -m zipfile -t "release/DCC-Web-$(tr -d '\r\n' < apps/dcc-web/VERSION)-source.zip"
+
+  updater:
+    needs: scope
+    if: needs.scope.outputs.updater == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: apps/container-updater/requirements.txt
+      - name: Updater regression suite
+        run: |
+          python -m pip install --disable-pip-version-check -r apps/container-updater/requirements.txt
+          python -m unittest discover -s apps/container-updater/tests -q
+
+  secrets-and-workflows:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install verified scanners
+        run: |
+          bash tools/ci/install-scanner.sh gitleaks
+          bash tools/ci/install-scanner.sh actionlint
+      - name: Detect committed secrets with redacted output
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show HEAD:apps/dcc-web/static/vendor/xterm.js | sha256sum | \
+            cut -d ' ' -f 1 | grep -Fxq 98d0973151aff2991d335b1adbbdac2e14da26341abe329d677d4c0034402bdf
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            gitleaks git --redact=100 --no-banner --max-target-megabytes 5 --log-opts="$BASE_SHA..HEAD" .
+          else
+            gitleaks dir --redact=100 --no-banner --max-target-megabytes 5 .
+          fi
+      - name: Validate GitHub Actions definitions
+        run: actionlint -shellcheck=
+
+  dependencies:
+    needs: scope
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.scope.outputs.dependencies == 'true') }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            manifests: apps/dcc-web/requirements.txt apps/container-updater/requirements.txt
+          - os: windows-latest
+            manifests: requirements-test.txt apps/dcc-web/requirements.txt
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Install audit tool
+        run: python -m pip install --disable-pip-version-check pip==26.3 pip-audit==2.10.1
+      - name: Audit resolved dependencies, including transitives
+        shell: bash
+        env:
+          MANIFESTS: ${{ matrix.manifests }}
+        run: |
+          status=0
+          for manifest in $MANIFESTS; do
+            echo "::group::Audit $manifest"
+            pip-audit --strict --progress-spinner off --timeout 10 -r "$manifest" || status=1
+            echo '::endgroup::'
+          done
+          exit "$status"
+
+  images:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: bash tools/ci/install-scanner.sh grype
+      - name: Audit published images without running them
+        env:
+          PLATFORM: linux/${{ matrix.arch }}
+          GRYPE_CHECK_FOR_APP_UPDATE: 'false'
+        run: |
+          web="$(tr -d '\r\n' < apps/dcc-web/VERSION)"
+          updater="$(tr -d '\r\n' < apps/container-updater/VERSION)"
+          remote="$(awk '$1 == "image:" {print $2}' apps/dcc-remote-access/compose.yaml)"
+          for version in "$web" "$updater"; do [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; done
+          [[ "$remote" =~ ^docker\.io/openziti/zrok2:[0-9]+\.[0-9]+\.[0-9]+@sha256:[0-9a-f]{64}$ ]]
+          status=0
+          for image in "ghcr.io/hattimon/dcc-web:$web" "ghcr.io/hattimon/dcc-container-updater:$updater" "$remote"; do
+            echo "::group::$image ($PLATFORM)"
+            report="$(mktemp)"
+            grype "registry:$image" --platform "$PLATFORM" --by-cve --only-fixed --fail-on high --output "json=$report" || status=1
+            if [[ -s "$report" ]]; then
+              jq -r '.matches[] | select(.vulnerability.severity == "High" or .vulnerability.severity == "Critical")
+                | [.vulnerability.severity, .vulnerability.id, .artifact.name, .artifact.version,
+                   (.vulnerability.fix.versions | join(", "))] | @tsv' "$report" | sort -u
+            fi
+            rm -f -- "$report"
+            echo '::endgroup::'
+          done
+          exit "$status"
+
+  pr-gate:
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs: [scope, desktop, web, updater, secrets-and-workflows, dependencies]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Require successful checks for changed components
+        env:
+          SCOPES: ${{ needs.scope.result }}
+          SECRETS_SCAN: ${{ needs.secrets-and-workflows.result }}
+          COMPONENTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          [[ "$SCOPES" == success && "$SECRETS_SCAN" == success ]]
+          for result in $COMPONENTS; do [[ "$result" == success || "$result" == skipped ]]; done

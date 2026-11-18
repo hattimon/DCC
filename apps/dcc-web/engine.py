@@ -1,4 +1,5 @@
 """Argument-based Docker transports. No shell is used on the web host."""
+from concurrent.futures import Future
 import json
 import os
 import re
@@ -262,6 +263,38 @@ class DockerBackend:
         for filename in project.get("files",[project["file"]]):
             args += ["--file",filename]
         return self.run([*args,"--project-name",project["name"],*suffix],timeout=300)
+
+
+class StatsSampler:
+    """Share only an in-flight sample for an already authorized profile snapshot."""
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.active = {}
+
+    def collect(self, key, sample):
+        with self.lock:
+            pending = self.active.get(key)
+            first = pending is None
+            if first:
+                if len(self.active) >= 4:
+                    raise EngineError('Monitoring is busy; try again shortly')
+                pending = self.active[key] = Future()
+        if not first:
+            try:
+                return pending.result(timeout=45)
+            except TimeoutError:
+                raise EngineError('The monitoring sample timed out') from None
+        try:
+            values = sample()
+        except BaseException as error:
+            pending.set_exception(error)
+            raise
+        else:
+            pending.set_result(values)
+            return values
+        finally:
+            with self.lock:
+                self.active.pop(key, None)
 
 
 class Jobs:

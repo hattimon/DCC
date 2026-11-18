@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from auth_fixture import authenticated_fixture
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("DCC_UPDATER_DATA", tempfile.mkdtemp(prefix="dcc-updater-tests-"))
@@ -60,11 +61,34 @@ class WebSecurityTests(unittest.TestCase):
         response = self.client.post("/api/scan")
         self.assertEqual(response.status_code, 400)
 
+    def _sign_in_and_copy_cookie(self):
+        password = self.app.extensions['dcc_updater_initial_password']
+        csrf = self._csrf()
+        self.assertEqual(self.client.post('/login', data={'csrf_token': csrf, 'password': password}).status_code, 302)
+        cookie = self.client.get_cookie(self.app.config['SESSION_COOKIE_NAME'])
+        copy = self.app.test_client()
+        copy.set_cookie(cookie.key, cookie.value)
+        self.assertEqual(copy.get('/').status_code, 200)
+        return password, copy
+
+    def test_logout_rejects_replay_of_copied_session_cookie(self):
+        _, copy = self._sign_in_and_copy_cookie()
+        self.assertEqual(self.client.post('/logout', data={'csrf_token': self._csrf('/')}).status_code, 302)
+        self.assertEqual(copy.get('/api/reports').status_code, 401)
+
+    def test_password_change_revokes_old_cookies_and_preserves_current_login(self):
+        password, copy = self._sign_in_and_copy_cookie()
+        csrf = self._csrf('/')
+        changed = self.client.post('/api/password', json={'old_password': password, 'new_password': 'fixture-replacement-password'},
+                                   headers={'X-CSRF-Token': csrf})
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(copy.get('/api/reports').status_code, 401)
+        self.assertEqual(self.client.get('/').status_code, 200)
+
     def test_reports_and_notification_settings_require_login_and_mutations_require_csrf(self):
         for route in ('/api/reports','/api/notifications'):
             self.assertEqual(self.client.get(route).status_code,401)
-        with self.client.session_transaction() as state:
-            state.update(authenticated=True,csrf_token='test-token')
+        authenticated_fixture(self.client, 'test-token')
         for route in ('/api/notifications','/api/notifications/test'):
             self.assertEqual(self.client.post(route,json={}).status_code,400)
         reports=self.app.extensions['dcc_updater_reports']
@@ -74,8 +98,7 @@ class WebSecurityTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/reports?page=invalid').status_code,200)
 
     def test_notification_api_never_returns_tokens_and_test_delivery_requires_explicit_request(self):
-        with self.client.session_transaction() as state:
-            state.update(authenticated=True,csrf_token='test-token')
+        authenticated_fixture(self.client, 'test-token')
         headers={'X-CSRF-Token':'test-token'}
         service=self.app.extensions['dcc_updater_notifications']
         calls=[]
@@ -139,8 +162,7 @@ class WebSecurityTests(unittest.TestCase):
                              startup_auto_updates=True)
         app.extensions['dcc_updater_auto_updates'].set('generic', 'example/service:latest', True)
         client = app.test_client()
-        with client.session_transaction() as state:
-            state.update(authenticated=True, csrf_token='test-token')
+        authenticated_fixture(client, 'test-token')
         headers = {'X-CSRF-Token': 'test-token'}
 
         def wait():
@@ -179,8 +201,7 @@ class WebSecurityTests(unittest.TestCase):
 
         app = create_app(self.temp.name, service_factory=Service, print_credentials=False)
         client = app.test_client()
-        with client.session_transaction() as state:
-            state.update(authenticated=True, csrf_token='test-token')
+        authenticated_fixture(client, 'test-token')
         headers = {'X-CSRF-Token': 'test-token'}
 
         def wait():
@@ -210,8 +231,7 @@ class WebSecurityTests(unittest.TestCase):
         self.assertEqual(calls, ['check', 'scan', 'check'])
         reloaded_app = create_app(self.temp.name, service_factory=Service, print_credentials=False)
         reloaded_client = reloaded_app.test_client()
-        with reloaded_client.session_transaction() as state:
-            state.update(authenticated=True)
+        authenticated_fixture(reloaded_client)
         restored = reloaded_client.get('/api/containers').get_json()
         self.assertEqual(restored['scanned_at'], first['scanned_at'])
         self.assertEqual(restored['containers'][0]['name'], 'generic')
@@ -226,23 +246,20 @@ class WebSecurityTests(unittest.TestCase):
         self.assertIn(b"Update panel", response.data)
 
     def test_auto_scan_refresh_is_optin_persistent_and_csrf_protected(self):
-        with self.client.session_transaction() as state:
-            state.update(authenticated=True, csrf_token='settings-test')
+        authenticated_fixture(self.client, 'settings-test')
         headers = {'X-CSRF-Token': 'settings-test'}
         self.assertFalse(self.client.get('/api/containers').get_json()['auto_scan_on_refresh'])
         self.assertEqual(self.client.post('/api/scan-settings', json={'auto_scan_on_refresh': True}).status_code, 400)
         self.assertEqual(self.client.post('/api/scan-settings', json={'auto_scan_on_refresh': 'true'}, headers=headers).status_code, 400)
         self.assertEqual(self.client.post('/api/scan-settings', json={'auto_scan_on_refresh': True}, headers=headers).status_code, 200)
         restarted = create_app(self.temp.name, print_credentials=False).test_client()
-        with restarted.session_transaction() as state:
-            state.update(authenticated=True)
+        authenticated_fixture(restarted)
         self.assertTrue(restarted.get('/api/containers').get_json()['auto_scan_on_refresh'])
         self.assertIsNone(restarted.get('/api/containers').get_json()['scanned_at'])
 
     def test_schedule_is_disabled_by_default_and_requires_csrf(self):
         self.assertEqual(self.client.get('/api/schedule').status_code, 401)
-        with self.client.session_transaction() as state:
-            state.update(authenticated=True, csrf_token='schedule-test')
+        authenticated_fixture(self.client, 'schedule-test')
         config = self.client.get('/api/schedule').get_json()['config']
         self.assertFalse(config['enabled'])
         self.assertFalse(config['panel_first'])
@@ -258,8 +275,7 @@ class WebSecurityTests(unittest.TestCase):
             _unsupported_reason = staticmethod(lambda _container, _inventory: None)
         app = create_app(self.temp.name, service_factory=Service, print_credentials=False)
         client = app.test_client()
-        with client.session_transaction() as state:
-            state.update(authenticated=True, csrf_token='schedule-test')
+        authenticated_fixture(client, 'schedule-test')
         headers = {'X-CSRF-Token': 'schedule-test'}
         payload = {**DEFAULT_CONFIG, 'enabled': True, 'action': 'update', 'targets': [{'name': 'generic', 'repository': 'untrusted/different'}]}
         response = client.post('/api/schedule', json=payload, headers=headers)
@@ -276,8 +292,7 @@ class WebSecurityTests(unittest.TestCase):
             self.fail('Saving all mode must not scan or query Docker.')
         app = create_app(self.temp.name, service_factory=unexpected_docker_call, print_credentials=False)
         client = app.test_client()
-        with client.session_transaction() as state:
-            state.update(authenticated=True, csrf_token='schedule-test')
+        authenticated_fixture(client, 'schedule-test')
         response = client.post('/api/schedule', json={**DEFAULT_CONFIG, 'enabled':True, 'action':'update_all'},
                                headers={'X-CSRF-Token':'schedule-test'})
         self.assertEqual(response.status_code,200)
@@ -288,8 +303,7 @@ class WebSecurityTests(unittest.TestCase):
 
     def test_preferences_require_login_and_csrf_and_persist_after_restart(self):
         self.assertEqual(self.client.get('/api/preferences').status_code,401)
-        with self.client.session_transaction() as state:
-            state.update(authenticated=True,csrf_token='test-token')
+        authenticated_fixture(self.client, 'test-token')
         self.assertEqual(self.client.get('/api/preferences').get_json(),{'theme':'red','sounds_enabled':True,'sound_style':'soft','show_unavailable':False})
         payload={'theme':'green','sounds_enabled':False,'sound_style':'chime','show_unavailable':True}
         self.assertEqual(self.client.post('/api/preferences',json=payload).status_code,400)
@@ -297,11 +311,11 @@ class WebSecurityTests(unittest.TestCase):
         reloaded=create_app(self.temp.name,print_credentials=False)
         client=reloaded.test_client()
         self.assertIn(b'data-theme="green"',client.get('/login').data)
-        with client.session_transaction() as state:state['authenticated']=True
+        authenticated_fixture(client)
         self.assertEqual(client.get('/api/preferences').get_json(),payload)
 
     def test_invalid_preferences_never_replace_saved_settings(self):
-        with self.client.session_transaction() as state:state.update(authenticated=True,csrf_token='test-token')
+        authenticated_fixture(self.client, 'test-token')
         for payload in ([],{'theme':'unknown'},{'theme':[]},{'sounds_enabled':'false'},{'sound_style':{}},{'show_unavailable':'true'}):
             self.assertEqual(self.client.post('/api/preferences',json=payload,headers={'X-CSRF-Token':'test-token'}).status_code,400)
         self.assertEqual(self.client.get('/api/preferences').get_json()['theme'],'red')
@@ -315,7 +329,7 @@ class WebSecurityTests(unittest.TestCase):
         app=create_app(self.temp.name,service_factory=lambda:SimpleNamespace(client=SimpleNamespace(info=info)),print_credentials=False)
         client=app.test_client()
         self.assertEqual(client.get('/api/infrastructure').status_code,401)
-        with client.session_transaction() as state:state['authenticated']=True
+        authenticated_fixture(client)
         response=client.get('/api/infrastructure')
         self.assertTrue(response.get_json()['available'])
         self.assertEqual(response.get_json()['operating_system'],'Ubuntu 22.04.5 LTS')
@@ -328,7 +342,7 @@ class WebSecurityTests(unittest.TestCase):
         def broken():raise RuntimeError('PRIVATE_CONNECTION_STRING')
         app=create_app(self.temp.name,service_factory=broken,print_credentials=False)
         client=app.test_client()
-        with client.session_transaction() as state:state['authenticated']=True
+        authenticated_fixture(client)
         result=client.get('/api/infrastructure')
         self.assertEqual(result.status_code,200)
         self.assertFalse(result.get_json()['available'])
@@ -491,6 +505,30 @@ class WebSecurityTests(unittest.TestCase):
         self.assertEqual(manager.snapshot(first['id'])['results'], ['original result'])
         self.assertEqual(first['instance'], second['instance'])
         self.assertNotEqual(first['instance'], JobManager().snapshot()['instance'])
+
+    def test_completion_is_visible_after_recording_the_report(self):
+        recording = threading.Event()
+        finish = threading.Event()
+        reported = []
+
+        def record(job):
+            reported.append(job)
+            recording.set()
+            finish.wait(2)
+
+        manager = JobManager(on_complete=record)
+        started, job = manager.start("scan", lambda _progress: ["result"])
+        self.assertTrue(started)
+        try:
+            self.assertTrue(recording.wait(2))
+            self.assertEqual(reported[0]["status"], "done")
+            self.assertEqual(manager.snapshot(job["id"])["status"], "running")
+        finally:
+            finish.set()
+        deadline = time.monotonic() + 2
+        while manager.snapshot(job["id"])["status"] == "running" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual(manager.snapshot(job["id"])["results"], ["result"])
 
     def test_startup_checks_panel_and_waits_for_decision_without_updating_or_scanning(self):
         checked = threading.Event()

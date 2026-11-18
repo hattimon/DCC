@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import closing
+import hashlib
 import hmac
 import json
 import logging
@@ -9,6 +11,7 @@ import os
 import posixpath
 import shlex
 import secrets
+import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -27,8 +30,10 @@ from registry_access import RegistryAccessStore
 from compose_manager import SafeComposeManager
 from compose_config import ComposeBlocked
 from cinema_windows import export_script as export_windows_cinema_script
+from file_storage import atomic_write as _atomic_write
 
 UPDATER_VERSION = Path(__file__).with_name("VERSION").read_text(encoding="utf-8").strip()
+SESSION_SECONDS = 8 * 60 * 60
 
 
 class JobManager:
@@ -79,33 +84,57 @@ class JobManager:
             progress("Uruchamianie zadania…")
             try:
                 result = work(progress)
-                with self._lock:
-                    if self._state.get("id") == job_id:
-                        self._state.update(status="done", progress="Gotowe.", results=result or [])
+                completed = {"status": "done", "progress": "Gotowe.", "results": result or []}
             except Exception as exc:
+                completed = {"status": "error", "progress": f"Zadanie nie powiodło się ({type(exc).__name__}).", "results": []}
+            try:
+                if self.on_complete:
+                    self.on_complete({**self.snapshot(job_id), **completed})
+            except Exception:
+                logging.getLogger(__name__).exception("Could not record completed updater job.")
+            finally:
+                # Readers and subsequent jobs can rely on the report having been handled.
                 with self._lock:
                     if self._state.get("id") == job_id:
-                        self._state.update(status="error", progress=f"Zadanie nie powiodło się ({type(exc).__name__}).", results=[])
-            finally:
-                if self.on_complete:
-                    try:
-                        self.on_complete(self.snapshot(job_id))
-                    except Exception:
-                        logging.getLogger(__name__).exception("Could not record completed updater job.")
+                        self._state.update(completed)
 
         threading.Thread(target=run, name=f"dcc-updater-{kind}", daemon=True).start()
         return True, self.snapshot()
 
 
-def _atomic_write(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(value, encoding="utf-8")
-    try:
-        os.chmod(temporary, 0o600)
-    except OSError:
-        pass
-    temporary.replace(path)
+class AdminSessions:
+    """Revocable cookie sessions for the existing single administrator login."""
+
+    def __init__(self, path: Path, password_path: Path) -> None:
+        self.path, self.password_path = path, password_path
+        os.close(os.open(path, os.O_CREAT | os.O_RDWR, 0o600))
+        with closing(sqlite3.connect(path)) as db:
+            db.execute('CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, password_id TEXT, expires REAL)')
+
+    @staticmethod
+    def digest(value: str) -> str:
+        return hashlib.sha256(value.encode()).hexdigest()
+
+    def issue(self, password_hash: str) -> str:
+        token = secrets.token_urlsafe(32)
+        now, password_id = time.time(), self.digest(password_hash)
+        with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute('DELETE FROM sessions WHERE expires<=?', (now,))
+            db.execute('DELETE FROM sessions WHERE token IN (SELECT token FROM sessions ORDER BY expires DESC LIMIT -1 OFFSET 127)')
+            db.execute('INSERT INTO sessions VALUES (?,?,?)', (self.digest(token), password_id, now + SESSION_SECONDS))
+        return token
+
+    def valid(self, token: str) -> bool:
+        if not isinstance(token, str) or len(token) != 43:
+            return False
+        password_id = self.digest(self.password_path.read_text(encoding='utf-8').strip())
+        with closing(sqlite3.connect(self.path)) as db:
+            return db.execute('SELECT 1 FROM sessions WHERE token=? AND password_id=? AND expires>?',
+                              (self.digest(token), password_id, time.time())).fetchone() is not None
+
+    def revoke(self, token: str) -> None:
+        with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute('DELETE FROM sessions WHERE token=?', (self.digest(token),))
 
 
 class AutoUpdateStore:
@@ -173,7 +202,7 @@ def create_app(
 ) -> Flask:
     app = Flask(__name__, template_folder="templates")
     data_path = Path(data_dir or os.environ.get("DCC_UPDATER_DATA", "/data"))
-    data_path.mkdir(parents=True, exist_ok=True)
+    data_path.mkdir(parents=True, exist_ok=True, mode=0o700)
     password_path = data_path / "admin_password_hash"
     secret_path = data_path / "secret_key"
     auto_update_store = AutoUpdateStore(data_path / "auto_update_containers.json")
@@ -229,7 +258,7 @@ def create_app(
         SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=os.environ.get("DCC_UPDATER_SECURE_COOKIE", "0") == "1",
         MAX_CONTENT_LENGTH=16 * 1024,
-        PERMANENT_SESSION_LIFETIME=60 * 60 * 8,
+        PERMANENT_SESSION_LIFETIME=SESSION_SECONDS,
     )
 
     initial_password = None
@@ -238,6 +267,8 @@ def create_app(
         _atomic_write(password_path, generate_password_hash(initial_password, method="scrypt"))
         if print_credentials:
             print(f"DCC_UPDATER_INITIAL_CREDENTIALS username=admin password={initial_password}", flush=True)
+    admin_sessions = AdminSessions(data_path / 'admin_sessions.sqlite3', password_path)
+    password_lock = threading.Lock()
 
     report_store = ReportStore(data_path / "reports.json")
     notifier = NotificationService(data_path / "notifications.json", report_store)
@@ -250,6 +281,7 @@ def create_app(
     app.extensions["dcc_updater_jobs"] = manager
     app.extensions["dcc_updater_data_dir"] = data_path
     app.extensions["dcc_updater_initial_password"] = initial_password
+    app.extensions["dcc_updater_sessions"] = admin_sessions
     app.extensions["dcc_updater_auto_updates"] = auto_update_store
     startup_lock = threading.RLock()
     startup_state = {
@@ -568,7 +600,7 @@ def create_app(
         return bool(supplied and hmac.compare_digest(str(session.get("csrf_token", "")), str(supplied)))
 
     def authenticated() -> bool:
-        return session.get("authenticated") is True
+        return admin_sessions.valid(session.get("sid", ""))
 
     @app.before_request
     def protect_routes():
@@ -618,7 +650,7 @@ def create_app(
                 if check_password_hash(stored_hash, password):
                     language = current_language()
                     session.clear()
-                    session["authenticated"] = True
+                    session["sid"] = admin_sessions.issue(stored_hash)
                     session["language"] = language
                     session["csrf_token"] = secrets.token_urlsafe(32)
                     session.permanent = True
@@ -646,6 +678,7 @@ def create_app(
 
     @app.post("/logout")
     def logout():
+        admin_sessions.revoke(session['sid'])
         session.clear()
         return redirect(url_for("login"))
 
@@ -1097,12 +1130,15 @@ def create_app(
         payload = request.get_json(silent=True) or {}
         old_password = str(payload.get("old_password", ""))
         new_password = str(payload.get("new_password", ""))
-        stored_hash = password_path.read_text(encoding="utf-8").strip()
-        if not check_password_hash(stored_hash, old_password):
-            return jsonify({"error": "Obecne hasło jest nieprawidłowe."}), 400
-        if len(new_password) < 14:
-            return jsonify({"error": "Nowe hasło musi mieć co najmniej 14 znaków."}), 400
-        _atomic_write(password_path, generate_password_hash(new_password, method="scrypt"))
+        with password_lock:
+            stored_hash = password_path.read_text(encoding="utf-8").strip()
+            if not check_password_hash(stored_hash, old_password):
+                return jsonify({"error": "Obecne hasło jest nieprawidłowe."}), 400
+            if len(new_password) < 14:
+                return jsonify({"error": "Nowe hasło musi mieć co najmniej 14 znaków."}), 400
+            new_hash = generate_password_hash(new_password, method="scrypt")
+            _atomic_write(password_path, new_hash)
+            session['sid'] = admin_sessions.issue(new_hash)
         return jsonify({"message": "Hasło zostało zmienione."})
 
     if startup_auto_updates or startup_self_update:

@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from auth_fixture import authenticated_fixture
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault('DCC_UPDATER_DATA',tempfile.mkdtemp(prefix='dcc-updater-tests-'))
@@ -30,6 +31,18 @@ class RegistryTests(unittest.TestCase):
         self.assertIsNone(self.store.for_image('ghcr.io.attacker.example/app'))
         self.store.change('ghcr.io','save','user','')
         self.assertEqual(self.store.for_image('ghcr.io/example/app')['password'],'PRIVATE_TOKEN')
+
+    def test_saving_credentials_does_not_write_through_a_preexisting_temporary_file(self):
+        other = self.path.with_name('other.json')
+        other.write_text('keep', encoding='utf-8')
+        os.link(other, self.path.with_suffix('.tmp'))
+
+        self.store.change('ghcr.io', 'save', 'user', 'fixture-value')
+
+        self.assertEqual(other.read_text(encoding='utf-8'), 'keep')
+        self.assertEqual(self.store.for_image('ghcr.io/example/app')['password'], 'fixture-value')
+        if os.name == 'posix':
+            self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
 
     def test_remove_and_undo_do_not_change_other_registries(self):
         self.store.change('ghcr.io','save','user','old')
@@ -83,7 +96,7 @@ class AdvancedApiTests(unittest.TestCase):
         self.panel=SimpleNamespace(name='dcc-container-updater',attrs={'Config':{'Labels':{}}})
         self.app=create_app(self.temp.name,service_factory=lambda:SimpleNamespace(_find_self_container=lambda:self.panel),print_credentials=False)
         self.client=self.app.test_client()
-        with self.client.session_transaction() as state:state.update(authenticated=True,csrf_token='test-token')
+        authenticated_fixture(self.client, 'test-token')
         self.headers={'X-CSRF-Token':'test-token'}
 
     def tearDown(self):self.temp.cleanup()

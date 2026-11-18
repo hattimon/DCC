@@ -1,5 +1,8 @@
 docker==7.2.0
 paramiko==5.0.0
+# Security floors also apply when building from an existing environment.
+certifi>=2026.10.18
+cryptography>=50.0.0
 PyQt6==6.9.1
 PyQt6-Qt6==6.9.1
 pyqtdarktheme==0.1.7
