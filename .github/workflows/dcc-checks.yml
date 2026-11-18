@@ -233,7 +233,6 @@ jobs:
       - name: Audit published images without running them
         env:
           PLATFORM: linux/${{ matrix.arch }}
-          GRYPE_CHECK_FOR_APP_UPDATE: 'false'
         run: |
           web="$(tr -d '\r\n' < apps/dcc-web/VERSION)"
           updater="$(tr -d '\r\n' < apps/container-updater/VERSION)"
@@ -244,12 +243,7 @@ jobs:
           for image in "ghcr.io/hattimon/dcc-web:$web" "ghcr.io/hattimon/dcc-container-updater:$updater" "$remote"; do
             echo "::group::$image ($PLATFORM)"
             report="$(mktemp)"
-            grype "registry:$image" --platform "$PLATFORM" --by-cve --only-fixed --fail-on high --output "json=$report" || status=1
-            if [[ -s "$report" ]]; then
-              jq -r '.matches[] | select(.vulnerability.severity == "High" or .vulnerability.severity == "Critical")
-                | [.vulnerability.severity, .vulnerability.id, .artifact.name, .artifact.version,
-                   (.vulnerability.fix.versions | join(", "))] | @tsv' "$report" | sort -u
-            fi
+            bash tools/ci/audit-image.sh "registry:$image" "$PLATFORM" "$report" || status=1
             rm -f -- "$report"
             echo '::endgroup::'
           done

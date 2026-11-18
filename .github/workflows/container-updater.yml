@@ -5,9 +5,13 @@ on:
     branches:
       - main
     paths:
-      - "apps/container-updater/**"
-      - ".github/workflows/container-updater.yml"
+      - "apps/container-updater/VERSION"
   workflow_dispatch:
+    inputs:
+      publish_image:
+        description: Publish the tested image from main
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -62,17 +66,20 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_BEFORE: ${{ github.event.before }}
+          PUBLISH_IMAGE: ${{ inputs.publish_image }}
         run: |
           current="$(tr -d '\r\n' < apps/container-updater/VERSION)"
+          [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           previous=""
-          if [[ "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]] && [[ "$EVENT_BEFORE" != 0000000000000000000000000000000000000000 ]]; then
+          if [[ "$EVENT_NAME" == push && "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]]; then
             previous="$(git show "$EVENT_BEFORE:apps/container-updater/VERSION" 2>/dev/null | tr -d '\r\n' || true)"
           fi
-          if [[ "$EVENT_NAME" == "workflow_dispatch" || -z "$previous" || "$current" != "$previous" ]]; then
+          if [[ "$EVENT_NAME" == workflow_dispatch && "$PUBLISH_IMAGE" == true ]] ||
+             [[ "$EVENT_NAME" == push && "$previous" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$current" != "$previous" ]]; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "VERSION is unchanged; tests ran, but published image tags will not be moved."
+            echo "No explicit publication or verified version change. Image tags are unchanged."
           fi
 
   publish:

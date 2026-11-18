@@ -4,88 +4,81 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      preview:
+        description: Check the catalog without opening pull requests
+        type: boolean
+        default: true
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+
+concurrency:
+  group: dcc-catalog-maintenance
+  cancel-in-progress: false
 
 jobs:
-  refresh-existing-apps:
+  refresh:
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.preview)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - kind: metadata
+            file: dcc-catalog.json
+          - kind: candidates
+            file: catalog/candidates.json
+    env:
+      CATALOG_KIND: ${{ matrix.kind }}
+      CATALOG_FILE: ${{ matrix.file }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: main
-
+          persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.12"
-
-      - name: Refresh upstream release metadata
+      - name: Refresh catalog data
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python tools/update_catalog_metadata.py
-
-      - name: Reject duplicate application definitions
-        run: python -m unittest discover -s tests -p test_catalog_identity.py -v
-
-      - name: Publish metadata changes
-        shell: bash
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if git diff --quiet -- dcc-catalog.json; then
-            echo "No upstream release changes."
+          if [[ "$CATALOG_KIND" == metadata ]]; then
+            python tools/update_catalog_metadata.py
+          else
+            python tools/update_catalog_metadata.py --skip-metadata --discover
+          fi
+          python -m unittest discover -s tests -p test_catalog_identity.py -q
+          python -m json.tool "$CATALOG_FILE" >/dev/null
+      - name: Open a catalog pull request
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || !inputs.preview)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- "$CATALOG_FILE"; then
+            echo "The catalog is current."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dcc-catalog.json
-          git commit -m "chore(catalog): refresh upstream releases"
-          git push origin HEAD:main
-
-  discover-candidates:
-    needs: refresh-existing-apps
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version: "3.12"
-
-      - name: Discover self-hosted candidates
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python tools/update_catalog_metadata.py --skip-metadata --discover
-
-      - name: Create or update review branch
-        id: candidate_changes
-        shell: bash
-        run: |
-          if git diff --quiet -- catalog/candidates.json; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+          prefix="automation/catalog-$CATALOG_KIND"
+          existing="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?base=main&state=open&per_page=100" |
+            jq -sr --arg prefix "$prefix" --arg repo "$GITHUB_REPOSITORY" '
+              [ .[][] | select(.head.repo.full_name == $repo)
+                | select(.head.ref == $prefix or (.head.ref | startswith($prefix + "-"))) ] | length')"
+          if [[ "$existing" != 0 ]]; then
+            echo "This part of the catalog already has a pull request awaiting review."
             exit 0
           fi
-          echo "changed=true" >> "$GITHUB_OUTPUT"
+          branch="$prefix-$GITHUB_RUN_ID"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B automation/catalog-candidates
-          git add catalog/candidates.json
-          git commit -m "chore(catalog): refresh discovery candidates"
-          git push --force-with-lease origin automation/catalog-candidates
-
-      - name: Open candidate review PR
-        if: steps.candidate_changes.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          if gh pr list --head automation/catalog-candidates --base main --state open --json number --jq 'length' | grep -q '^0$'; then
-            gh pr create \
-              --base main \
-              --head automation/catalog-candidates \
-              --title "Catalog: review newly discovered container apps" \
-              --body "Automated discovery refreshed catalog/candidates.json. Review sources, Docker installation requirements, mounts, privileges, persistence and ports before promoting any candidate to dcc-catalog.json."
-          fi
+          git add -- "$CATALOG_FILE"
+          git commit -m "chore(catalog): refresh $CATALOG_KIND"
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential' push origin "HEAD:refs/heads/$branch"
+          gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
+            --title "Catalog: refresh $CATALOG_KIND" \
+            --body "The scheduled catalog job refreshed $CATALOG_FILE. Review upstream versions, sources and installation requirements before merging. Approve the CI run from the PR if GitHub requests it."
