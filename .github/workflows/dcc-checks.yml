@@ -198,7 +198,20 @@ jobs:
           status=0
           for manifest in $MANIFESTS; do
             echo "::group::Audit $manifest"
-            pip-audit --strict --progress-spinner off --timeout 10 -r "$manifest" || status=1
+            log="$(mktemp)"
+            result=0
+            pip-audit --strict --progress-spinner off --timeout 30 -r "$manifest" > "$log" 2>&1 || result=$?
+            cat "$log"
+            if (( result != 0 )); then
+              if grep -Eq '^requests\.exceptions\.(ConnectTimeout|ReadTimeout):' "$log"; then
+                echo '::warning::Advisory service timed out. Retrying this manifest once.'
+                sleep 3
+                pip-audit --strict --progress-spinner off --timeout 30 -r "$manifest" || status=1
+              else
+                status=1
+              fi
+            fi
+            rm -f -- "$log"
             echo '::endgroup::'
           done
           exit "$status"
