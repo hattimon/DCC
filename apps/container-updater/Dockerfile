@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS compose-download
+FROM python:3.12-slim-trixie AS compose-download
 ARG TARGETARCH
 ARG COMPOSE_VERSION=5.8.0
 RUN set -eu; \
@@ -16,7 +16,7 @@ RUN set -eu; \
     echo "${compose_sha}  /usr/local/bin/docker-compose" | sha256sum --check --status; \
     chmod 0755 /usr/local/bin/docker-compose
 
-FROM python:3.12-slim
+FROM python:3.12-slim-trixie
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     DCC_UPDATER_DATA=/data \
@@ -24,6 +24,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DCC_UPDATER_SELF_UPDATE_ON_START=1
 
 WORKDIR /app
+# Keep the upstream Debian Trixie security backport when the base image is older.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade zlib1g \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' zlib1g)" ge '1:1.3.dfsg+really1.3.1-1+deb13u1' \
+    && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt ./requirements.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check --upgrade pip==26.3 \
     && python -m pip install --no-cache-dir --disable-pip-version-check -r requirements.txt

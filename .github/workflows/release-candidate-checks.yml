@@ -20,12 +20,17 @@ on:
         description: Only build, exercise and scan the image candidates
         type: boolean
         default: false
+      image_component:
+        description: Image candidates to verify in audit mode
+        type: choice
+        options: [all, web, updater]
+        default: all
 
 permissions:
   contents: read
 
 concurrency:
-  group: dcc-candidate-${{ github.ref }}-${{ inputs.image_audit || false }}
+  group: dcc-candidate-${{ github.ref }}-${{ inputs.image_audit || false }}-${{ inputs.image_component || 'all' }}
   cancel-in-progress: true
 
 jobs:
@@ -241,19 +246,21 @@ jobs:
     timeout-minutes: 20
     env:
       PLATFORM: linux/${{ matrix.arch }}
+      COMPONENT: ${{ inputs.image_component }}
       DOCKER_BUILDKIT: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - name: Build images and test upgrade, persistence and rollback
-        run: bash tools/ci/smoke-image-candidates.sh "$PLATFORM" "$RUNNER_TEMP/dcc-image-audit"
+        run: bash tools/ci/smoke-image-candidates.sh "$PLATFORM" "$RUNNER_TEMP/dcc-image-audit" "$COMPONENT"
       - name: Audit candidate images
         run: |
           bash tools/ci/install-scanner.sh grype
           export PATH="$RUNNER_TEMP/dcc-audit-bin:$PATH"
           status=0
           for app in web updater; do
+            if [[ "$COMPONENT" != all && "$COMPONENT" != "$app" ]]; then continue; fi
             echo "::group::$app ($PLATFORM)"
             bash tools/ci/audit-image.sh "docker:dcc-candidate-$app" "$PLATFORM" "$RUNNER_TEMP/dcc-image-audit/$app.json" || status=1
             echo '::endgroup::'
