@@ -274,3 +274,19 @@ jobs:
           path: ${{ runner.temp }}/dcc-image-audit
           if-no-files-found: ignore
           retention-days: 7
+
+  release-candidate-gate:
+    if: ${{ always() && !inputs.image_audit }}
+    needs:
+      - windows-upgrade
+      - debian-upgrade
+      - debian-stable-compatibility
+      - debian-bookworm-upgrade-compatibility
+      - web-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Require all release candidate checks to pass
+        env:
+          CHECKS: ${{ toJSON(needs) }}
+        run: jq -e 'length > 0 and all(.[]; .result == "success")' <<< "$CHECKS"
