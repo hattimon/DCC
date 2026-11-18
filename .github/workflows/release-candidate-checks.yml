@@ -205,3 +205,18 @@ jobs:
           docker exec "$container" python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8789/login",timeout=2)' >/dev/null
           test "$(docker logs "$container" 2>&1 | grep -c 'DCC_WEB_INITIAL_CREDENTIALS username=admin password=')" -eq 1
           echo "Fresh App Store container starts and keeps one generated admin credential across restart."
+
+  pr-gate:
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs:
+      - windows-upgrade
+      - debian-upgrade
+      - debian-stable-compatibility
+      - debian-bookworm-upgrade-compatibility
+      - web-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require all release candidate checks to pass
+        env:
+          CHECKS: ${{ toJSON(needs) }}
+        run: jq -e 'length > 0 and all(.[]; .result == "success")' <<< "$CHECKS"
