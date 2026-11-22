@@ -175,7 +175,7 @@ jobs:
               --latest=false \
               --notes-file "$notes"
           fi
-      - name: Refresh the official App Store catalog
+      - name: Preview App Store catalog changes after publication
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run catalog-maintenance.yml --repo "$GITHUB_REPOSITORY" --ref main
