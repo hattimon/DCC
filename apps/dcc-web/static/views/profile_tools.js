@@ -55,8 +55,50 @@ export async function profileWizard(profile,ctx){
    if(remote){config.ssh_auth=choice.ssh_auth;config.key_scope=choice.key_scope;config.key_path=choice.key_scope==='individual'?choice.individual_key:choice.key_choice;if(choice.key_scope==='individual')config.known_hosts_path=choice.known_hosts_path;else delete config.known_hosts_path;}
    for(const name of ['password','passphrase','tls_ca','tls_cert','tls_key'])if(choice[name])credentials[name]=choice[name];step++;
   }else{
+   const sshProfile=['ssh','balena'].includes(config.kind);
    let verified=false;
-   const choice=await openDialog('3 / 3 · Test i uprawnienia',html`<div class="stack"><p><strong>${esc(config.name)}</strong> · ${esc(config.kind)} · ${esc(config.host||config.endpoint||config.distro||'Local Docker')}</p><button type="button" data-test-connection>Sprawdź połączenie</button><div data-check-result aria-live="polite"></div><h3>Uprawnienia profilu</h3>${notice('Domyślnie tylko odczyt. Włączaj wyłącznie potrzebne operacje.')}<div class="toolbar"><button type="button" class="small" data-toggle-permissions>${t('Zaznacz wszystkie')}</button></div><div class="permission-grid">${Object.entries(permissionLabels).map(([id,label])=>html`<label class="check"><input type="checkbox" name="permissions" value="${id}" ${config.permissions.includes(id)?'checked':''}>${t(label)}</label>`).join('')}</div><label class="check"><input type="checkbox" name="save_unverified">Zapisz bez udanego testu połączenia</label><button type="submit" name="back" value="1" formnovalidate>Wstecz</button></div>`,{submit:'Zapisz profil',onReady:form=>{form.querySelector('[name=back]').onclick=()=>form._back=true;const permissionBoxes=form.querySelectorAll('[name=permissions]'),toggle=form.querySelector('[data-toggle-permissions]');const updateToggle=()=>{const checked=allChecked(permissionBoxes);toggle.textContent=t(checked?'Odznacz wszystkie':'Zaznacz wszystkie');toggle.setAttribute('aria-pressed',String(checked));};toggle.onclick=()=>{setAllChecked(permissionBoxes,!allChecked(permissionBoxes));updateToggle();};updateToggle();form.querySelector('[data-test-connection]').onclick=async e=>{e.target.disabled=true;const output=form.querySelector('[data-check-result]');output.textContent=t('Sprawdzanie połączenia…');try{const result=await post('profiles/check',{configuration:config,credentials,...(profile?{existing_id:profile.id}:{})});verified=true;output.textContent=t('Połączono')+' · '+(result.name||'Docker');}catch(error){verified=false;output.textContent=error.message;}finally{e.target.disabled=false;}};},onSubmit:async(f,form)=>{if(form._back)return{back:true};if(!verified&&!f.has('save_unverified'))throw Error(t('Sprawdź połączenie lub świadomie zapisz bez testu'));const payload={...config,credentials,permissions:['read',...f.getAll('permissions')]};if(profile)await api('profiles/'+profile.id,{method:'PUT',data:payload});else await post('profiles',payload);return{saved:true};}});
+   const choice=await openDialog('3 / 3 · Test i uprawnienia',html`<div class="stack">
+    <p><strong>${esc(config.name)}</strong> · ${esc(config.kind)} · ${esc(config.host||config.endpoint||config.distro||'Local Docker')}</p>
+    <div class="toolbar">
+     <button type="button" data-test-connection="docker">Sprawdź Docker</button>
+     ${sshProfile?html`<button type="button" data-test-connection="ssh">Sprawdź SSH</button>`:''}
+    </div>
+    <div data-check-result aria-live="polite"></div>
+    <h3>Uprawnienia profilu</h3>${notice('Domyślnie tylko odczyt. Włączaj wyłącznie potrzebne operacje.')}
+    <p class="fine">Terminal hosta w MCP wymaga profilu SSH lub Balena oraz osobnej zgody w grancie.</p>
+    <div class="toolbar"><button type="button" class="small" data-toggle-permissions>${t('Zaznacz wszystkie')}</button></div>
+    <div class="permission-grid">${Object.entries(permissionLabels).map(([id,label])=>html`<label class="check"><input type="checkbox" name="permissions" value="${id}" ${config.permissions.includes(id)?'checked':''}>${t(label)}</label>`).join('')}</div>
+    <label class="check"><input type="checkbox" name="save_unverified">Zapisz bez udanego testu połączenia</label>
+    <button type="submit" name="back" value="1" formnovalidate>Wstecz</button>
+   </div>`,{submit:'Zapisz profil',onReady:form=>{
+    form.querySelector('[name=back]').onclick=()=>form._back=true;
+    const permissionBoxes=form.querySelectorAll('[name=permissions]'),toggle=form.querySelector('[data-toggle-permissions]');
+    const updateToggle=()=>{
+     const checked=allChecked(permissionBoxes);
+     toggle.textContent=t(checked?'Odznacz wszystkie':'Zaznacz wszystkie');
+     toggle.setAttribute('aria-pressed',String(checked));
+    };
+    toggle.onclick=()=>{setAllChecked(permissionBoxes,!allChecked(permissionBoxes));updateToggle();};
+    updateToggle();
+    const tests=form.querySelectorAll('[data-test-connection]'),output=form.querySelector('[data-check-result]');
+    tests.forEach(button=>button.onclick=async()=>{
+     const transport=button.dataset.testConnection;
+     tests.forEach(test=>test.disabled=true);
+     output.textContent=t('Sprawdzanie połączenia…');
+     try{
+      const result=await post('profiles/check',{transport,configuration:config,credentials,...(profile?{existing_id:profile.id}:{})});
+      verified=true;
+      output.textContent=transport==='ssh'?t('Połączono przez SSH. Użyj oddzielnego testu, aby sprawdzić Docker.'):t('Połączono')+' · '+(result.name||'Docker');
+     }catch(error){output.textContent=error.message;}
+     finally{tests.forEach(test=>test.disabled=false);}
+    });
+   },onSubmit:async(f,form)=>{
+    if(form._back)return{back:true};
+    if(!verified&&!f.has('save_unverified'))throw Error(t('Sprawdź połączenie lub świadomie zapisz bez testu'));
+    const payload={...config,credentials,permissions:['read',...f.getAll('permissions')]};
+    if(profile)await api('profiles/'+profile.id,{method:'PUT',data:payload});else await post('profiles',payload);
+    return{saved:true};
+   }});
    if(!choice)return;if(choice.back){step=1;continue;}notify('Profil został zapisany');ctx.reload();step=3;
   }
  }

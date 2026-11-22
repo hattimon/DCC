@@ -11,6 +11,16 @@ An administrator creates a separate client grant by selecting profiles, individu
 - `container_remove` requires a separate destructive consent when creating the grant, the selected tool, and the profile's destructive permission. Removing a container never removes volumes.
 - Every call is audited. Inspect and log output is redacted; environment variable values are not returned through MCP tools. Treat Docker logs and tool output as untrusted data.
 - Tokens are scoped to selected profiles and tools; they do not provide general Docker CLI access. Public HTTP requires separate opt-in at the endpoint and individual grant levels.
+- Docker mutations from the panel and MCP share a lock for the same DCC Web profile. Retry a conflicting mutation once the update finishes. MCP read tools remain available.
+
+## Windows host commands through MCP
+
+The `Local` profile exposes Docker engine operations to MCP. Docker Desktop running Linux containers typically reports Linux or WSL2 in `host_info` because the tool queries the engine. Windows host commands require a separate SSH connection to Windows.
+
+1. In **Profiles**, add an **SSH** profile with a Windows address reachable from DCC Web. Docker Desktop can use `host.docker.internal` where available. Windows needs a running OpenSSH server. Use a verified `known_hosts` entry and an account intended for those operations.
+2. Use **Test SSH** to check the connection and authentication. Enable the profile's **Host terminal** permission (`host.exec`) and save it. **Test Docker** checks engine access separately.
+3. In **AI / MCP**, select a **Read and modify** grant. Add the profile under **Profiles**, enable host terminal access and select the same device under **Devices with host terminal access**. Select `host_exec` for individual commands. Save with the administrator password and 2FA where enabled. A dedicated host grant can include only the terminal tools you need.
+4. Reconnect MCP and use the SSH profile ID shown in the `host_exec` tool's profile description. DCC uses the permissions of that SSH account.
 
 ## Optional public MCP over HTTPS (OpenAI Codex)
 

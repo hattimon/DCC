@@ -1,4 +1,6 @@
-# DCC Web 0.3.4
+# DCC Web 0.3.5
+
+Wersja 0.3.5 wskazuje profile z dostępem do hosta przez MCP i dodaje osobny test połączenia SSH dla profilu Windows. [Konfiguracja Windows](docs/mcp.pl.md#polecenia-hosta-windows-przez-mcp).
 
 Wersja 0.3.4 zachowuje oryginalne adresy paneli kontenerów i otwiera je przez chronioną sesję DCC przy wejściu publicznym. Naprawia usuwanie starego udziału zrok podczas odzyskiwania dostępu. [Konfiguracja, bezpieczeństwo i ograniczenia](docs/panels.pl.md).
 
@@ -42,7 +44,7 @@ Przy instalacji ze Sklepu DCC świeży kontener tworzy konto `admin` z silnym, l
 
 ### Instalacja na Windows, macOS lub Linux
 
-Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.4/DCC-Web-0.3.4-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.3.4`. Wybierz lokalny kontekst Docker; instalator nie obsługuje zdalnych endpointów, bo wystawia panel wyłącznie na localhost:
+Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.5/DCC-Web-0.3.5-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.3.5`. Instalator wystawia panel na localhost i korzysta z lokalnego kontekstu Dockera.
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
@@ -60,7 +62,7 @@ Dostęp do `/var/run/docker.sock` daje panelowi administracyjną kontrolę nad h
 
 [Instalacja](docs/installation.md) · [Bezpieczeństwo](docs/security.md) · [Profile](docs/configuration.md) · [Sklep](docs/catalogs.md) · [Funkcje i ograniczenia](docs/feature-matrix.md)
 
-Kod źródłowy: [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.3.4/apps/dcc-web).
+Kod źródłowy w repozytorium [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.3.5/apps/dcc-web).
 
 
 ## Klucze SSH po imporcie profili

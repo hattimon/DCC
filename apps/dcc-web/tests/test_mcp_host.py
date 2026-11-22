@@ -15,7 +15,8 @@ from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cryptography.fernet import Fernet
-from mcp_preview import MCPService, TERMINAL_TOOLS, stdio
+from engine import ProfileOperationBusy
+from mcp_preview import MCPService, TERMINAL_TOOLS, _stdio_messages, stdio
 from mcp_host import SSHCommand, MAX_OUTPUT
 from security import CAPABILITIES
 from web import create_app
@@ -111,6 +112,20 @@ class MCPHostTests(unittest.TestCase):
         self.assertEqual(self.request(path, self.payload(), 'PUT').status_code, 409)
         with self.assertRaises(PermissionError): metadata.grant()
 
+    def test_stale_grant_form_cannot_restore_removed_host_access(self):
+        grant = self.grant()
+        service = self.service(grant)
+        revision = service.grant()['revision']
+        path = 'mcp/grants/' + grant['id']
+        reduced = self.payload(mode='read', tools=['list_containers'], expected_revision=revision,
+                               allow_host_terminal=False, terminal_profiles=[])
+        self.assertEqual(self.request(path, reduced, 'PUT').status_code, 200)
+        stale = self.request(path, self.payload(expected_revision=revision), 'PUT')
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(service.grant()['tools'], ['list_containers'])
+        with self.assertRaises(PermissionError):
+            self.call(service, 'host_exec', command='qa-command')
+
     def test_terminal_scope_requires_explicit_write_device_and_capability(self):
         for changes in ({'mode': 'read'}, {'allow_host_terminal': False}, {'terminal_profiles': []},
                         {'terminal_profiles': ['local']}, {'terminal_profiles': ['not-granted']},
@@ -128,6 +143,60 @@ class MCPHostTests(unittest.TestCase):
             with self.subTest(arguments=arguments), self.assertRaises(ValueError): self.call(service, 'host_exec', **arguments)
         with self.assertRaises(PermissionError): self.call(service, 'host_exec', profile='ssh-two', command='uname')
         with self.assertRaises(PermissionError): self.call(service, 'host_exec', profile='local', command='uname')
+
+    def test_stdio_reports_the_missing_host_scope_without_exposing_other_profiles(self):
+        grant = self.grant(terminal_profiles=['ssh-one'], profiles=['local', 'ssh-one'])
+        service = self.service(grant, command_factory=MagicMock(side_effect=AssertionError('SSH must not start')))
+        profile = self.state.profile('ssh-one')
+        profile['permissions'] = ['read']
+        requests = [
+            {'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2025-11-25'}},
+            {'method': 'notifications/initialized'},
+            {'id': 2, 'method': 'tools/list'},
+            *[{'id': i, 'method': 'tools/call', 'params': {
+                'name': 'host_exec', 'arguments': {'profile': target, 'command': 'do-not-echo'},
+            }} for i, target in enumerate(('local', 'ssh-two'), start=3)],
+        ]
+        source = io.StringIO(''.join(json.dumps({'jsonrpc': '2.0', **item}) + '\n' for item in requests))
+        output = io.StringIO()
+        _stdio_messages(service, source, output)
+        replies = {item['id']: item for item in map(json.loads, output.getvalue().splitlines())}
+        tool = next(tool for tool in replies[2]['result']['tools'] if tool['name'] == 'host_exec')
+        selector = tool['inputSchema']['properties']['profile']['description']
+        self.assertIn('Authorized profile IDs for this host tool: ssh-one.', selector)
+        self.assertNotIn('ssh-two', selector)
+        self.assertEqual(replies[3]['error']['data']['reason'], 'host_profile_unsupported')
+        self.assertIn('separate SSH profile', replies[3]['error']['message'])
+        self.assertEqual(replies[4]['error'], {'code': -32001, 'message': 'MCP access denied'})
+        self.assertNotIn('do-not-echo', output.getvalue())
+        self.state.save_profile('ssh-one', profile)
+        self.assertNotIn('host_exec', [tool['name'] for tool in service.handle({'id': 5, 'method': 'tools/list'})['result']['tools']])
+        with self.assertRaisesRegex(PermissionError, 'Enable the host.exec permission'):
+            self.call(service, 'host_exec', command='qa-command')
+        service.command_factory.assert_not_called()
+
+    def test_mcp_mutations_share_the_web_update_lock(self):
+        jobs = self.app.extensions['dcc_jobs']
+        service = self.service(self.grant(tools=['list_containers', 'container_restart'],
+                                          allow_host_terminal=False, terminal_profiles=[]))
+        backend = MagicMock()
+        backend.containers.return_value = []
+        service.factory = lambda _profile: backend
+
+        with jobs.reserve('local'):
+            with self.assertRaises(ProfileOperationBusy):
+                self.call(service, 'container_restart', profile='local', container='redis')
+            backend.action.assert_not_called()
+            self.assertEqual(self.call(service, 'list_containers', profile='local'), [])
+            self.assertTrue(self.call(service, 'container_restart', profile='ssh-one', container='redis')['ok'])
+        self.assertTrue(self.call(service, 'container_restart', profile='local', container='redis')['ok'])
+
+        def during_mcp(*_):
+            with self.assertRaises(ProfileOperationBusy):
+                jobs.start('qa', 'local', 'update.apply', lambda: self.fail('Update should wait'))
+        backend.action.side_effect = during_mcp
+        self.assertTrue(self.call(service, 'container_restart', profile='local', container='redis')['ok'])
+        self.assertEqual(jobs.execute('local', lambda: 'released'), 'released')
 
     def test_terminal_isolated_by_connection_grant_and_device(self):
         grant = self.grant(); service = self.service(grant)

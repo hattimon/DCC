@@ -160,7 +160,7 @@ def main():
                         help='Upgrade a released Web image with saved consent and a stopped tunnel')
     parser.add_argument('--verify-catalog', action='store_true', help='Require the official catalog to offer the target')
     parser.add_argument('--verify-release-candidate', action='store_true',
-                        help='Use the checked-out catalog and exercise a running loopback-only project panel')
+                        help='Test the local release in a catalog copy and exercise a running loopback-only project panel')
     args = parser.parse_args()
     if args.with_tunnel_resume and not args.local_target:
         parser.error('--with-tunnel-resume requires a local target')
@@ -349,6 +349,13 @@ with closing(remote.client_factory()) as client:
         if args.verify_release_candidate:
             catalog_file = Path(__file__).resolve().parents[3] / 'dcc-catalog.json'
             apps = json.loads(catalog_file.read_text(encoding='utf-8'))['apps']
+            # The official catalog must continue pointing to a public image until
+            # publication succeeds. Give the smoke test the locally built candidate.
+            [web_app] = [app for app in apps if app['name'] == 'DCC Web']
+            repository = 'ghcr.io/hattimon/dcc-web'
+            assert web_app['image'].startswith(repository + ':')
+            assert target == f'{repository}:{args.expected_version}'
+            web_app['image'] = target
             candidate = service.inspect_container(web, apps, all_containers=inventory)
             assert candidate['update_available'] and candidate['supported'], candidate
             assert candidate['target_image'] == target, candidate

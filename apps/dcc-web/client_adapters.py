@@ -139,7 +139,12 @@ def agent_instructions(grant_id, grant, profiles, tool_descriptions, variant="st
             available = [name for name in tools if name in profile.get("tools", [])]
             lines.append("  - Currently permitted tools: " + (", ".join(f"`{name}`" for name in available) if available else "none"))
             terminal = any(name.startswith("host_terminal_") or name == "host_exec" for name in available)
-            lines.append("  - Host terminal access: " + ("explicitly granted through the listed DCC MCP tools only" if terminal else "not granted"))
+            if terminal:
+                lines.append("  - Host terminal access: explicitly granted through the listed DCC MCP tools only")
+            elif profile.get("kind") == "local":
+                lines.append("  - Host terminal access: this Local profile exposes Docker operations to MCP. For the Windows host, use a separately authorized SSH profile in DCC Web.")
+            else:
+                lines.append("  - Host terminal access: not granted")
             environment = profile.get("environment", {})
             for key, value in environment.items():
                 lines.append(f"  - {_md_value(key)}: {_md_value(value)}")

@@ -11,6 +11,16 @@ Administrator tworzy osobny dostęp dla klienta, wybierając profile, konkretne 
 - `container_remove` wymaga włączenia osobnej zgody destrukcyjnej przy tworzeniu dostępu, wybrania narzędzia oraz uprawnienia destrukcyjnego w profilu. Usunięcie kontenera nie usuwa wolumenów.
 - Każde wywołanie jest audytowane. Wyniki inspekcji i logów są redagowane; wartości zmiennych środowiskowych nie są zwracane przez narzędzia MCP. Treści logów i wyniki narzędzi traktuj jako niezaufane dane.
 - Token ogranicza profile i listę narzędzi; nie daje ogólnego dostępu do Docker CLI. Publiczny HTTP wymaga osobnego włączenia na poziomie endpointu i każdego grantu.
+- Operacje modyfikujące Docker z panelu i MCP współdzielą blokadę dla tego samego profilu DCC Web. Gdy trwa aktualizacja, ponów modyfikację po jej zakończeniu. Odczyty MCP nadal są dostępne.
+
+## Polecenia hosta Windows przez MCP
+
+Profil `Local` udostępnia przez MCP operacje silnika Docker. Docker Desktop pracujący z kontenerami linuksowymi zwykle zgłasza w `host_info` system Linux lub WSL2, ponieważ narzędzie odczytuje silnik. Polecenia Windows wymagają osobnego połączenia SSH z hostem.
+
+1. W **Profile** dodaj profil **SSH** z adresem Windows osiągalnym z DCC Web. W Docker Desktop może to być `host.docker.internal`. Windows musi mieć działający serwer OpenSSH. Użyj zweryfikowanego wpisu `known_hosts` i konta przeznaczonego do tych operacji.
+2. Wybierz **Sprawdź SSH**, aby zweryfikować połączenie i uwierzytelnianie, a następnie przyznaj uprawnienie **Terminal hosta** (`host.exec`) i zapisz profil. **Sprawdź Docker** weryfikuje oddzielnie dostęp do silnika.
+3. W **AI / MCP** wybierz grant z trybem **Odczyt i modyfikacje**. Dodaj profil w **Profile**, włącz zgodę na dostęp terminalowy i zaznacz ten sam profil w **Urządzenia z dostępem terminalowym**. Do pojedynczych poleceń wybierz `host_exec`. Zapisz po potwierdzeniu hasłem i 2FA, jeśli jest aktywne. Osobny grant dla hosta może zawierać wyłącznie potrzebne narzędzia terminalowe.
+4. Połącz MCP ponownie i w `host_exec` użyj ID profilu SSH wskazanego przez listę narzędzi. DCC stosuje uprawnienia tego konta SSH.
 
 ## Opcjonalne publiczne MCP przez HTTPS (OpenAI Codex)
 
@@ -66,7 +76,7 @@ Instrukcje pokazują profile z aktywnym uprawnieniem odczytu oraz narzędzia dos
 
 ### Codex i ChatGPT Web
 
-Wariant standardowy jest domyślny. Opcjonalny wariant **ChatGPT Web** dodatkowo opisuje sprawdzenie niezależnie autoryzowanych połączeń pośrednich, gdy zawiedzie dostęp bezpośredni. Osobno pobierzesz go jako `AGENTS.chatgpt-web.md`. ZIP projektu zawiera wybrany wariant pod nazwą `AGENTS.md`. W zwykłym czacie ChatGPT Web wybierz **Kopiuj instrukcje** lub wklej pobraną treść ręcznie. Dotarcie do DCC wymaga osobno skonfigurowanego połączenia.
+Wariant standardowy jest domyślny. Wariant **ChatGPT Web** przypomina o wymaganym połączeniu z DCC MCP. Osobno pobierzesz go jako `AGENTS.chatgpt-web.md`. ZIP projektu zawiera wybrany wariant pod nazwą `AGENTS.md`. W zwykłym czacie ChatGPT Web wybierz **Kopiuj instrukcje** lub wklej pobraną treść ręcznie. Połączenie z DCC MCP skonfiguruj osobno w kliencie.
 
 - **Paczka projektu (ZIP).** Scal pliki w katalogu głównym zaufanego projektu. Aby ograniczyć dostęp do projektu, usuń ewentualny wpis `dcc` z globalnego `~/.codex/config.toml`. Otwórz nowy czat w projekcie.
 - **TOML.** Dodaj sekcję `[mcp_servers.dcc]` do `~/.codex/config.toml` lub do `.codex/config.toml` zaufanego projektu. Jeśli sekcja już istnieje, zaktualizuj istniejący wpis.
