@@ -24,7 +24,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from catalogs import Catalogs, InstalledCatalogScans, app_id, install_plan, validate_catalog
 from markdown_render import render_markdown
-from engine import DockerBackend, EngineError, Jobs, StatsSampler
+from engine import DockerBackend, EngineError, Jobs, StatsSampler, check_ssh_connection
 from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES, trusted_https_request
 from state import State
 from ports import container_revision,enrich_containers,inventory
@@ -111,7 +111,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     app.secret_key = state.session_key
     catalogs = Catalogs(state, ROOT)
     installed_scans = InstalledCatalogScans()
-    jobs = Jobs()
+    jobs = Jobs(state.directory)
     stats = StatsSampler()
     factory = backend_factory or DockerBackend
     app.extensions.update(dcc_state=state, dcc_catalogs=catalogs, dcc_catalog_scans=installed_scans, dcc_jobs=jobs)
@@ -462,6 +462,9 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def check_profile():
         admin()
         data = body()
+        transport = data.get('transport', 'docker')
+        if transport not in ('docker', 'ssh'):
+            abort(400, 'Choose a Docker or SSH connection test')
         value = validate_profile(data.get('configuration',{}))
         secret = data.get('credentials',{})
         if not isinstance(secret,dict) or any(not isinstance(v,str) or len(v)>8192 for v in secret.values()):
@@ -471,6 +474,9 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             previous.pop('private_key',None)
             secret = dict(previous,**secret)
         value = state.ssh.resolve(dict(value,credentials=secret))
+        if transport == 'ssh':
+            check_ssh_connection(value)
+            return jsonify(ok=True, transport='ssh')
         info = factory(value).info()
         return jsonify(ok=True,name=info.get('Name'),version=info.get('ServerVersion'))
 

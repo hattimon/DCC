@@ -9,10 +9,11 @@ from engine import EngineError
 from profile_ssh import configure_client, connection_options
 
 MAX_OUTPUT = 131072
+HOST_PROFILE_KINDS = frozenset({"ssh", "balena"})
 
 
 def host_profile(profile):
-    if profile.get("kind") not in {"ssh", "balena"}:
+    if profile.get("kind") not in HOST_PROFILE_KINDS:
         raise ValueError("MCP host access requires an SSH or Balena profile with host.exec permission")
 
 

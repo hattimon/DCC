@@ -15,14 +15,14 @@ from urllib.parse import urlsplit
 
 from flask import abort, g, jsonify, request, send_file
 
-from engine import DockerBackend
+from engine import DockerBackend, ProfileOperationBusy, profile_operation
 from client_adapters import (
     CONFIG_PATHS, MANUAL_INSTRUCTIONS, agent_instructions, client_project_archive,
     codex_marketplace_archive, configuration_text, export_client, export_public_client, instruction_path,
 )
 from security import admin, redact
 from host_terminal import HostTerminals
-from mcp_host import SSHCommand, host_profile
+from mcp_host import HOST_PROFILE_KINDS, SSHCommand
 import profile_facts
 
 CLIENTS = ["OpenAI Codex", "Claude Desktop", "Claude Code", "Cursor", "Windsurf", "VS Code / GitHub Copilot", "Generic MCP"]
@@ -54,6 +54,35 @@ TERMINAL_TOOLS = {
     "host_terminal_close": "Close this MCP connection's authorized terminal",
 }
 TOOLS = {**READ_TOOLS, **WRITE_TOOLS, **TERMINAL_TOOLS}
+
+
+class MCPHostAccessDenied(PermissionError):
+    """Fixed guidance for an authenticated caller targeting a readable granted profile."""
+
+    messages = {
+        "host_profile_unsupported": "Host tools require an SSH or Balena profile. For the Windows host, configure a separate SSH profile in DCC Web and explicitly grant host access to it.",
+        "profile_host_permission_required": "Enable the host.exec permission for this SSH or Balena profile in DCC Web.",
+        "host_tool_not_granted": "In DCC Web, select this device and tool in a write-enabled MCP grant with host access. Reconnect MCP after updating the grant.",
+    }
+
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__("MCP access denied. " + self.messages[reason])
+
+
+def _host_access_denial(name, grant, profile):
+    permissions = set(profile.get("permissions", ["read"]))
+    if profile["id"] not in grant.get("profiles", []) or "read" not in permissions:
+        return "profile_outside_scope"
+    if profile.get("kind") not in HOST_PROFILE_KINDS:
+        return "host_profile_unsupported"
+    if "host.exec" not in permissions:
+        return "profile_host_permission_required"
+    if (grant.get("mode") != "write" or name not in grant.get("tools", [])
+            or grant.get("allow_host_terminal") is not True
+            or profile["id"] not in grant.get("terminal_profiles", [])):
+        return "host_tool_not_granted"
+    return None
 
 
 # Docker ps/inspect can contain credentials in arbitrary fields (Command,
@@ -347,23 +376,14 @@ class MCPService:
 
     def authorize_host(self, name, profile_id, revision=None):
         grant = self.grant()
-        if (grant.get("mode") != "write" or name not in grant.get("tools", [])
-                or grant.get("allow_host_terminal") is not True
-                or profile_id not in grant.get("profiles", [])
-                or profile_id not in grant.get("terminal_profiles", [])
+        if (profile_id not in grant.get("profiles", [])
                 or revision is not None and revision != grant.get("revision")):
             raise PermissionError("Host tool or device is outside this grant")
-        profile = self.state.profile(profile_id)
-        if not required_capabilities(name) <= set(profile.get("permissions", ["read"])):
-            raise PermissionError("Profile host permission was revoked")
-        host_profile(profile)
-
-    def host_available(self, name, profile_id):
-        try:
-            self.authorize_host(name, profile_id)
-            return True
-        except (PermissionError, ValueError):
-            return False
+        denial = _host_access_denial(name, grant, self.state.profile(profile_id))
+        if denial == "profile_outside_scope":
+            raise PermissionError("Profile read access is required")
+        if denial:
+            raise MCPHostAccessDenied(denial)
 
     def _watch_terminals(self):
         while not self.stopped.wait(.5):
@@ -498,46 +518,22 @@ class MCPService:
         profile_id = arguments.get("profile") if isinstance(arguments, dict) else None
         status = 200
         try:
-            if name not in TOOLS or name not in grant.get("tools", []):
+            if name not in TOOLS or name not in TERMINAL_TOOLS and name not in grant.get("tools", []):
                 raise PermissionError("Tool or profile is outside this grant")
             profile_id=self.resolve_profile(profile_id,grant)
-            if name in MUTATING_TOOLS and grant.get("mode", "read") != "write":
-                raise PermissionError("Write tools require a write-enabled grant")
-            if name == "container_remove" and not grant.get("allow_destructive", False):
-                raise PermissionError("Container removal requires explicit destructive authorization")
-            profile = self.state.profile(profile_id, private=True)
-            required = required_capabilities(name)
-            if not required.issubset(set(profile.get("permissions", ["read"]))):
-                raise PermissionError("Profile permission was revoked")
-            engine = self.factory(profile) if name not in TERMINAL_TOOLS else None
             if name in TERMINAL_TOOLS:
+                self.authorize_host(name, profile_id, grant.get("revision"))
+                profile = self.state.profile(profile_id, private=True)
                 result = self.host_call(name, arguments, profile, grant)
-            elif name == "host_info":
-                result = profile_facts.remember(self.state, profile, engine.info())
-            elif name == "list_containers":
-                result = _mcp_container_list(engine.containers())
-            elif name == "inspect_container":
-                result = _mcp_container_inspect(engine.inspect(_container_id(arguments.get("container"))))
-            elif name == "container_logs":
-                target = _container_id(arguments.get("container"))
-                result = engine.logs(target, max(1, min(int(arguments.get("tail", 200)), 2000)))
-            elif name == "container_stats":
-                result = _mcp_docker_rows(name, engine.stats())
-            elif name in {"list_images", "list_volumes", "list_networks"}:
-                result = _mcp_docker_rows(name, engine.resources(name.removeprefix("list_")))
-            elif name in ACTION_TOOLS:
-                target = _container_id(arguments.get("container"))
-                action = ACTION_TOOLS[name][0]
-                engine.action(target, action)
-                result = {"container": target, "operation": action, "ok": True, "volumes_deleted": False}
             else:
-                args, container_name, image = _create_args(arguments, engine)
-                created_id = engine.run(args, timeout=600).strip()
-                result = {"container": container_name, "image": image, "id": created_id[:128], "ok": True}
+                result = self.docker_call(name, arguments, profile_id, grant)
             self.state.audit("mcp:" + str(grant.get("name", "client")), name, profile_id, 200)
             return {"content": [{"type": "text", "text": json.dumps(redact(result), ensure_ascii=False)}], "isError": False}
         except PermissionError:
             status = 403
+            raise
+        except ProfileOperationBusy:
+            status = 409
             raise
         except Exception:
             status = 400
@@ -545,6 +541,38 @@ class MCPService:
         finally:
             if status != 200:
                 self.state.audit("mcp:" + str(grant.get("name", "client")), name if isinstance(name, str) else "invalid", str(profile_id or "invalid"), status)
+
+    def docker_call(self, name, arguments, profile_id, grant):
+        if name in WRITE_TOOLS and grant.get("mode", "read") != "write":
+            raise PermissionError("Write tools require a write-enabled grant")
+        if name == "container_remove" and not grant.get("allow_destructive", False):
+            raise PermissionError("Container removal requires explicit destructive authorization")
+        profile = self.state.profile(profile_id, private=True)
+        if not required_capabilities(name) <= set(profile.get("permissions", ["read"])):
+            raise PermissionError("Profile permission was revoked")
+        engine = self.factory(profile)
+        if name in WRITE_TOOLS:
+            with profile_operation(self.state.directory, profile_id):
+                if name in ACTION_TOOLS:
+                    target = _container_id(arguments.get("container"))
+                    action = ACTION_TOOLS[name][0]
+                    engine.action(target, action)
+                    return {"container": target, "operation": action, "ok": True, "volumes_deleted": False}
+                args, container_name, image = _create_args(arguments, engine)
+                created_id = engine.run(args, timeout=600).strip()
+                return {"container": container_name, "image": image, "id": created_id[:128], "ok": True}
+        if name == "host_info":
+            return profile_facts.remember(self.state, profile, engine.info())
+        if name == "list_containers":
+            return _mcp_container_list(engine.containers())
+        if name == "inspect_container":
+            return _mcp_container_inspect(engine.inspect(_container_id(arguments.get("container"))))
+        if name == "container_logs":
+            target = _container_id(arguments.get("container"))
+            return engine.logs(target, max(1, min(int(arguments.get("tail", 200)), 2000)))
+        if name == "container_stats":
+            return _mcp_docker_rows(name, engine.stats())
+        return _mcp_docker_rows(name, engine.resources(name.removeprefix("list_")))
 
     def handle(self, message):
         method = message.get("method")
@@ -575,15 +603,26 @@ class MCPService:
             return {"jsonrpc": "2.0", "id": message["id"], "error": {"code": -32002, "message": "Complete initialize and notifications/initialized first"}}
         elif method == "tools/list":
             grant = self.grant()
+            terminal_profiles = []
+            for ident in dict.fromkeys(grant.get("terminal_profiles", [])):
+                if ident not in grant.get("profiles", []):
+                    continue
+                try:
+                    terminal_profiles.append(self.state.profile(ident))
+                except ValueError:
+                    continue
             result = {"tools": []}
             for name in grant.get("tools", []):
                 if name not in TOOLS or name in MUTATING_TOOLS and grant.get("mode", "read") != "write":
                     continue
-                if name in TERMINAL_TOOLS and not any(
-                        self.host_available(name, ident) for ident in grant.get("terminal_profiles", [])):
-                    continue
                 definition = READ_SCHEMAS[name]
-                properties = {"profile": {"type": "string", "description": "Exact granted profile name or host/IP address; profile ID is also accepted."}, **definition.get("properties", {})}
+                selector = "Exact granted profile name or host/IP address; profile ID is also accepted."
+                if name in TERMINAL_TOOLS:
+                    eligible = [profile["id"] for profile in terminal_profiles if not _host_access_denial(name, grant, profile)]
+                    if not eligible:
+                        continue
+                    selector += " Authorized profile IDs for this host tool: " + ", ".join(eligible) + "."
+                properties = {"profile": {"type": "string", "description": selector}, **definition.get("properties", {})}
                 write = name in MUTATING_TOOLS
                 result["tools"].append({"name": name, "description": TOOLS[name],
                     "inputSchema": {"type": "object", "properties": properties, "required": definition["required"], "additionalProperties": False},
@@ -613,6 +652,9 @@ def register_mcp(app, state, profile_lookup, reauthenticate, confirmed):
     def save_grant(data, existing=None):
         if not isinstance(data, dict):
             abort(400)
+        previous = json.loads(existing["data"]) if existing else {}
+        if existing and "expected_revision" in data and data["expected_revision"] != previous.get("revision"):
+            abort(409, "This grant was edited after you opened it. Close this form, reload the grants and review the current settings.")
         mode = data.get("mode", "read")
         if mode not in ("read", "write"):
             abort(400, "Choose read-only or read/write access")
@@ -646,7 +688,7 @@ def register_mcp(app, state, profile_lookup, reauthenticate, confirmed):
             if any(not required_capabilities(tool).issubset(permissions) for tool in tools if tool not in TERMINAL_TOOLS):
                 abort(400, "The profile does not have the permission required by the selected tool")
             if profile_id in terminal_profiles:
-                if not {"read", "host.exec"} <= permissions or profile.get("kind") not in {"ssh", "balena"}:
+                if not {"read", "host.exec"} <= permissions or profile.get("kind") not in HOST_PROFILE_KINDS:
                     abort(400, "Terminal devices require SSH or Balena profiles with host.exec permission")
         allow_public = data.get("allow_public") is True
         if allow_public and not state.mfa.enabled(g.user['id']):
@@ -662,7 +704,6 @@ def register_mcp(app, state, profile_lookup, reauthenticate, confirmed):
             abort(400, "Validity must be between 1 and 1000000 days, or select No expiry")
         token = secrets.token_urlsafe(40) if not existing else None
         ident = existing["id"] if existing else secrets.token_hex(12)
-        previous = json.loads(existing["data"]) if existing else {}
         public_minutes = data.get('public_session_minutes',previous.get('public_session_minutes',30))
         if type(public_minutes) is not int or public_minutes not in (15,30,60):
             abort(400, "Public session duration must be 15, 30 or 60 minutes")
@@ -783,10 +824,10 @@ def register_mcp(app, state, profile_lookup, reauthenticate, confirmed):
             profiles.append({
                 "id": profile_id,
                 "name": profile.get("name") or profile_id,
+                "kind": profile.get("kind"),
                 "addresses": addresses,
                 "tools": [name for name in tools if required_capabilities(name) <= permissions
-                          and (name not in TERMINAL_TOOLS or metadata.get("allow_host_terminal") is True
-                               and profile_id in metadata.get("terminal_profiles", []) and profile.get("kind") in {"ssh", "balena"})],
+                          and (name not in TERMINAL_TOOLS or not _host_access_denial(name, metadata, profile))],
                 "environment": profile_facts.snapshot(state, profile),
             })
         return agent_instructions(grant_id, dict(metadata,export_transport=transport), profiles, TOOLS, variant)
@@ -920,6 +961,10 @@ def _stdio_messages(service, input_stream, output_stream):
             if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
                 raise ValueError("Invalid JSON-RPC request")
             response = service.handle(message)
+        except MCPHostAccessDenied as error:
+            response = {"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32001, "message": str(error), "data": {"reason": error.reason}}}
+        except ProfileOperationBusy as error:
+            response = {"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32003, "message": str(error)}}
         except PermissionError:
             response = {"jsonrpc": "2.0", "id": message.get("id") if isinstance(message, dict) else None, "error": {"code": -32001, "message": "MCP access denied"}}
         except Exception:

@@ -908,6 +908,21 @@ class WebTests(unittest.TestCase):
         self.assertEqual(response.status_code,503)
         self.assertIn('SSH connection timed out',response.json['error'])
 
+    def test_profile_can_verify_ssh_with_strict_host_keys_without_using_docker(self):
+        configuration = {'name': 'Windows host', 'kind': 'ssh', 'host': 'win.example', 'username': 'qa', 'port': 2222}
+        client = MagicMock()
+        with patch('engine.paramiko.SSHClient', return_value=client), patch.object(FakeBackend, 'info') as info:
+            response = self.request('profiles/check', {'configuration': configuration, 'transport': 'ssh'})
+            self.assertEqual(response.json, {'ok': True, 'transport': 'ssh'})
+            client.connect.assert_called_once()
+            self.assertEqual(client.connect.call_args.kwargs['port'], 2222)
+            self.assertEqual(type(client.set_missing_host_key_policy.call_args.args[0]).__name__, 'RejectPolicy')
+            client.exec_command.assert_not_called()
+            client.close.assert_called_once()
+            info.assert_not_called()
+        response = self.request('profiles/check', {'configuration': {'name': 'Local', 'kind': 'local'}, 'transport': 'ssh'})
+        self.assertEqual(response.status_code, 400)
+
     def test_configuration_delegates_to_existing_updater_and_retains_environment(self):
         container=SimpleNamespace(attrs={'Config':{'Image':'demo:1','Env':['OLD=retained','CHANGE=old']}},image=SimpleNamespace(id='sha256:existing'))
         client=MagicMock();client.containers.get.return_value=container

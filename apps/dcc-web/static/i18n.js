@@ -17,7 +17,13 @@ Narzędzia terminala MCP|MCP terminal tools
 Zapis zachowa obecny token. Wszystkie czaty używające tego tokena otrzymają nowy zakres. Otwarte terminale zostaną zamknięte.|Saving keeps the current token. All chats using it receive the new scope. Open terminals will be closed.
 Ta zgoda włącza container_remove i potwierdza usuwanie. Wolumeny pozostają. Nie ogranicza poleceń wykonywanych przez terminal.|This consent enables container_remove and authorizes removal. Volumes remain. It does not restrict shell commands.
 Polecenia działają jako użytkownik SSH profilu i mogą zmieniać lub usuwać dane hosta. Uprawnienia root lub sudo zależą od tego konta. Wybierz urządzenia osobno.|Commands run as the profile SSH account and can modify or delete host data. Root or sudo privileges depend on that account. Select devices separately.
-Dostępne są profile SSH i Balena z uprawnieniem host.exec. Profil Local w kontenerze nie udostępnia terminala hosta.|SSH and Balena profiles with host.exec are eligible. A containerized Local profile does not provide a host shell.
+Aby używać poleceń systemu Windows przez MCP, dodaj osobny profil SSH z uprawnieniem host.exec i wybierz go w sekcji Profile.|To run Windows host commands through MCP, add a separate SSH profile with host.exec and select it under Profiles.
+Wybierz w sekcji Profile urządzenie SSH lub Balena z uprawnieniem host.exec.|Select an SSH or Balena device with host.exec under Profiles.
+Wybierz co najmniej jedno urządzenie i narzędzie terminala MCP.|Select at least one device and one MCP terminal tool.
+Sprawdź Docker|Test Docker
+Sprawdź SSH|Test SSH
+Połączono przez SSH. Użyj oddzielnego testu, aby sprawdzić Docker.|SSH connection succeeded. Use the separate test to check Docker.
+Terminal hosta w MCP wymaga profilu SSH lub Balena oraz osobnej zgody w grancie.|MCP host terminal access requires an SSH or Balena profile and separate consent in the grant.
 Dostęp zapisany. Token pozostał ten sam. Połącz MCP ponownie i pobierz aktualne instrukcje.|Grant saved. The token is unchanged. Reconnect MCP and export updated instructions.
 ZIP nigdy nie zawiera tokena. Wartość jest widoczna tylko przy utworzeniu dostępu; DCC zapisuje wyłącznie jej skrót. Zmiana zakresu zachowuje aktywny token. Po utracie tokena utwórz nowy dostęp.|The ZIP never contains the token. Its value is shown only when creating a grant; DCC stores only its hash. Scope edits preserve the active token. If it is lost, create a new grant.
 System komputera z klientem MCP|MCP client computer platform

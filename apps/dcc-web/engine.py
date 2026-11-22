@@ -1,5 +1,8 @@
 """Argument-based Docker transports. No shell is used on the web host."""
 from concurrent.futures import Future
+from contextlib import ExitStack, contextmanager
+import errno
+import hashlib
 import json
 import os
 import re
@@ -65,6 +68,48 @@ def _connect_ssh(client, profile):
         client.connect(**options)
     except (paramiko.SSHException, OSError, EOFError) as error:
         raise EngineError(_ssh_error_message(error, "connect")) from error
+
+
+def check_ssh_connection(profile):
+    if profile["kind"] not in {"ssh", "balena"}:
+        raise ValueError("An SSH connection test requires an SSH or Balena profile")
+    client = paramiko.SSHClient()
+    try:
+        _connect_ssh(client, profile)
+    finally:
+        client.close()
+
+
+class ProfileOperationBusy(ValueError):
+    def __init__(self):
+        super().__init__("Another Docker operation is already running for this profile. Wait for it to finish before retrying.")
+
+
+@contextmanager
+def profile_operation(data_directory, profile_id):
+    """Serialize Docker mutations across Web and MCP processes sharing this state."""
+    if data_directory is None:
+        yield
+        return
+    locks = data_directory / "profile-locks"
+    locks.mkdir(mode=0o700, exist_ok=True)
+    filename = hashlib.sha256(profile_id.encode("utf-8")).hexdigest() + ".lock"
+    # Keep the inode in place between operations. Closing the handle releases
+    # the OS lock, including if the process exits before the operation finishes.
+    with (locks / filename).open("a+b") as handle:
+        try:
+            if os.name == "nt":
+                import msvcrt
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            if error.errno not in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+                raise
+            raise ProfileOperationBusy() from None
+        yield
 
 
 class DockerBackend:
@@ -299,32 +344,37 @@ class StatsSampler:
 
 class Jobs:
     """One mutation per Docker profile; bounded completion history."""
-    def __init__(self):
+    def __init__(self, data_directory=None):
         self.lock = threading.Lock()
         self.history = {}
         self.active = set()
+        self.data_directory = data_directory
 
-    def execute(self,profile,work):
-        """Synchronous lifecycle/exec operations share the same per-profile write guard."""
+    @contextmanager
+    def reserve(self, profile):
         with self.lock:
             if profile in self.active:
-                raise ValueError('Another operation is already running for this profile')
-            if len(self.active)>=4:
-                raise ValueError('The operation queue is full')
+                raise ProfileOperationBusy()
+            if len(self.active) >= 4:
+                raise ValueError("The operation queue is full")
             self.active.add(profile)
-        try:return work()
+        try:
+            with profile_operation(self.data_directory, profile):
+                yield
         finally:
-            with self.lock:self.active.discard(profile)
+            with self.lock:
+                self.active.discard(profile)
+
+    def execute(self, profile, work):
+        with self.reserve(profile):
+            return work()
 
     def start(self, owner, profile, action, work, progress=False):
         import secrets
+        job_id = secrets.token_hex(12)
+        reservation = ExitStack()
+        reservation.enter_context(self.reserve(profile))
         with self.lock:
-            if profile in self.active:
-                raise ValueError("Another operation is already running for this profile")
-            if len(self.active) >= 4:
-                raise ValueError("The operation queue is full")
-            job_id = secrets.token_hex(12)
-            self.active.add(profile)
             self.history[job_id] = {"id":job_id, "owner":owner, "profile":profile, "action":action, "status":"running", "started":time.time()}
         def report(**updates):
             with self.lock:
@@ -333,21 +383,26 @@ class Jobs:
                 if text:value['logs']=(value.get('logs','')+str(text))[-200_000:]
                 value.update(updates)
         def run():
-            try:
-                result = work(report) if progress else work()
-                self.history[job_id].update(status="success", result=result)
-                if progress:self.history[job_id]['phase']='completed'
-            except Exception as error:
-                from security import redact
-                message=redact(str(error)) if isinstance(error,(EngineError,ValueError)) else "Operation failed; review the selected profile, configuration and Docker state"
-                self.history[job_id].update(status="error", error=message)
-                if progress:self.history[job_id]['phase']='failed'
-            finally:
-                with self.lock:
-                    self.active.discard(profile)
-                    self.history[job_id]["finished"] = time.time()
-                    completed = [key for key,value in self.history.items() if value["status"] != "running"]
-                    for key in completed[:-50]:
-                        self.history.pop(key, None)
-        threading.Thread(target=run, name="dcc-web-operation", daemon=True).start()
+            with reservation:
+                try:
+                    result = work(report) if progress else work()
+                    outcome = {"status": "success", "result": result}
+                except Exception as error:
+                    from security import redact
+                    message = redact(str(error)) if isinstance(error, (EngineError, ValueError)) else "Operation failed; review the selected profile, configuration and Docker state"
+                    outcome = {"status": "error", "error": message}
+            with self.lock:
+                if progress:
+                    outcome["phase"] = "completed" if outcome["status"] == "success" else "failed"
+                self.history[job_id].update(outcome, finished=time.time())
+                completed = [key for key, value in self.history.items() if value["status"] != "running"]
+                for key in completed[:-50]:
+                    self.history.pop(key, None)
+        try:
+            threading.Thread(target=run, name="dcc-web-operation", daemon=True).start()
+        except RuntimeError:
+            reservation.close()
+            with self.lock:
+                self.history.pop(job_id, None)
+            raise
         return {"id":job_id,"profile":profile,"action":action,"status":"running"}

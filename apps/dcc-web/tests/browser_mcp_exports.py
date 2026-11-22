@@ -174,9 +174,13 @@ def main():
         # devices independently. This never executes against a real host.
         page.locator(f'[data-grant-edit="{first_id}"]').click()
         modal.locator('[name=mode][value=write]').check()
-        modal.locator('[name=profiles][value=mcp-ssh-qa]').check()
         modal.locator('[name=allow_host_terminal]').check()
+        expect(modal.locator('[data-no-host-profiles]')).to_be_visible()
+        expect(modal.locator('[name=terminal_profiles][value=mcp-ssh-qa]')).to_be_disabled()
+        expect(modal.locator('[name=tools][value=host_exec]')).not_to_be_checked()
+        modal.locator('[name=profiles][value=mcp-ssh-qa]').check()
         modal.locator('[name=terminal_profiles][value=mcp-ssh-qa]').check()
+        modal.locator('[name=tools][value=host_exec]').check()
         assert modal.locator('[name=tools][value=container_remove]').count()==0
         assert modal.locator('[name=allow_destructive]').count()==1
         modal.locator('[name=current_password]').fill('Review-only-password-4488')

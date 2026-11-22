@@ -19,7 +19,8 @@ from urllib.parse import urlsplit
 
 from flask import abort, g, jsonify, request, Response
 
-from mcp_preview import MCPService, READ_SCHEMAS, TOOLS
+from engine import ProfileOperationBusy
+from mcp_preview import MCPHostAccessDenied, MCPService, READ_SCHEMAS, TOOLS
 from security import admin, trusted_https_request
 
 SETTINGS = '__dcc_mcp_http__'
@@ -166,6 +167,8 @@ class PublicMCP:
                 try:
                     result = await anyio.to_thread.run_sync(lambda: CURRENT.get().call(params.name, params.arguments or {}))
                     return types.CallToolResult.model_validate(result)
+                except (MCPHostAccessDenied, ProfileOperationBusy) as error:
+                    return types.CallToolResult(content=[types.TextContent(type='text', text=str(error))], isError=True)
                 except PermissionError:
                     return types.CallToolResult(content=[types.TextContent(type='text',text='MCP operation denied by the current grant or device permissions')],isError=True)
                 except Exception:

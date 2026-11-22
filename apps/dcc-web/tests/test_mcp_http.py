@@ -151,6 +151,19 @@ class PublicMCPTests(unittest.TestCase):
         self.assertNotIn(self.grant['token'],instructions)
         self.assertNotIn(token,instructions)
 
+    def test_host_tool_denial_explains_why_local_requires_an_ssh_profile(self):
+        row = self.state.rows('SELECT data FROM grants WHERE id=?', (self.grant['id'],))[0]
+        metadata = json.loads(row['data'])
+        metadata['profiles'].append('local')
+        metadata['tools'].append('host_exec')
+        self.state.execute('UPDATE grants SET data=? WHERE id=?', (json.dumps(metadata), self.grant['id']))
+        token = self.session_token()
+        response = self.rpc_call(token, self.grant['token'], 'host_exec', profile='local', command='do-not-echo')
+        self.assertEqual(response.status_code, 200, response.json)
+        self.assertTrue(response.json['result']['isError'])
+        self.assertIn('separate SSH profile', response.json['result']['content'][0]['text'])
+        self.assertNotIn('do-not-echo', response.get_data(as_text=True))
+
     def test_stolen_grant_and_complete_config_cannot_start_session(self):
         for token,grant in ((None,None),(None,self.grant['token']),(self.grant['token'],self.grant['token']),('x'*64,self.grant['token'])):
             response=self.rpc_call(token,grant)

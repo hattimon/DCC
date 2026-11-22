@@ -5,8 +5,9 @@ import{accountFields}from'./profile_tools.js';
 
 export function grantForm(data,ctx,grant=null){
  const editing=!!grant,selected=new Set(grant?.profiles||[]),tools=new Set(grant?.tools||Object.keys(data.read_tools));
+ const hostProfiles=state.profiles.filter(p=>['ssh','balena'].includes(p.kind)&&p.permissions?.includes('read')&&p.permissions?.includes('host.exec'));
  const checkbox=(name,value,label,checked=false,extra='')=>html`<label class="check"><input type="checkbox" name="${name}" value="${esc(value)}" ${checked?'checked':''} ${extra}>${label}</label>`;
- const profileLabel=p=>html`<span class="grant-profile">${esc(p.name)}<span class="secondary">${esc(p.host||p.endpoint||p.distro||p.context||'')}</span></span>`;
+ const profileLabel=p=>html`<span class="grant-profile">${esc(p.name)}<span class="secondary">${esc(p.host||p.endpoint||p.distro||p.context||'')}</span>${p.kind==='local'?html`<span class="secondary">MCP · Docker</span>`:''}</span>`;
  return openDialog(editing?'Edytuj dostęp MCP':'Nowy dostęp MCP',html`<div class="stack">
   ${editing?notice('Zapis zachowa obecny token. Wszystkie czaty używające tego tokena otrzymają nowy zakres. Otwarte terminale zostaną zamknięte.'):''}
   ${field('Nazwa dostępu','name',grant?.name||'',{required:true})}
@@ -25,9 +26,10 @@ export function grantForm(data,ctx,grant=null){
    ${checkbox('allow_host_terminal','yes',t('Zezwól na dostęp terminalowy'),grant?.allow_host_terminal===true)}
    <section data-terminal-scope><h3>Urządzenia z dostępem terminalowym</h3>
     ${notice('Polecenia działają jako użytkownik SSH profilu i mogą zmieniać lub usuwać dane hosta. Uprawnienia root lub sudo zależą od tego konta. Wybierz urządzenia osobno.','warning')}
-    <div class="permission-grid">${state.profiles.filter(p=>['ssh','balena'].includes(p.kind)&&p.permissions?.includes('host.exec')).map(p=>checkbox('terminal_profiles',p.id,profileLabel(p),grant?.terminal_profiles?.includes(p.id))).join('')}</div>
-    <p class="fine">Dostępne są profile SSH i Balena z uprawnieniem host.exec. Profil Local w kontenerze nie udostępnia terminala hosta.</p>
-    <h4>Narzędzia terminala MCP</h4><div class="permission-grid">${Object.keys(data.terminal_tools).map(key=>checkbox('tools',key,esc(key),editing?tools.has(key):true)).join('')}</div>
+    <p class="fine">Aby używać poleceń systemu Windows przez MCP, dodaj osobny profil SSH z uprawnieniem host.exec i wybierz go w sekcji Profile.</p>
+    <p class="fine" data-no-host-profiles>Wybierz w sekcji Profile urządzenie SSH lub Balena z uprawnieniem host.exec.</p>
+    <div class="permission-grid">${hostProfiles.map(p=>checkbox('terminal_profiles',p.id,profileLabel(p),grant?.terminal_profiles?.includes(p.id))).join('')}</div>
+    <h4>Narzędzia terminala MCP</h4><div class="permission-grid">${Object.keys(data.terminal_tools).map(key=>checkbox('tools',key,esc(key),tools.has(key))).join('')}</div>
    </section>
    ${notice('Utworzenie kontenera używa tylko nazwanych wolumenów, domyślnie publikuje porty na 127.0.0.1 i nie pozwala na privileged ani montowanie ścieżek hosta. Usunięcie kontenera nie usuwa wolumenów.','warning')}
   </section>
@@ -38,25 +40,30 @@ export function grantForm(data,ctx,grant=null){
    form.querySelector('[data-write-tools]').hidden=!write;
    form.querySelectorAll('[data-write-tools] input').forEach(input=>input.disabled=!write);
    form.querySelector('[data-terminal-scope]').hidden=!terminal;
-   form.querySelectorAll('[data-terminal-scope] input').forEach(input=>{
-    const eligible=input.name!=='terminal_profiles'||[...form.querySelectorAll('[name=profiles]:checked')].some(p=>p.value===input.value);
-    input.disabled=!terminal||!eligible;if(!eligible)input.checked=false;
+   const selectedProfiles=new Set([...form.querySelectorAll('[name=profiles]:checked')].map(input=>input.value));
+   const devices=[...form.querySelectorAll('[name=terminal_profiles]')];
+   devices.forEach(input=>{
+    const eligible=selectedProfiles.has(input.value);
+    input.disabled=!terminal||!eligible;
+    if(!eligible)input.checked=false;
    });
+   form.querySelector('[data-no-host-profiles]').hidden=devices.some(input=>!input.disabled);
+   form.querySelectorAll('[data-terminal-scope] [name=tools]').forEach(input=>input.disabled=!terminal);
    const publicEnabled=form.elements.allow_public.checked;form.querySelector('[data-public-scope]').hidden=!publicEnabled;
    const authenticate=editing||write||publicEnabled,auth=form.querySelector('[data-write-auth]');auth.hidden=!authenticate;
    auth.querySelectorAll('input').forEach(input=>{input.disabled=!authenticate;input.required=authenticate&&input.name==='current_password';});
    const expiry=!editing||form.elements.renew_expiry.checked;form.querySelector('[data-expiry]').hidden=!expiry;
   };
   form.querySelectorAll('[name=mode],[name=profiles],[name=renew_expiry],[name=allow_public]').forEach(input=>input.onchange=sync);
-  form.elements.allow_host_terminal.onchange=()=>{
-   const hostTools=[...form.querySelectorAll('[data-terminal-scope] [name=tools]')];
-   if(form.elements.allow_host_terminal.checked&&!hostTools.some(input=>input.checked))hostTools.forEach(input=>input.checked=true);
-   sync();
-  };
+  form.elements.allow_host_terminal.onchange=sync;
   sync();
  },onSubmit:async f=>{
   const selectedTools=f.getAll('tools');if(f.has('allow_destructive'))selectedTools.push('container_remove');
+  if(f.has('allow_host_terminal')&&(!f.getAll('terminal_profiles').length||!selectedTools.some(key=>Object.hasOwn(data.terminal_tools,key)))){
+   throw Error(t('Wybierz co najmniej jedno urządzenie i narzędzie terminala MCP.'));
+  }
   const payload={name:f.get('name'),client:f.get('client'),days:Number(f.get('days')),unlimited:f.has('unlimited'),renew_expiry:f.has('renew_expiry'),mode:f.get('mode'),allow_destructive:f.has('allow_destructive'),allow_host_terminal:f.has('allow_host_terminal'),terminal_profiles:f.getAll('terminal_profiles'),profiles:f.getAll('profiles'),tools:selectedTools,allow_public:f.has('allow_public'),public_session_minutes:Number(f.get('public_session_minutes')),current_password:f.get('current_password'),otp:f.get('otp')};
+  if(editing)payload.expected_revision=grant.revision??null;
   const result=editing?await api('mcp/grants/'+encodeURIComponent(grant.id),{method:'PUT',data:payload}):await post('mcp/grants',payload);
   if(editing)notify('Dostęp zapisany. Token pozostał ten sam. Połącz MCP ponownie i pobierz aktualne instrukcje.');
   else setTimeout(()=>openDialog('Token — pokazany tylko raz',html`${notice('Zapisz token w menedżerze sekretów klienta. Nie będzie można ponownie go odczytać.','warning')}<pre class="inspect">${esc(result.token)}</pre>`),0);
