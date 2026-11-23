@@ -2193,7 +2193,7 @@
     },
     {
       "name": "X-Cleaner AI",
-      "image": "ghcr.io/hattimon/x-cleaner-ai:0.1.2",
+      "image": "ghcr.io/hattimon/x-cleaner-ai:0.2.0",
       "category": "Analityka",
       "category_en": "Analytics",
       "categories": [
@@ -2208,8 +2208,8 @@
       "container_port": "8080",
       "host_port": "3180",
       "extra": "-v x-cleaner-ai_data:/var/lib/postgresql/data --restart unless-stopped",
-      "notes": "Obraz zawiera panel, backend i PostgreSQL. Login i hasło pojawią się raz w logu initial_credentials. Wybierz port 3180 lub ustaw zgodny PUBLIC_ORIGIN.",
-      "notes_en": "This image includes the dashboard, backend and PostgreSQL. Read the one-time initial_credentials log. Use port 3180 or configure PUBLIC_ORIGIN to match.",
+      "notes": "Panel i PostgreSQL w jednym kontenerze na Windows z Docker Desktop oraz Ubuntu ARM64 na Raspberry Pi 4. Przy pierwszym starcie pustego wolumenu DCC wykryje login admin i wygenerowane hasło. Otwórz wybrany port przez localhost lub prywatny adres IP hosta.",
+      "notes_en": "The dashboard and PostgreSQL run in one container on Docker Desktop and ARM64 Ubuntu on a Raspberry Pi 4. On a fresh volume, DCC detects the admin username and generated password. Open the selected port on localhost or the host's private IP address.",
       "engines": [
         "docker"
       ],
@@ -2231,21 +2231,21 @@
         {
           "label": "Login",
           "label_en": "Username",
-          "regex": "\"event\":\"initial_credentials\"[^\\r\\n]*\"login\":\"(?P<value>admin-[a-f0-9]{8})\""
+          "regex": "(?:\"event\":\"initial_credentials\"[^\\r\\n]*\"login\":\"|initial_credentials service=x-cleaner-ai login=)(?P<value>admin(?:-[a-f0-9]{8})?)(?=[\"\\s]|$)"
         },
         {
           "label": "Hasło",
           "label_en": "Password",
-          "regex": "\"event\":\"initial_credentials\"[^\\r\\n]*\"password\":\"(?P<value>[A-Za-z0-9_-]{32})\""
+          "regex": "(?:\"event\":\"initial_credentials\"[^\\r\\n]*\"password\":\"|initial_credentials service=x-cleaner-ai login=admin(?:-[a-f0-9]{8})? password=)(?P<value>[A-Za-z0-9_-]{32})(?=[\"\\s]|$)"
         }
       ],
       "post_install_hints": [
-        "Odczytaj initial_credentials z logów kontenera DCC.",
-        "Domyślny panel działa pod http://localhost:3180. Na serwerze użyj tunelu SSH lub prywatnego HTTPS."
+        "Odczytaj initial_credentials z logów kontenera DCC i zmień hasło po zalogowaniu.",
+        "Panel działa na wybranym porcie przez localhost i prywatny adres IP hosta. Połączenia X i AI dodasz w Integracjach."
       ],
       "post_install_hints_en": [
-        "Read initial_credentials from the container logs in DCC.",
-        "The default dashboard runs at http://localhost:3180. Use an SSH tunnel or private HTTPS on a server."
+        "Read initial_credentials from the container logs in DCC and change the password after signing in.",
+        "Open the selected port on localhost or the host's private IP address. Connect X and AI in Integrations."
       ]
     }
   ]
