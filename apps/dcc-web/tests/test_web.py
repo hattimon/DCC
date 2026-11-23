@@ -941,7 +941,8 @@ class WebTests(unittest.TestCase):
         self.assertIn('powershell.exe', client.exec_command.call_args.args[0])
         self.assertIn('powershell.exe', channel.exec_command.call_args.args[0])
         stream_script = base64.b64decode(channel.exec_command.call_args.args[0].split()[-1]).decode('utf-16-le')
-        self.assertIn("'pull' 'image:1'", stream_script)
+        for argument in ('docker', 'pull', 'image:1'):
+            self.assertIn(base64.b64encode(argument.encode('utf-8')).decode('ascii'), stream_script)
 
     def test_ssh_restart_policy_format_works_without_shell_specific_quotes(self):
         rows = [{'ID': 'abc', 'State': 'running'}, {'ID': 'def', 'State': 'exited'}]
