@@ -2190,6 +2190,63 @@
       ],
       "latest_release": "v1.3.27",
       "latest_release_url": "https://github.com/hattimon/CINEMA-HUB/releases/tag/v1.3.27"
+    },
+    {
+      "name": "X-Cleaner AI",
+      "image": "ghcr.io/hattimon/x-cleaner-ai:0.1.1",
+      "category": "Analityka",
+      "category_en": "Analytics",
+      "categories": [
+        "AI 🧠 › UI"
+      ],
+      "categories_en": [
+        "AI 🧠 › UI"
+      ],
+      "description": "Panel do analizy obserwowanych kont X, ręcznej weryfikacji i kontrolowanego unfollow.",
+      "description_en": "A dashboard to analyze your X following, review evidence and confirm individual unfollows.",
+      "default_name": "x-cleaner-ai",
+      "container_port": "8080",
+      "host_port": "3180",
+      "extra": "-v x-cleaner-ai_data:/var/lib/postgresql/data --restart unless-stopped",
+      "notes": "Obraz zawiera panel, backend i PostgreSQL. Login i hasło pojawią się raz w logu initial_credentials. Wybierz port 3180 lub ustaw zgodny PUBLIC_ORIGIN.",
+      "notes_en": "This image includes the dashboard, backend and PostgreSQL. Read the one-time initial_credentials log. Use port 3180 or configure PUBLIC_ORIGIN to match.",
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "amd64",
+        "arm64"
+      ],
+      "requires": [
+        "Docker"
+      ],
+      "storage_type": "named_volume",
+      "backup_priority": "high",
+      "security_exposure": "lan_only",
+      "compose_required": false,
+      "source_url": "https://github.com/hattimon/x-cleaner-ai",
+      "docs_url": "https://github.com/hattimon/x-cleaner-ai/blob/main/docs/DCC-INSTALL.md",
+      "icon_text": "🎯",
+      "credential_patterns": [
+        {
+          "label": "Login",
+          "label_en": "Username",
+          "regex": "\"event\":\"initial_credentials\"[^\\r\\n]*\"login\":\"(?P<value>admin-[a-f0-9]{8})\""
+        },
+        {
+          "label": "Hasło",
+          "label_en": "Password",
+          "regex": "\"event\":\"initial_credentials\"[^\\r\\n]*\"password\":\"(?P<value>[A-Za-z0-9_-]{32})\""
+        }
+      ],
+      "post_install_hints": [
+        "Odczytaj initial_credentials z logów kontenera DCC.",
+        "Domyślny panel działa pod http://localhost:3180. Na serwerze użyj tunelu SSH lub prywatnego HTTPS."
+      ],
+      "post_install_hints_en": [
+        "Read initial_credentials from the container logs in DCC.",
+        "The default dashboard runs at http://localhost:3180. Use an SSH tunnel or private HTTPS on a server."
+      ]
     }
   ]
 }
