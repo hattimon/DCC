@@ -155,7 +155,9 @@ def authorize(profile, capability="read"):
 
 
 def validate_profile(data):
-    result = {key: data.get(key) for key in ("name", "kind", "endpoint", "host", "port", "username", "key_path", "key_scope", "ssh_auth", "known_hosts_path", "distro", "cli", "context", "users", "panel_host") if data.get(key) is not None}
+    result = {key: data.get(key) for key in ("name", "kind", "endpoint", "host", "port", "username", "key_path", "key_scope", "ssh_auth", "ssh_shell", "known_hosts_path", "distro", "cli", "context", "users", "panel_host") if data.get(key) is not None}
+    if result.get('ssh_shell', 'posix') not in {'posix', 'windows'}:
+        raise ValueError('Invalid SSH remote shell')
     if result.get('ssh_auth', 'auto') not in {'auto', 'key', 'agent'}:
         raise ValueError('Invalid SSH authentication method')
     if result.get("key_scope", "individual") not in {"individual", "shared", "mounted"}:

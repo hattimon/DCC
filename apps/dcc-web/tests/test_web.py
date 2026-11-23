@@ -1,3 +1,4 @@
+import base64
 import hashlib
 from concurrent.futures import Future, ThreadPoolExecutor
 import io
@@ -30,7 +31,7 @@ from security import CAPABILITIES,redact,validate_profile
 from catalogs import Catalogs,install_plan,fetch_public,validate_catalog,image_repo
 from mcp_preview import MCPService,stdio
 from client_adapters import _zip_files, export_client
-from engine import DockerBackend,EngineError,StatsSampler
+from engine import DockerBackend,EngineError,StatsSampler,_ssh_docker_command,_DOCKER_RESTART_FORMAT
 from profile_ssh import connection_options
 from ports import published_ports,enrich_containers,inventory,parse_bindings
 from remote_api import VerifiedProfileAdapter,ssh_docker_client
@@ -177,11 +178,12 @@ class WebTests(unittest.TestCase):
         self.assertNotEqual(self.client.get('/',headers={'Upgrade':'websocket','Connection':'Upgrade'}).status_code,101)
 
     def test_profile_credentials_encrypted_and_export_omits_them(self):
-        value={'name':'SSH host','kind':'ssh','host':'server.example','username':'docker','credentials':{'password':'Do-not-store-in-plain-text-77'}}
+        value={'name':'SSH host','kind':'ssh','host':'server.example','username':'docker','ssh_shell':'windows','credentials':{'password':'Do-not-store-in-plain-text-77'}}
         response=self.request('profiles',value)
         self.assertEqual(response.status_code,201,response.json)
         profile=self.state.profile(response.json['id'],private=True)
         self.assertEqual(profile['credentials']['password'],value['credentials']['password'])
+        self.assertEqual(profile['ssh_shell'],'windows')
         self.assertNotIn(value['credentials']['password'],self.client.get('/api/profiles/export').get_data(as_text=True))
         for filename in Path(self.temp.name).glob('*'):
             if filename.is_file():self.assertNotIn(value['credentials']['password'].encode(),filename.read_bytes())
@@ -270,14 +272,14 @@ class WebTests(unittest.TestCase):
     def test_container_listing_reads_restart_policies_in_one_safe_batch(self):
         backend = DockerBackend({'kind':'local'})
         entries = [{'ID':'one','Status':'Up 1 hour'}, {'ID':'two','Status':'Exited'}, {'ID':'three','Status':'Up'}]
-        with patch.object(backend, 'json', side_effect=[entries,[{'ID':'one','RestartPolicy':'unless-stopped'},
-                                                               {'ID':'two','RestartPolicy':'no'},
-                                                               {'ID':'three','RestartPolicy':'on-failure'}]]) as request:
+        with patch.object(backend, 'json', return_value=entries) as listing, \
+             patch.object(backend, 'run', return_value='one__DCC__unless-stopped\ntwo__DCC__no\nthree__DCC__on-failure\n') as request:
             values = backend.containers()
         self.assertEqual([v['RestartPolicy'] for v in values], ['unless-stopped','no','on-failure'])
-        self.assertEqual(request.call_count,2)
+        listing.assert_called_once()
+        request.assert_called_once()
         self.assertIn('HostConfig.RestartPolicy.Name',request.call_args.args[0][2])
-        with patch.object(backend,'json',side_effect=[entries,EngineError('removed during inspect')]):
+        with patch.object(backend,'json',return_value=entries), patch.object(backend,'run',side_effect=EngineError('removed during inspect')):
             self.assertTrue(all(v['RestartPolicy'] is None for v in backend.containers()))
 
     def test_container_mutations_require_single_use_bound_confirmation(self):
@@ -883,6 +885,73 @@ class WebTests(unittest.TestCase):
         self.assertEqual(type(client.set_missing_host_key_policy.call_args.args[0]).__name__,'RejectPolicy')
         client.close.assert_called_once()
 
+    def test_ssh_docker_info_passes_json_format_as_one_windows_argument(self):
+        client = MagicMock()
+        stdin, stdout, stderr = MagicMock(), MagicMock(), MagicMock()
+        stdout.read.return_value = b'{"ServerVersion":"29.6.1"}'
+        stdout.channel.recv_exit_status.return_value = 0
+        stderr.read.return_value = b''
+        client.exec_command.return_value = (stdin, stdout, stderr)
+        with patch('engine.paramiko.SSHClient', return_value=client):
+            info = DockerBackend({'kind': 'ssh', 'host': 'windows.example', 'username': 'qa'}).info()
+        client.exec_command.assert_called_once_with('docker info --format "{{json .}}"', timeout=45)
+        self.assertEqual(info, {'ServerVersion': '29.6.1'})
+
+    def test_windows_ssh_docker_command_preserves_arguments_and_metacharacters(self):
+        profile = validate_profile({'name': 'Windows', 'kind': 'ssh', 'host': 'windows.example',
+                                    'username': 'qa', 'ssh_shell': 'windows'})
+        self.assertEqual(profile['ssh_shell'], 'windows')
+        with self.assertRaisesRegex(ValueError, 'Invalid SSH remote shell'):
+            validate_profile({**profile, 'ssh_shell': 'unsupported'})
+        payload = ['ps', '--format', '{{json .}}', 'name with spaces', "user's & | $(`test`)"]
+        command = _ssh_docker_command('docker', payload, profile['ssh_shell'])
+        self.assertTrue(command.startswith('powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand '))
+        script = base64.b64decode(command.rsplit(' ', 1)[-1]).decode('utf-16-le')
+        for argument in ['docker', *payload]:
+            self.assertIn(base64.b64encode(argument.encode('utf-8')).decode('ascii'), script)
+        self.assertNotIn("user's & | $(`test`)", script)
+        self.assertTrue(script.endswith('; exit $LASTEXITCODE'))
+
+    def test_windows_ssh_docker_command_never_interpolates_unicode_quotes(self):
+        payload = ['exec', 'fixture', "echo 'x’\u003b whoami\u003b #'", '‘left’', '“double”']
+        command = _ssh_docker_command('docker', payload, 'windows')
+        script = base64.b64decode(command.rsplit(' ', 1)[-1]).decode('utf-16-le')
+        self.assertNotIn('whoami', script)
+        self.assertNotIn('‘', script)
+        self.assertNotIn('’', script)
+        self.assertIn('& $dccExe @dccArgs', script)
+        for argument in ['docker', *payload]:
+            self.assertIn(base64.b64encode(argument.encode('utf-8')).decode('ascii'), script)
+
+    def test_windows_ssh_uses_encoded_command_for_docker_info_and_stream(self):
+        client = MagicMock()
+        stdin, stdout, stderr = MagicMock(), MagicMock(), MagicMock()
+        stdout.read.return_value = b'{"ServerVersion":"29.6.1"}'
+        stdout.channel.recv_exit_status.return_value = 0
+        stderr.read.return_value = b''
+        client.exec_command.return_value = (stdin, stdout, stderr)
+        channel = client.get_transport.return_value.open_session.return_value
+        channel.recv_ready.return_value = False
+        channel.exit_status_ready.return_value = True
+        channel.recv_exit_status.return_value = 0
+        profile = {'kind': 'ssh', 'host': 'windows.example', 'username': 'qa', 'ssh_shell': 'windows'}
+        with patch('engine.paramiko.SSHClient', return_value=client):
+            self.assertEqual(DockerBackend(profile).info()['ServerVersion'], '29.6.1')
+            DockerBackend(profile).stream(['pull', 'image:1'], lambda chunk: None)
+        self.assertIn('powershell.exe', client.exec_command.call_args.args[0])
+        self.assertIn('powershell.exe', channel.exec_command.call_args.args[0])
+        stream_script = base64.b64decode(channel.exec_command.call_args.args[0].split()[-1]).decode('utf-16-le')
+        for argument in ('docker', 'pull', 'image:1'):
+            self.assertIn(base64.b64encode(argument.encode('utf-8')).decode('ascii'), stream_script)
+
+    def test_ssh_restart_policy_format_works_without_shell_specific_quotes(self):
+        rows = [{'ID': 'abc', 'State': 'running'}, {'ID': 'def', 'State': 'exited'}]
+        engine = DockerBackend({'kind': 'ssh', 'host': 'host.example', 'username': 'qa'})
+        with patch.object(engine, '_container_list', return_value=rows), patch.object(engine, 'run', return_value='abc__DCC__always\ndef__DCC__no\n') as run:
+            result = engine.containers()
+        self.assertEqual([item['RestartPolicy'] for item in result], ['always', 'no'])
+        self.assertEqual(run.call_args.args[0][:3], ['inspect', '--format', _DOCKER_RESTART_FORMAT])
+
     def test_ssh_transport_failures_return_actionable_safe_messages(self):
         cases=[
             (socket.gaierror('private.example lookup detail'),'could not be resolved'),
@@ -1309,6 +1378,20 @@ class WebTests(unittest.TestCase):
         self.assertEqual(create.call_args.kwargs['version'],'1.44')
         self.assertNotIn('only-in-vault',str(create.call_args))
         self.assertEqual(client.api._version,'1.55')
+
+    def test_windows_ssh_docker_sdk_uses_powershell_for_dial_stdio(self):
+        profile={'kind':'ssh','host':'windows.example','username':'qa','ssh_shell':'windows'}
+        ssh=MagicMock()
+        with patch('remote_api.paramiko.SSHClient',return_value=ssh):
+            adapter=VerifiedProfileAdapter(profile)
+            connection=adapter.get_connection('http+docker://ssh/version')._new_conn()
+            connection.connect()
+            command=ssh.get_transport.return_value.open_session.return_value.exec_command.call_args.args[0]
+            self.assertTrue(command.startswith('powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand '))
+            script=base64.b64decode(command.rsplit(' ',1)[-1]).decode('utf-16-le')
+            for argument in ('docker','system','dial-stdio'):
+                self.assertIn(base64.b64encode(argument.encode('utf-8')).decode('ascii'),script)
+            adapter.close()
 
     def test_ai_edit_proposal_keeps_own_name_and_published_ports(self):
         self.request('ai/connection',{'provider':'compatible','endpoint':'https://example.net/v1','model':'coder','enabled':True},method='PUT')

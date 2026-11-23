@@ -1,30 +1,32 @@
 """Docker SDK over the same verified SSH identity as the CLI profile."""
-import shlex
 import paramiko
 import docker
 from profile_ssh import configure_client, connection_options
+from engine import _ssh_docker_command
 from docker.transport.sshconn import SSHHTTPAdapter,SSHConnection,SSHConnectionPool
 
 
 class ProfileConnection(SSHConnection):
-    def __init__(self,*args,cli='docker',**kwargs):
+    def __init__(self,*args,cli='docker',shell='posix',**kwargs):
         super().__init__(*args,**kwargs)
         self.cli=cli
+        self.shell=shell
 
     def connect(self):
         channel=self.ssh_transport.open_session(timeout=self.timeout)
         channel.settimeout(self.timeout)
-        channel.exec_command(shlex.join([self.cli,'system','dial-stdio']))
+        channel.exec_command(_ssh_docker_command(self.cli,['system','dial-stdio'],self.shell))
         self.sock=channel
 
 
 class ProfilePool(SSHConnectionPool):
-    def __init__(self,*args,cli='docker',**kwargs):
+    def __init__(self,*args,cli='docker',shell='posix',**kwargs):
         self.cli=cli
+        self.shell=shell
         super().__init__(*args,**kwargs)
 
     def _new_conn(self):
-        return ProfileConnection(self.ssh_transport,self.timeout,self.ssh_host,cli=self.cli)
+        return ProfileConnection(self.ssh_transport,self.timeout,self.ssh_host,cli=self.cli,shell=self.shell)
 
 
 class VerifiedProfileAdapter(SSHHTTPAdapter):
@@ -45,7 +47,7 @@ class VerifiedProfileAdapter(SSHHTTPAdapter):
             if not self.ssh_client.get_transport():self._connect()
             cli=self.profile.get('cli') or ('balena' if self.profile['kind']=='balena' else 'docker')
             if cli not in {'docker','balena','balena-engine'}:raise ValueError('Unsupported engine CLI')
-            pool=ProfilePool(ssh_client=self.ssh_client,timeout=self.timeout,maxsize=self.max_pool_size,host=self.ssh_host,cli=cli)
+            pool=ProfilePool(ssh_client=self.ssh_client,timeout=self.timeout,maxsize=self.max_pool_size,host=self.ssh_host,cli=cli,shell=self.profile.get('ssh_shell','posix'))
             self.pools[url]=pool
             return pool
 

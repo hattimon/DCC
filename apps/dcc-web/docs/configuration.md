@@ -15,6 +15,8 @@ BalenaOS host SSH listens on TCP port `22222` ([Balena SSH documentation](https:
 
 SSH connection errors distinguish host-name resolution, timeouts, refused connections, authentication, host-key verification and inaccessible key files. These checks run from the DCC Web server/container, so connectivity from the desktop computer alone does not confirm that the Web server can reach the host.
 
+To add an SSH host from a fresh Docker Compose or App Store installation, open **Profiles → Add profile**, select **SSH** or **Balena OS over SSH**, then enter its reachable IP/hostname, SSH username and port. Choose **Linux/macOS/Balena (sh)** for POSIX targets or **Windows (PowerShell)** when the target runs Docker under Windows OpenSSH. In the next step select password, uploaded key or an accessible SSH agent, and provide a trusted `known_hosts` entry. In the third step run **Check SSH** to verify authentication/host identity, then **Check Docker** to confirm the engine CLI works on the remote host. Give additional permissions only as needed. SSH and Docker checks are independent; an SSH-only connection can work even when Docker is not installed or the remote account lacks Docker access. Existing profiles without `ssh_shell` retain the POSIX behavior.
+
 SSH/WSL operations run in their target environment. Compose files and bind mount paths must exist there. Compose YAML import currently writes to the backend and requires a local/TLS profile; discovered remote projects remain manageable when their Compose CLI is available. Source builds require a separately reviewed GitHub repository and explicit confirmation. GitHub/source builds are not automatic catalog side effects.
 
 ### Terminal for the Docker host

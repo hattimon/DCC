@@ -1,6 +1,8 @@
-# DCC Web 0.3.5
+# DCC Web 0.3.6
 
-Web 0.3.5 shows which profiles can use MCP host tools and offers a separate SSH connection test for Windows host profiles. [Windows setup](docs/mcp.md#windows-host-commands-through-mcp).
+Web 0.3.6 fixes Docker CLI argument quoting over SSH (including JSON views and container restart policies), adds a Windows PowerShell remote-shell choice, and uses that choice for Docker API operations over SSH. Existing Linux, Balena and SSH profiles default to the POSIX shell. In **Profiles**, select **Add profile → SSH**, supply the host, account, port, remote shell and credentials, then run **Check SSH** and **Check Docker** separately. [Profile configuration](docs/configuration.md).
+
+Web 0.3.5 introduced the separate SSH connection check and MCP host permission diagnostics. [Windows setup](docs/mcp.md#windows-host-commands-through-mcp).
 
 Web 0.3.4 preserves original container panel addresses and opens them through a session-protected gateway on public entry. It fixes stale zrok share cleanup during access recovery. [Configuration, security model and limitations](docs/panels.md).
 
@@ -44,7 +46,7 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 
 ## Install on Windows, macOS or Linux
 
-Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.5/DCC-Web-0.3.5-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.3.5` directory:
+Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.6/DCC-Web-0.3.6-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.3.6` directory:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
