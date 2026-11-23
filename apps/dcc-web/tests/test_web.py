@@ -907,10 +907,21 @@ class WebTests(unittest.TestCase):
         command = _ssh_docker_command('docker', payload, profile['ssh_shell'])
         self.assertTrue(command.startswith('powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand '))
         script = base64.b64decode(command.rsplit(' ', 1)[-1]).decode('utf-16-le')
-        self.assertIn("'{{json .}}'", script)
-        self.assertIn("'name with spaces'", script)
-        self.assertIn("'user''s & | $(`test`)'", script)
+        for argument in ['docker', *payload]:
+            self.assertIn(base64.b64encode(argument.encode('utf-8')).decode('ascii'), script)
+        self.assertNotIn("user's & | $(`test`)", script)
         self.assertTrue(script.endswith('; exit $LASTEXITCODE'))
+
+    def test_windows_ssh_docker_command_never_interpolates_unicode_quotes(self):
+        payload = ['exec', 'fixture', "echo 'x’\u003b whoami\u003b #'", '‘left’', '“double”']
+        command = _ssh_docker_command('docker', payload, 'windows')
+        script = base64.b64decode(command.rsplit(' ', 1)[-1]).decode('utf-16-le')
+        self.assertNotIn('whoami', script)
+        self.assertNotIn('‘', script)
+        self.assertNotIn('’', script)
+        self.assertIn('& $dccExe @dccArgs', script)
+        for argument in ['docker', *payload]:
+            self.assertIn(base64.b64encode(argument.encode('utf-8')).decode('ascii'), script)
 
     def test_windows_ssh_uses_encoded_command_for_docker_info_and_stream(self):
         client = MagicMock()
@@ -1377,7 +1388,8 @@ class WebTests(unittest.TestCase):
             command=ssh.get_transport.return_value.open_session.return_value.exec_command.call_args.args[0]
             self.assertTrue(command.startswith('powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand '))
             script=base64.b64decode(command.rsplit(' ',1)[-1]).decode('utf-16-le')
-            self.assertIn("'docker' 'system' 'dial-stdio'",script)
+            for argument in ('docker','system','dial-stdio'):
+                self.assertIn(base64.b64encode(argument.encode('utf-8')).decode('ascii'),script)
             adapter.close()
 
     def test_ai_edit_proposal_keeps_own_name_and_published_ports(self):

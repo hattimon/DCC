@@ -29,11 +29,18 @@ class EngineError(RuntimeError):
 
 def _ssh_docker_command(cli, args, shell="posix"):
     if shell == "windows":
-        # An encoded PowerShell command is safe to pass through either cmd.exe
-        # or PowerShell as the Windows OpenSSH default shell. Single-quote each
-        # argument inside the script so metacharacters remain argument data.
-        quote = lambda value: "'" + value.replace("'", "''") + "'"
-        script = f"& {quote(cli)} " + " ".join(quote(arg) for arg in args) + "; exit $LASTEXITCODE"
+        # Encode each argument independently. PowerShell treats Unicode smart
+        # quotes as string delimiters, so single-quote escaping is insufficient.
+        # Only base64 data, never an SSH caller's argument, appears in script code.
+        def encoded_string(value):
+            payload = base64.b64encode(value.encode("utf-8")).decode("ascii")
+            return f"[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{payload}'))"
+
+        script = (
+            f"$dccExe = {encoded_string(cli)}; "
+            f"$dccArgs = @({', '.join(encoded_string(arg) for arg in args)}); "
+            "& $dccExe @dccArgs; exit $LASTEXITCODE"
+        )
         encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
         return "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand " + encoded
     # This fixed template needs quotes for the embedded space. Double quotes
