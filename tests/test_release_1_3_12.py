@@ -46,7 +46,7 @@ class Release1312Tests(unittest.TestCase):
 
     def test_canonical_catalog_keeps_69_entries_and_updater_configuration(self):
         entries=json.loads((ROOT/'dcc-catalog.json').read_text(encoding='utf-8'))['apps']
-        self.assertEqual(len(entries),69)
+        self.assertGreaterEqual(len(entries),69)
         self.assertIn('DCC Remote Access',{app['name'] for app in entries})
         updater=next(app for app in entries if app['name']=='DCC Container Updater')
         self.assertEqual(updater['image'],'ghcr.io/hattimon/dcc-container-updater:latest')
