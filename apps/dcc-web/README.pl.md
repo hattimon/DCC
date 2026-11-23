@@ -1,6 +1,8 @@
-# DCC Web 0.3.5
+# DCC Web 0.3.6
 
-Wersja 0.3.5 wskazuje profile z dostępem do hosta przez MCP i dodaje osobny test połączenia SSH dla profilu Windows. [Konfiguracja Windows](docs/mcp.pl.md#polecenia-hosta-windows-przez-mcp).
+Wersja 0.3.6 poprawia przekazywanie argumentów Docker CLI przez SSH (w tym JSON oraz polityki restartu kontenerów), dodaje wybór powłoki zdalnego Windows PowerShell i stosuje go również do operacji Docker API przez SSH. Istniejące profile Linux, Balena i SSH zachowują domyślną powłokę POSIX. W **Profilach** wybierz **Dodaj profil → SSH**, podaj host, użytkownika, port, powłokę i dane uwierzytelnienia, a następnie uruchom osobno **Sprawdź SSH** i **Sprawdź Docker**. [Konfiguracja profili](docs/configuration.md).
+
+Wersja 0.3.5 dodała osobny test SSH i objaśnienia uprawnień MCP do hosta. [Konfiguracja Windows](docs/mcp.pl.md#polecenia-hosta-windows-przez-mcp).
 
 Wersja 0.3.4 zachowuje oryginalne adresy paneli kontenerów i otwiera je przez chronioną sesję DCC przy wejściu publicznym. Naprawia usuwanie starego udziału zrok podczas odzyskiwania dostępu. [Konfiguracja, bezpieczeństwo i ograniczenia](docs/panels.pl.md).
 
@@ -44,7 +46,7 @@ Przy instalacji ze Sklepu DCC świeży kontener tworzy konto `admin` z silnym, l
 
 ### Instalacja na Windows, macOS lub Linux
 
-Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.5/DCC-Web-0.3.5-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.3.5`. Instalator wystawia panel na localhost i korzysta z lokalnego kontekstu Dockera.
+Pobierz [pakiet źródłowy DCC Web](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.6/DCC-Web-0.3.6-source.zip), rozpakuj go i uruchom instalator z katalogu `DCC-Web-0.3.6`. Instalator wystawia panel na localhost i korzysta z lokalnego kontekstu Dockera.
 
 ```powershell
 py -3.12 apps/dcc-web/install.py
@@ -62,7 +64,7 @@ Dostęp do `/var/run/docker.sock` daje panelowi administracyjną kontrolę nad h
 
 [Instalacja](docs/installation.md) · [Bezpieczeństwo](docs/security.md) · [Profile](docs/configuration.md) · [Sklep](docs/catalogs.md) · [Funkcje i ograniczenia](docs/feature-matrix.md)
 
-Kod źródłowy w repozytorium [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.3.5/apps/dcc-web).
+Kod źródłowy w repozytorium [hattimon/DCC](https://github.com/hattimon/DCC/tree/dcc-web-v0.3.6/apps/dcc-web).
 
 
 ## Klucze SSH po imporcie profili

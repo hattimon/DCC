@@ -1,4 +1,5 @@
 """Argument-based Docker transports. No shell is used on the web host."""
+import base64
 from concurrent.futures import Future
 from contextlib import ExitStack, contextmanager
 import errno
@@ -18,8 +19,29 @@ from profile_ssh import configure_client, connection_options
 from ports import container_revision
 
 
+_DOCKER_JSON_FORMAT = "{{json .}}"
+_DOCKER_RESTART_FORMAT = "{{.Id}}__DCC__{{.HostConfig.RestartPolicy.Name}}"
+
+
 class EngineError(RuntimeError):
     pass
+
+
+def _ssh_docker_command(cli, args, shell="posix"):
+    if shell == "windows":
+        # An encoded PowerShell command is safe to pass through either cmd.exe
+        # or PowerShell as the Windows OpenSSH default shell. Single-quote each
+        # argument inside the script so metacharacters remain argument data.
+        quote = lambda value: "'" + value.replace("'", "''") + "'"
+        script = f"& {quote(cli)} " + " ".join(quote(arg) for arg in args) + "; exit $LASTEXITCODE"
+        encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+        return "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand " + encoded
+    # This fixed template needs quotes for the embedded space. Double quotes
+    # keep Docker's JSON Go template as one argument on POSIX shells.
+    return " ".join(
+        f'"{_DOCKER_JSON_FORMAT}"' if arg == _DOCKER_JSON_FORMAT else shlex.quote(arg)
+        for arg in [cli, *args]
+    )
 
 
 def _ssh_error_message(error, stage):
@@ -149,7 +171,7 @@ class DockerBackend:
                 _connect_ssh(client, profile)
                 cli = profile.get('cli') or ("balena" if kind == "balena" else "docker")
                 try:
-                    stdin, stdout, stderr = client.exec_command(shlex.join([cli, *args]), timeout=timeout)
+                    stdin, stdout, stderr = client.exec_command(_ssh_docker_command(cli, args, profile.get('ssh_shell', 'posix')), timeout=timeout)
                     if input_data is not None:
                         stdin.write(input_data)
                         stdin.flush()
@@ -195,7 +217,9 @@ class DockerBackend:
                 _connect_ssh(client, profile)
                 try:
                     channel=client.get_transport().open_session(timeout=12);channel.set_combine_stderr(True)
-                    channel.exec_command(shlex.join([profile.get('cli') or ('balena' if profile['kind']=='balena' else 'docker'),*args]));channel.shutdown_write()
+                    cli = profile.get('cli') or ('balena' if profile['kind'] == 'balena' else 'docker')
+                    channel.exec_command(_ssh_docker_command(cli, args, profile.get('ssh_shell', 'posix')))
+                    channel.shutdown_write()
                     import codecs
                     decoder=codecs.getincrementaldecoder('utf-8')('replace')
                     deadline=time.monotonic()+timeout
@@ -244,10 +268,10 @@ class DockerBackend:
             return [json.loads(line) for line in text.splitlines() if line.strip()]
 
     def info(self):
-        return self.json(["info", "--format", "{{json .}}"])
+        return self.json(["info", "--format", _DOCKER_JSON_FORMAT])
 
     def _container_list(self):
-        data = self.json(["ps", "--all", "--no-trunc", "--format", "{{json .}}"])
+        data = self.json(["ps", "--all", "--no-trunc", "--format", _DOCKER_JSON_FORMAT])
         values=data if isinstance(data,list) else [data]
         for entry in values:
             if not entry.get('State') or entry.get('State')=='unknown':
@@ -262,13 +286,14 @@ class DockerBackend:
             policies = {}
             for start in range(0, len(values), 100):
                 try:
-                    items = self.json(['inspect', '--format', '{"ID":{{json .Id}},"RestartPolicy":{{json .HostConfig.RestartPolicy.Name}}}',
-                                       *[v['ID'] for v in values[start:start+100]]])
+                    lines = self.run(['inspect', '--format', _DOCKER_RESTART_FORMAT,
+                                      *[v['ID'] for v in values[start:start+100]]]).splitlines()
                 except (EngineError, ValueError, KeyError):
                     continue
-                for item in items if isinstance(items, list) else [items]:
-                    if isinstance(item, dict):
-                        policies[item.get('ID')] = item.get('RestartPolicy')
+                for line in lines:
+                    identifier, separator, policy = line.strip().partition('__DCC__')
+                    if separator and identifier:
+                        policies[identifier] = policy
             for entry in values:
                 entry['RestartPolicy'] = policies.get(entry.get('ID'))
         return values
@@ -286,12 +311,12 @@ class DockerBackend:
         return self.run([*args, target])
 
     def stats(self):
-        data = self.json(["stats", "--no-stream", "--no-trunc", "--format", "{{json .}}"])
+        data = self.json(["stats", "--no-stream", "--no-trunc", "--format", _DOCKER_JSON_FORMAT])
         return data if isinstance(data, list) else [data]
 
     def resources(self, kind):
         commands = {"images": ["image", "ls", "--no-trunc"], "volumes": ["volume", "ls"], "networks": ["network", "ls"]}
-        data = self.json([*commands[kind], "--format", "{{json .}}"])
+        data = self.json([*commands[kind], "--format", _DOCKER_JSON_FORMAT])
         return data if isinstance(data, list) else [data]
 
     def action(self, target, action):

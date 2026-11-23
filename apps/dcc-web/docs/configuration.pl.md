@@ -15,6 +15,8 @@ Serwer SSH systemu BalenaOS nasłuchuje na porcie TCP `22222` ([dokumentacja Bal
 
 Błędy SSH rozróżniają m.in. brak rozpoznania nazwy hosta, timeout, odmowę połączenia, błąd uwierzytelniania, weryfikacji klucza hosta oraz brak dostępu do plików kluczy. Test działa z serwera/kontenera DCC Web, więc połączenie z komputera nie potwierdza jeszcze dostępności hosta z kontenera.
 
+Po instalacji przez Docker Compose lub Sklep DCC otwórz **Profile → Dodaj profil → SSH** (albo **Balena OS przez SSH**). Podaj host osiągalny z kontenera, użytkownika i port. Wybierz powłokę **Linux/macOS/Balena (sh)** dla serwerów POSIX albo **Windows (PowerShell)** dla Windows OpenSSH z Dockerem. W drugim kroku ustaw hasło, wgrany klucz prywatny lub dostępnego agenta SSH oraz zaufany wpis `known_hosts`. W trzecim kroku uruchom osobno **Sprawdź SSH** (uwierzytelnianie i tożsamość hosta) i **Sprawdź Docker** (dostępność silnika). Pomyślny test SSH nie wymaga instalacji Dockera na zdalnym hoście. Dotychczasowe profile bez pola `ssh_shell` używają powłoki POSIX.
+
 SSH/WSL wykonują operacje w środowisku docelowym. Pliki Compose i ścieżki montowań muszą być dostępne tam. Import Compose zapisuje pliki po stronie backendu. Profile mają domyślnie tylko odczyt; osobno można zezwolić na cykl życia, exec, obrazy, wolumeny, sieci, Compose, instalację, aktualizacje i operacje destrukcyjne. Rola użytkownika dodatkowo ogranicza dostęp. Puste ograniczenie użytkowników oznacza wszystkich zalogowanych, nadal zgodnie z rolą i prawami.
 
 ### Terminal hosta Docker

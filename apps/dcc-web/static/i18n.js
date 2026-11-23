@@ -587,6 +587,7 @@ Dystrybucja WSL|WSL distribution
 Adres paneli / IP hosta (opcjonalnie)|Panel hostname / host IP (optional)
 Host SSH / Balena|SSH / Balena host
 Użytkownik SSH|SSH username
+Powłoka zdalnego hosta SSH|Remote SSH host shell
 Ścieżka klucza SSH|SSH key path
 Endpoint Docker, np. tcp://server:2376|Docker endpoint, e.g. tcp://server:2376
 Hasło SSH — puste zachowuje obecne|SSH password — leave blank to retain

@@ -1,6 +1,8 @@
-# DCC Web 0.3.5
+# DCC Web 0.3.6
 
-DCC Web 0.3.5 adds an SSH connection test for host profiles and explains MCP host access denials. Panel jobs and MCP Docker mutations on the same profile use a shared lock. The grant editor detects changes saved after the form was opened.
+DCC Web 0.3.6 improves SSH Docker operations for Linux/Balena and Windows hosts. Docker JSON/Go templates and arguments containing spaces or shell metacharacters are passed intact. The profile wizard lets administrators select a remote shell (POSIX or Windows PowerShell), including for the Docker SDK connection used by container updates. Profiles still require trusted host keys and an explicit successful SSH/Docker check or conscious unverified save.
+
+DCC Web 0.3.5 added a separate SSH connection test and MCP host permission guidance. Panel jobs and MCP Docker mutations on the same profile use a shared lock. The grant editor detects changes saved after the form was opened.
 
 DCC Web 0.3.4 sends the media type required by zrok when releasing a verified stale share. Web can then reopen the saved reservation. Recovery consent persists through failed provider calls, and Updater 1.1.9 can transfer that consent when replacing a Web container with a stopped tunnel.
 
