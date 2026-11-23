@@ -2193,7 +2193,7 @@
     },
     {
       "name": "X-Cleaner AI",
-      "image": "ghcr.io/hattimon/x-cleaner-ai:0.2.0",
+      "image": "ghcr.io/hattimon/x-cleaner-ai:0.2.1",
       "category": "Analityka",
       "category_en": "Analytics",
       "categories": [
