@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/browser.mjs",
+    "test:panel": "node tests/browser.mjs --panel",
+    "test:site": "node tests/browser.mjs --site",
+    "capture": "node tests/browser.mjs --panel --capture"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

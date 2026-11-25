@@ -1,0 +1,225 @@
+name: DCC Kiri Manager
+
+on:
+  pull_request:
+    paths:
+      - apps/kiri-manager/**
+      - .github/workflows/kiri-manager*.yml
+  workflow_dispatch:
+    inputs:
+      live:
+        description: Verify against Kiri on disposable GitHub runners
+        type: boolean
+        default: false
+      publish:
+        description: Publish the verified image from an approved Kiri Manager tag
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kiri-manager-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/hattimon/dcc-kiri-manager
+
+jobs:
+  verify:
+    name: VERIFY
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/kiri-manager
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Validate source, version and secure install options
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          version="$(cat VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if [[ "$PUBLISH" == true ]]; then
+            [[ "$GITHUB_REPOSITORY" == hattimon/DCC && "$GITHUB_REF" == "refs/tags/kiri-manager-v$version" ]]
+          fi
+          python -m compileall -q backend tests tools
+          for file in frontend/assets/*.js site/assets/*.js tests/*.mjs; do node --check "$file"; done
+          bash -n setup-kiri-linux.sh
+          KIRI_SOCKET_PATH=/run/kiri/docker.sock KIRI_SOCKET_GID=4242 \
+            docker compose -f compose.yaml -f compose.kiri-socket.yaml config --quiet
+          python tools/catalog_review.py
+          python tools/prepare_pages.py "$RUNNER_TEMP/kiri-pages-verify"
+      - name: Python unit and security tests
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip check
+          python -m pip install ruff==0.15.0
+          ruff check --select E4,E7,E9,F backend tests tools
+          python -m unittest discover -s tests -v
+      - name: Playwright Chromium for dashboard and Pages
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          KIRI_PYTHON="$(which python)" npm test
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: kiri-browser-evidence
+          path: apps/kiri-manager/browser-artifacts
+          if-no-files-found: ignore
+
+  build:
+    name: BUILD · OCI and isolated smoke
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - name: Smoke with no engine and verify the OCI archive
+        working-directory: apps/kiri-manager
+        run: |
+          version="$(cat VERSION)"
+          docker buildx build --target smoke --platform linux/amd64,linux/arm64 \
+            --build-arg VERSION="$version" --output type=cacheonly --progress=plain .
+          docker buildx build --platform linux/amd64,linux/arm64 \
+            --build-arg VERSION="$version" --provenance=false --sbom=false -t dcc-kiri-manager:verify \
+            --output "type=oci,dest=$RUNNER_TEMP/kiri-manager.oci.tar" .
+          python tools/check_oci.py "$RUNNER_TEMP/kiri-manager.oci.tar" "$version"
+          sha256sum "$RUNNER_TEMP/kiri-manager.oci.tar"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: kiri-manager-verified-oci
+          path: ${{ runner.temp }}/kiri-manager.oci.tar
+          compression-level: 0
+          if-no-files-found: error
+
+  smoke:
+    name: Docker runtime · ${{ matrix.arch }}
+    needs: build
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: kiri-manager-verified-oci
+          path: ${{ runner.temp }}
+      - name: Start and restart the exact built archive in Docker
+        working-directory: apps/kiri-manager
+        env:
+          IMAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo
+          skopeo --override-arch "$IMAGE_ARCH" copy "oci-archive:$RUNNER_TEMP/kiri-manager.oci.tar" \
+            docker-daemon:dcc-kiri-manager:verify
+          PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify
+
+  live_kiri:
+    name: Kiri 0.2.2 integration · ${{ matrix.arch }}
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'hattimon/DCC' && (inputs.live || inputs.publish)
+    needs: [build, smoke]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: kiri-manager-verified-oci
+          path: ${{ runner.temp }}
+      - name: Test real Kiri from Docker and directly from Kiri
+        working-directory: apps/kiri-manager
+        env:
+          IMAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo
+          bash setup-kiri-linux.sh --apply
+          skopeo --override-arch "$IMAGE_ARCH" copy "oci-archive:$RUNNER_TEMP/kiri-manager.oci.tar" \
+            docker-daemon:dcc-kiri-manager:verify
+          kiri_sock=/run/kiri/docker.sock
+          kiri_cli=(sudo -n docker --host "unix://$kiri_sock")
+          "${kiri_cli[@]}" compose -f tests/live-compose.yaml -p dcc-kiri-fixture up -d
+          PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify --socket "$kiri_sock"
+          docker --context default save dcc-kiri-manager:verify | "${kiri_cli[@]}" load
+          PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify --socket "$kiri_sock" --runtime kiri
+
+  publish:
+    name: PUBLISH · GHCR
+    if: github.repository == 'hattimon/DCC' && github.event_name == 'workflow_dispatch' && inputs.publish && startsWith(github.ref, 'refs/tags/kiri-manager-v')
+    needs: [verify, build, smoke, live_kiri]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: kiri-manager-release
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: kiri-manager-verified-oci
+          path: ${{ runner.temp }}
+      - name: Publish and compare all registry manifests
+        working-directory: apps/kiri-manager
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          version="$(cat VERSION)"
+          [[ "$GITHUB_REF" == "refs/tags/kiri-manager-v$version" ]]
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq skopeo
+          authfile="$RUNNER_TEMP/kiri-ghcr-auth.json"
+          export REGISTRY_AUTH_FILE="$authfile"
+          trap 'rm -f -- "$authfile"' EXIT
+          printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          oci="$RUNNER_TEMP/kiri-manager.oci.tar"
+          registry_index="$RUNNER_TEMP/kiri-registry-index.json"
+          for tag in "sha-$GITHUB_SHA" "$version" latest; do
+            destination="docker://$IMAGE:$tag"
+            if [[ "$tag" != latest ]] && skopeo inspect --raw "$destination" >"$registry_index"; then
+              python tools/check_oci.py "$oci" "$version" --registry-index "$registry_index"
+              continue
+            fi
+            skopeo copy --all --preserve-digests "oci-archive:$oci" "$destination"
+            skopeo inspect --raw "$destination" >"$registry_index"
+            python tools/check_oci.py "$oci" "$version" --registry-index "$registry_index"
+          done

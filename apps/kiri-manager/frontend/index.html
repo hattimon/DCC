@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DCC Kiri Manager</title>
+  <link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/panel.css">
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <a class="skip" id="skip" href="#main">Skip to content</a>
+  <div id="boot" class="boot" role="status">Opening DCC Kiri Manager…</div>
+  <div id="auth" hidden></div>
+  <div id="workspace" class="workspace" hidden>
+    <aside id="rail" class="rail">
+      <a class="brand" href="#overview"><img src="/assets/mark.svg" width="34" height="34" alt=""> <span>DCC Kiri Manager</span></a>
+      <nav id="navigation" aria-label="Workspace navigation"></nav>
+      <div class="rail-foot"><span id="version"></span><button id="sign-out" type="button" class="quiet" data-action="logout"></button></div>
+    </aside>
+    <button class="scrim" type="button" data-action="close-menu" hidden></button>
+    <div class="body">
+      <header class="top">
+        <button class="mobile icon-button" type="button" aria-controls="rail" aria-expanded="false" data-action="menu"></button>
+        <span class="mobile mobile-name">DCC Kiri Manager</span>
+        <div id="breadcrumb" class="breadcrumb"></div>
+        <div id="quick" class="quick"></div>
+      </header>
+      <main id="main" class="main" tabindex="-1">
+        <div id="demo" class="demo" hidden></div>
+        <div id="heading" class="heading"></div>
+        <div id="content" aria-busy="true"></div>
+      </main>
+      <footer id="foot" class="foot"></footer>
+    </div>
+  </div>
+  <dialog id="modal" aria-labelledby="modal-title"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

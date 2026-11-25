@@ -1,0 +1,12 @@
+*
+!VERSION
+!setup-kiri-linux.sh
+!requirements.txt
+!backend
+!backend/*.py
+!frontend
+!frontend/**
+!tests
+!tests/fixtures.py
+!tests/image_smoke.py
+!tests/test_connection.py

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pl" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DCC Kiri Manager · Panel WWW dla Kiri</title><meta name="description" content="Niezależny panel tylko do odczytu dla kontenerów Kiri, usług lokalnych i projektów Compose.">
+  <meta property="og:type" content="website"><meta property="og:locale" content="pl_PL">
+  <meta property="og:title" content="DCC Kiri Manager"><meta property="og:description" content="Niezależny panel tylko do odczytu dla kontenerów Kiri, usług lokalnych i projektów Compose.">
+  <meta property="og:image" content="../assets/social-preview.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Przegląd DCC Kiri Manager z danymi testowymi">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="DCC Kiri Manager"><meta name="twitter:description" content="Niezależny panel tylko do odczytu dla kontenerów Kiri, usług lokalnych i projektów Compose."><meta name="twitter:image" content="../assets/social-preview.png">
+  <!-- pages-canonical -->
+  <link rel="icon" href="../assets/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="../assets/site.css"><script type="module" src="../assets/site.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Pomiń nawigację</a>
+  <header class="top"><div class="frame top-inner">
+    <a class="brand" href="./"><img src="../assets/mark.svg" width="34" height="34" alt="">DCC Kiri Manager</a>
+    <nav id="navigation" aria-label="Nawigacja strony"><a href="#install">Instalacja</a><a href="#screenshots">Zrzuty ekranu</a><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.pl.md">Dokumentacja</a></nav>
+    <div class="buttons"><a class="lang" data-language="en" title="English" href="../" hreflang="en">EN</a>
+      <button id="theme" type="button" aria-label="Zmień motyw" title="Zmień motyw"></button>
+      <button id="menu" type="button" aria-expanded="false" aria-controls="navigation" aria-label="Otwórz menu">☰</button>
+    </div>
+  </div></header>
+  <main id="main">
+    <section class="frame hero">
+      <div><h1>DCC Kiri Manager</h1><p class="lead">Zobacz, co działa w Kiri.</p><p>Przeglądaj kontenery, obrazy, wolumeny, sieci i projekty Compose w jednym lekkim panelu.</p>
+        <div class="buttons"><a class="button primary" href="#install">Instalacja</a><a class="button" href="https://github.com/hattimon/DCC/tree/main/apps/kiri-manager">Kod źródłowy ↗</a></div>
+      </div>
+      <div class="hero-image"><img id="hero-image" src="../assets/screenshots/dashboard-dark-pl.webp" data-dark="../assets/screenshots/dashboard-dark-pl.webp" data-light="../assets/screenshots/dashboard-light-pl.webp" width="1440" height="900" fetchpriority="high" alt="Przegląd DCC Kiri Manager z danymi testowymi · DEMO"></div>
+    </section>
+    <section class="section divider"><div class="frame pitch">
+      <div><h2>Lokalny panel dla Kiri</h2><p>Niezależny panel tylko do odczytu dla kontenerów Kiri, usług lokalnych i projektów Compose.</p><h3>Funkcje</h3>
+        <ul class="feature-list"><li>Zasoby, diagnostyka i ograniczony podgląd logów</li><li>Próbki CPU i pamięci wybranego kontenera</li><li>Projekty Compose, profile połączeń, dwa języki i motywy</li></ul></div>
+      <div><h2>Jak to działa</h2><p>Środowisko uruchamia panel, a zatwierdzony socket Unix łączy go z Kiri.</p>
+        <ol class="flow"><li>Docker lub Kiri</li><li>DCC Kiri Manager</li><li>API silnika Kiri</li></ol>
+      </div>
+    </div></section>
+    <section id="screenshots" class="section"><div class="frame"><h2>Zrzuty ekranu</h2>
+      <p>Zrzuty pokazują działający panel z syntetycznymi danymi oznaczonymi jako DEMO.</p>
+      <div class="gallery">
+        <figure><button class="shot" type="button" data-shot="0" data-src="../assets/screenshots/dashboard-dark-pl.webp" data-caption="Przegląd (ciemny)" aria-label="Powiększ · Przegląd (ciemny)"><img src="../assets/screenshots/dashboard-dark-pl.webp" alt="Przegląd (ciemny) · DEMO" loading="lazy" decoding="async"></button><figcaption>Przegląd (ciemny)</figcaption></figure>
+        <figure><button class="shot" type="button" data-shot="1" data-src="../assets/screenshots/dashboard-light-pl.webp" data-caption="Przegląd (jasny)" aria-label="Powiększ · Przegląd (jasny)"><img src="../assets/screenshots/dashboard-light-pl.webp" alt="Przegląd (jasny) · DEMO" loading="lazy" decoding="async"></button><figcaption>Przegląd (jasny)</figcaption></figure>
+        <figure><button class="shot" type="button" data-shot="2" data-src="../assets/screenshots/containers.webp" data-caption="Kontenery" aria-label="Powiększ · Kontenery"><img src="../assets/screenshots/containers.webp" alt="Kontenery · DEMO" loading="lazy" decoding="async"></button><figcaption>Kontenery</figcaption></figure>
+        <figure><button class="shot" type="button" data-shot="3" data-src="../assets/screenshots/images.webp" data-caption="Obrazy" aria-label="Powiększ · Obrazy"><img src="../assets/screenshots/images.webp" alt="Obrazy · DEMO" loading="lazy" decoding="async"></button><figcaption>Obrazy</figcaption></figure>
+        <figure><button class="shot" type="button" data-shot="4" data-src="../assets/screenshots/volumes.webp" data-caption="Wolumeny" aria-label="Powiększ · Wolumeny"><img src="../assets/screenshots/volumes.webp" alt="Wolumeny · DEMO" loading="lazy" decoding="async"></button><figcaption>Wolumeny</figcaption></figure>
+        <figure><button class="shot" type="button" data-shot="5" data-src="../assets/screenshots/networks.webp" data-caption="Sieci" aria-label="Powiększ · Sieci"><img src="../assets/screenshots/networks.webp" alt="Sieci · DEMO" loading="lazy" decoding="async"></button><figcaption>Sieci</figcaption></figure>
+        <figure><button class="shot" type="button" data-shot="6" data-src="../assets/screenshots/compose.webp" data-caption="Compose" aria-label="Powiększ · Compose"><img src="../assets/screenshots/compose.webp" alt="Compose · DEMO" loading="lazy" decoding="async"></button><figcaption>Compose</figcaption></figure>
+        <figure><button class="shot" type="button" data-shot="7" data-src="../assets/screenshots/wizard.webp" data-caption="Kreator połączenia" aria-label="Powiększ · Kreator połączenia"><img src="../assets/screenshots/wizard.webp" alt="Kreator połączenia · DEMO" loading="lazy" decoding="async"></button><figcaption>Kreator połączenia</figcaption></figure>
+        <figure><button class="shot" type="button" data-shot="8" data-src="../assets/screenshots/diagnostics.webp" data-caption="Diagnostyka" aria-label="Powiększ · Diagnostyka"><img src="../assets/screenshots/diagnostics.webp" alt="Diagnostyka · DEMO" loading="lazy" decoding="async"></button><figcaption>Diagnostyka</figcaption></figure>
+        <figure><button class="shot" type="button" data-shot="9" data-src="../assets/screenshots/mobile.webp" data-caption="Widok mobilny" aria-label="Powiększ · Widok mobilny"><img src="../assets/screenshots/mobile.webp" alt="Widok mobilny · DEMO" loading="lazy" decoding="async"></button><figcaption>Widok mobilny</figcaption></figure>
+      </div>
+    </div></section>
+    <section id="install" class="section divider"><div class="frame">
+      <div class="section-heading"><div><h2>Instalacja</h2><p>Uruchom panel lokalnie. Kreator przeprowadzi Cię przez instalację Kiri i podłączenie zatwierdzonego socketu.</p></div><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.pl.md">Dokumentacja ↗</a></div>
+      <div class="ways">
+        <article><h3>Docker Compose</h3><p>Uruchom panel z nazwanym wolumenem i portem lokalnym. Na zgodnym hoście Linux dołącz konfigurację socketu.</p></article>
+        <article><h3>Bezpośrednio w Kiri</h3><p>Użyj zgodnego CLI, wskazując kontekst Kiri. Montowanie socketu zależy od hosta.</p></article>
+        <article><h3>Sklep DCC</h3><p>Przygotowany wpis instaluje panel w Dockerze. Dostępność w sklepie zależy od zweryfikowanego wydania OCI.</p></article>
+      </div>
+      <div class="pitch platform">
+        <div><h2>Platformy docelowe</h2><p>Linux amd64 i arm64, Windows/WSL2, macOS oraz Raspberry Pi OS. Uruchomienie panelu i łączność z Kiri mają osobne wymagania.</p><a href="https://runkiri.com/download/">Oficjalne pliki Kiri ↗</a></div>
+        <div><h2>Bezpieczeństwo</h2><p>Lokalne sesje administratora, ochrona CSRF i lista zatwierdzonych socketów. Zamontowany socket zachowuje uprawnienia silnika. Poza hostem używaj HTTPS.</p><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/security.md">Dokumentacja ↗</a></div>
+      </div>
+    </div></section>
+    <section id="compatibility" class="section"><div class="frame"><h2>Zgodność</h2>
+      <p>Zgodność panelu z rzeczywistym Kiri nadal wymaga weryfikacji. Testy Chromium używają odizolowanych danych testowych.</p>
+      <table class="matrix" role="table"><thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Host</th><th scope="col" role="columnheader">Architektura</th><th scope="col" role="columnheader">Środowisko panelu</th><th scope="col" role="columnheader">Połączenie z Kiri</th><th scope="col" role="columnheader">Status</th></tr></thead>
+        <tbody role="rowgroup"><tr role="row"><td role="cell" data-label="Host">Windows 10/11</td><td role="cell" data-label="Architektura">amd64</td><td role="cell" data-label="Środowisko panelu">Docker Desktop</td><td role="cell" data-label="Połączenie z Kiri">Socket niedostępny między VM</td><td role="cell" data-label="Status"><span class="status blocked">Nieobsługiwane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Windows 10/11</td><td role="cell" data-label="Architektura">amd64</td><td role="cell" data-label="Środowisko panelu">Kiri / WSL2</td><td role="cell" data-label="Połączenie z Kiri">Ta sama dystrybucja WSL</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Ubuntu</td><td role="cell" data-label="Architektura">amd64</td><td role="cell" data-label="Środowisko panelu">Docker</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Ubuntu</td><td role="cell" data-label="Architektura">amd64</td><td role="cell" data-label="Środowisko panelu">Kiri</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Ubuntu</td><td role="cell" data-label="Architektura">arm64</td><td role="cell" data-label="Środowisko panelu">Docker</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Ubuntu</td><td role="cell" data-label="Architektura">arm64</td><td role="cell" data-label="Środowisko panelu">Kiri</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Debian</td><td role="cell" data-label="Architektura">amd64</td><td role="cell" data-label="Środowisko panelu">Docker</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Debian</td><td role="cell" data-label="Architektura">amd64</td><td role="cell" data-label="Środowisko panelu">Kiri</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Debian</td><td role="cell" data-label="Architektura">arm64</td><td role="cell" data-label="Środowisko panelu">Docker</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Debian</td><td role="cell" data-label="Architektura">arm64</td><td role="cell" data-label="Środowisko panelu">Kiri</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Raspberry Pi OS</td><td role="cell" data-label="Architektura">arm64</td><td role="cell" data-label="Środowisko panelu">Docker</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">Raspberry Pi OS</td><td role="cell" data-label="Architektura">arm64</td><td role="cell" data-label="Środowisko panelu">Kiri</td><td role="cell" data-label="Połączenie z Kiri">Dedykowany socket Unix</td><td role="cell" data-label="Status"><span class="status">Niezweryfikowane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">macOS Intel</td><td role="cell" data-label="Architektura">amd64</td><td role="cell" data-label="Środowisko panelu">Docker Desktop</td><td role="cell" data-label="Połączenie z Kiri">Socket niedostępny między VM</td><td role="cell" data-label="Status"><span class="status blocked">Nieobsługiwane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">macOS Intel</td><td role="cell" data-label="Architektura">amd64</td><td role="cell" data-label="Środowisko panelu">Kiri</td><td role="cell" data-label="Połączenie z Kiri">Socket niedostępny między VM</td><td role="cell" data-label="Status"><span class="status blocked">Nieobsługiwane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">macOS Apple Silicon</td><td role="cell" data-label="Architektura">arm64</td><td role="cell" data-label="Środowisko panelu">Docker Desktop</td><td role="cell" data-label="Połączenie z Kiri">Socket niedostępny między VM</td><td role="cell" data-label="Status"><span class="status blocked">Nieobsługiwane</span></td></tr>
+        <tr role="row"><td role="cell" data-label="Host">macOS Apple Silicon</td><td role="cell" data-label="Architektura">arm64</td><td role="cell" data-label="Środowisko panelu">Kiri</td><td role="cell" data-label="Połączenie z Kiri">Socket niedostępny między VM</td><td role="cell" data-label="Status"><span class="status blocked">Nieobsługiwane</span></td></tr></tbody>
+      </table><p><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/compatibility.md">Pełna macierz zgodności ↗</a></p>
+      <div class="road"><h3>Plan rozwoju</h3><p>Plan obejmuje ograniczone uprawnienia zapisu i dodatkowe warianty łączności. Migracja zależy od izolowanych testów kopiowania i wycofania.</p></div>
+    </div></section>
+    <section class="section divider"><div class="frame resource-grid">
+      <article class="resource"><h2><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.pl.md">Dokumentacja ↗</a></h2><p>Instalacja, konfiguracja i diagnostyka.</p></article>
+      <article class="resource"><h2><a href="https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.0">Wydanie ↗</a></h2><p>Wydanie GitHub i obraz OCI.</p><a href="https://github.com/hattimon/DCC/pkgs/container/dcc-kiri-manager">GHCR ↗</a></article>
+      <article class="resource"><h2><a href="https://github.com/hattimon/DCC/tree/main/apps/kiri-manager">Otwarty kod ↗</a></h2><p>Projekt DCC autorstwa hattimon na licencji MIT.</p></article>
+      <article class="resource"><h2><a href="https://ko-fi.com/hattimon">Wsparcie na Ko-fi ↗</a></h2><p>Wesprzyj autora i projekty DCC.</p></article>
+    </div></section>
+  </main>
+  <footer class="frame foot"><a class="brand" href="https://github.com/hattimon/DCC"><img src="../assets/mark.svg" width="34" height="34" alt="">Ekosystem DCC</a><span>v0.1.0 · EKSPERYMENTALNA</span>
+    <nav><a href="https://github.com/hattimon/DCC">GitHub</a><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.pl.md">Dokumentacja</a><a href="https://github.com/hattimon/DCC/blob/main/LICENSE">Licencja</a></nav>
+  </footer>
+  <dialog id="lightbox" aria-labelledby="shot-title">
+    <div class="light-top"><h2 id="shot-title"></h2><button id="close" type="button" autofocus>Zamknij</button></div>
+    <img id="large" alt="">
+    <div class="light-controls"><button id="prev" type="button" aria-label="Poprzedni zrzut">←</button><span id="number" aria-live="polite"></span><button id="next" type="button" aria-label="Następny zrzut">→</button></div>
+  </dialog>
+</body>
+</html>
