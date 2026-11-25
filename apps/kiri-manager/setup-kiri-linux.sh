@@ -2,11 +2,21 @@
 # Run on an explicitly chosen, trusted Ubuntu or Debian host. Usage defaults to a plan.
 set -euo pipefail
 
+usage() {
+  printf 'Usage: bash setup-kiri-linux.sh [--plan|--apply] [--grant-panel-access]\n' >&2
+  exit 2
+}
+
 case "${1---plan}" in
   --plan|--apply) mode="${1---plan}" ;;
-  *) printf 'Usage: bash setup-kiri-linux.sh [--plan|--apply]\n' >&2; exit 2 ;;
+  *) usage ;;
 esac
-[[ $# -le 1 ]] || exit 2
+[[ $# -le 2 ]] || usage
+case "${2-}" in
+  '') grant_access=false ;;
+  --grant-panel-access) grant_access=true ;;
+  *) usage ;;
+esac
 if [[ $(uname -s) != Linux || ! -r /etc/os-release || ! -d /run/systemd/system ]] || grep -qi microsoft /proc/sys/kernel/osrelease; then
   printf 'This helper requires a Debian or Ubuntu host running systemd.\n' >&2
   exit 2
@@ -26,6 +36,27 @@ case "$arch" in
 esac
 package="kiri-lite_${version}_${arch}.deb"
 socket=/run/kiri/docker.sock
+panel_user=dcc-kiri-panel
+panel_uid=10001
+panel_shell=/usr/sbin/nologin
+panel_entry=''
+
+if [[ "$grant_access" == true ]]; then
+  if panel_entry=$(getent passwd "$panel_user"); then
+    IFS=: read -r _ _ existing_uid _ _ _ existing_shell <<< "$panel_entry"
+    if [[ "$existing_uid" != "$panel_uid" || "$existing_shell" != "$panel_shell" ||
+          $(getent passwd "$panel_uid") != "$panel_entry" ]]; then
+      printf 'The account %s is reserved for the panel. Resolve the host account conflict first.\n' "$panel_user" >&2
+      exit 2
+    fi
+  else
+    if getent passwd "$panel_uid" >/dev/null; then
+      printf 'Host UID %s is already in use. Resolve the host account conflict first.\n' "$panel_uid" >&2
+      exit 2
+    fi
+  fi
+  printf 'The plan authorizes the dedicated non-login account %s (UID %s) for the Kiri socket.\n' "$panel_user" "$panel_uid"
+fi
 
 installed=false
 for name in kiri kiri-lite; do
@@ -63,6 +94,14 @@ if [[ ! -S "$socket" || -L "$socket" ]]; then
   printf 'The dedicated Kiri socket did not become available. Check kiri.service.\n' >&2
   exit 1
 fi
+
+if [[ "$grant_access" == true ]]; then
+  if [[ -z "$panel_entry" ]]; then
+    "${elevate[@]}" useradd --uid "$panel_uid" --user-group --no-create-home --shell "$panel_shell" "$panel_user"
+  fi
+  "${elevate[@]}" /usr/bin/kiri host-access "$panel_user"
+fi
+
 printf 'Kiri socket ready. Use these values with compose.kiri-socket.yaml and then run the connection test.\n'
 printf 'KIRI_SOCKET_PATH=%s\nKIRI_SOCKET_GID=%s\n' "$socket" "$(stat -c %g -- "$socket")"
 printf 'Panel setup: https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.0/apps/kiri-manager/docs\n'

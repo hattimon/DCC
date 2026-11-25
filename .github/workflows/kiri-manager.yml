@@ -167,22 +167,35 @@ jobs:
         with:
           name: kiri-manager-verified-oci
           path: ${{ runner.temp }}
-      - name: Test real Kiri from Docker and directly from Kiri
+      - name: Prepare Kiri and the Compose fixture
+        id: prepare
         working-directory: apps/kiri-manager
         env:
           IMAGE_ARCH: ${{ matrix.arch }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq skopeo
-          bash setup-kiri-linux.sh --apply
+          bash setup-kiri-linux.sh --apply --grant-panel-access
           skopeo --override-arch "$IMAGE_ARCH" copy "oci-archive:$RUNNER_TEMP/kiri-manager.oci.tar" \
             docker-daemon:dcc-kiri-manager:verify
           kiri_sock=/run/kiri/docker.sock
           kiri_cli=(sudo -n docker --host "unix://$kiri_sock")
           "${kiri_cli[@]}" compose -f tests/live-compose.yaml -p dcc-kiri-fixture up -d
-          PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify --socket "$kiri_sock"
+      - name: Read real Kiri from a Docker-hosted panel
+        working-directory: apps/kiri-manager
+        run: |
+          PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify --socket /run/kiri/docker.sock
+      - name: Start the panel in Kiri and read real Kiri
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: apps/kiri-manager
+        run: |
+          kiri_sock=/run/kiri/docker.sock
+          kiri_cli=(sudo -n docker --host "unix://$kiri_sock")
           docker --context default save dcc-kiri-manager:verify | "${kiri_cli[@]}" load
-          PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify --socket "$kiri_sock" --runtime kiri
+          PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify --socket "$kiri_sock" --runtime kiri --port 28797
+      - name: Diagnose Kiri service failures
+        if: failure()
+        run: sudo journalctl -u kiri.service --no-pager -n 35
 
   publish:
     name: PUBLISH · GHCR

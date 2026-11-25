@@ -33,6 +33,17 @@ bash setup-kiri-linux.sh --plan
 bash setup-kiri-linux.sh --apply
 ```
 
+### Nadaj dostęp panelowi na natywnym Linuxie
+
+Kiri 0.2.2 sprawdza UID procesu w bazie kont hosta oraz uprawnienia pliku socketu. Przed uruchomieniem obu wariantów kontenerowych upoważnij dedykowane konto bez logowania o UID `10001`. Wariant zakłada bezpośrednie mapowanie UID kontenera na hosta. Skrypt zatrzyma się, jeśli identyfikator lub nazwa konta jest już zajęta przez innego użytkownika. [Kod kontroli UID w Kiri](https://github.com/libracoder/kiri/blob/v0.2.2/crates/kiri/src/daemon/access.rs).
+
+```sh
+bash setup-kiri-linux.sh --plan --grant-panel-access
+bash setup-kiri-linux.sh --apply --grant-panel-access
+```
+
+Jawna opcja nadaje dostęp kontu `dcc-kiri-panel` przez `kiri host-access`. Członkostwo w grupie `kiri` daje uprawnienia na poziomie silnika. Aby cofnąć dostęp, usuń to konto z grupy `kiri` na hoście. Przy mapowaniu przestrzeni użytkowników sprawdź rzeczywisty UID procesu widoczny dla hosta.
+
 Panel w Dockerze na tym samym hoście może użyć osobnej konfiguracji montowania jednego socketu:
 
 ```sh
@@ -80,7 +91,7 @@ Eksperymentalna opcja zaawansowana to lokalny proces Python 3.12 z zależnościa
 ## Problemy i aktualizacja
 
 - **Brak aliasów:** zamontuj dedykowany socket tam, gdzie ten wariant jest dostępny, i skonfiguruj `KIRI_SOCKETS`.
-- **Odmowa dostępu:** sprawdź właściciela socketu i numeryczną grupę. Nadaj panelowi tylko wymagany dostęp do tej grupy.
+- **Odmowa dostępu lub natychmiastowe rozłączenie:** sprawdź, czy UID procesu panelu jest upoważniony w Kiri. Konfiguracja montowania wymaga także numerycznej grupy socketu.
 - **Błąd tożsamości:** sprawdź kontekst CLI, wersję upstream i ścieżkę endpointu. Panel weryfikuje identyfikatory Kiri przed odczytem.
 - **Timeout:** zweryfikuj gotowość silnika oraz aktualny plik socketu. Pomiar warstw obrazów może przekroczyć limit czasu panelu.
 - **Aktualizacja:** wykonaj spójną kopię bazy z dedykowanego wolumenu lub zrób ją przy zatrzymanym panelu. Odtwórz tylko panel z zatwierdzonym obrazem i zachowaj wolumen.

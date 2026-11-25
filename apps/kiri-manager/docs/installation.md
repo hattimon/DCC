@@ -33,7 +33,18 @@ bash setup-kiri-linux.sh --plan
 bash setup-kiri-linux.sh --apply
 ```
 
-This is a host-side operation. Review the package and configuration before running it on a host you administer. Kiri group membership carries engine-level authority. The script leaves membership to the administrator. Official package alternatives and requirements are in [Kiri on Linux](https://docs.runkiri.com/linux/).
+This is a host-side operation. Review the package and configuration before running it on a host you administer. Official package alternatives and requirements are in [Kiri on Linux](https://docs.runkiri.com/linux/).
+
+### Authorize a containerized panel on native Linux
+
+Kiri 0.2.2 checks the connecting process's host UID against the host account database as well as the socket's filesystem permissions. Give the panel's host UID `10001` a dedicated non-login account and authorize it in Kiri before using either container variant. This helper option assumes the container UID maps directly to the host UID. It stops if that UID or account name is already allocated to another user. [Kiri peer UID check](https://github.com/libracoder/kiri/blob/v0.2.2/crates/kiri/src/daemon/access.rs).
+
+```sh
+bash setup-kiri-linux.sh --plan --grant-panel-access
+bash setup-kiri-linux.sh --apply --grant-panel-access
+```
+
+The explicit grant enrolls `dcc-kiri-panel` through `kiri host-access`. Kiri group membership carries engine-level authority. To revoke the grant, remove that account from the `kiri` group on the host. User-namespace mappings need an independent check of the effective host UID.
 
 ### Panel on Docker connected to Kiri
 
@@ -88,7 +99,7 @@ An **experimental native Python** variant keeps the process and socket on macOS.
 ## Diagnose, update, remove
 
 - **No aliases:** configure `KIRI_SOCKETS` and attach the dedicated endpoint where supported. Reopen the wizard.
-- **Permission denied:** check the socket ownership and numeric group. Match the panel's allowed supplementary group.
+- **Permission denied or immediate disconnect:** check the socket group and make sure the panel's effective host UID is enrolled in Kiri. The socket overlay also needs the socket's numeric group.
 - **Kiri identity rejected:** verify the socket, upstream version and Docker context. Identity checks require the explicit Kiri fields and Server header.
 - **Timeout or disconnect:** verify the engine is running, check whether its socket inode was replaced and retry. On-demand image storage may require longer than the current request limit.
 - **Upgrade or rollback:** back up the dedicated data volume using a consistent SQLite backup or while this panel is stopped. Recreate the panel using the selected version and existing volume. If the schema is newer than the old image, restore the corresponding backup.

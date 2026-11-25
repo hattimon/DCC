@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import time
+from urllib.error import HTTPError
 from uuid import uuid4
 
 from image_smoke import PASSWORD, PanelHTTP, wait_ready
@@ -49,7 +50,12 @@ def verify(args):
         profile = None
         if args.socket:
             configured = {"name": "CI Kiri", "host": "linux", "runtime": args.runtime, "endpoint": "test"}
-            connection = client.request("/api/profiles/test", configured)
+            try:
+                connection = client.request("/api/profiles/test", configured)
+            except HTTPError as error:
+                with error:
+                    detail = error.read(1024).decode("utf-8", errors="replace")
+                raise AssertionError(f"{args.runtime} profile test returned HTTP {error.code}: {detail}") from None
             assert connection["engine"]["version"] == args.version
             assert set(connection["checks"].values()) == {"available"}
             profile = client.request("/api/profiles", configured)

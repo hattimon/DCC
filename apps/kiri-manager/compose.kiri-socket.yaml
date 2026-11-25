@@ -1,4 +1,5 @@
 # Opt in only on a Linux runtime that can bind the Kiri socket directly.
+# The effective host UID of the panel also needs a host account authorized by Kiri.
 services:
   panel:
     group_add:
