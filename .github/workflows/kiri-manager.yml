@@ -176,8 +176,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq skopeo
           bash setup-kiri-linux.sh --apply --grant-panel-access
+          archive="$RUNNER_TEMP/kiri-manager.docker.tar"
           skopeo --override-arch "$IMAGE_ARCH" copy "oci-archive:$RUNNER_TEMP/kiri-manager.oci.tar" \
-            docker-daemon:dcc-kiri-manager:verify
+            "docker-archive:$archive:dcc-kiri-manager:verify"
+          docker --context default image load --input "$archive"
           kiri_sock=/run/kiri/docker.sock
           kiri_cli=(sudo -n docker --host "unix://$kiri_sock")
           "${kiri_cli[@]}" compose -f tests/live-compose.yaml -p dcc-kiri-fixture up -d
@@ -188,10 +190,22 @@ jobs:
       - name: Start the panel in Kiri and read real Kiri
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         working-directory: apps/kiri-manager
+        env:
+          IMAGE_ARCH: ${{ matrix.arch }}
         run: |
           kiri_sock=/run/kiri/docker.sock
           kiri_cli=(sudo -n docker --host "unix://$kiri_sock")
-          docker --context default save dcc-kiri-manager:verify | "${kiri_cli[@]}" load
+          # Kiri 0.2.2 closes the connection at the tar boundary. Send the
+          # completed archive with a known length to avoid a chunked upload race.
+          sudo -n curl --fail-with-body --silent --show-error --unix-socket "$kiri_sock" \
+            --request POST --header 'Content-Type: application/x-tar' --header 'Expect:' \
+            --upload-file "$RUNNER_TEMP/kiri-manager.docker.tar" 'http://localhost/v1.47/images/load'
+          format='{{.Id}} {{.Os}}/{{.Architecture}}'
+          docker_image="$(docker --context default image inspect --format "$format" dcc-kiri-manager:verify)"
+          kiri_image="$("${kiri_cli[@]}" image inspect --format "$format" dcc-kiri-manager:verify)"
+          echo "Docker image: $docker_image"
+          echo "Kiri image:   $kiri_image"
+          [[ "$kiri_image" == "$docker_image" && "$kiri_image" == *" linux/$IMAGE_ARCH" ]]
           PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify --socket "$kiri_sock" --runtime kiri --port 28797
       - name: Diagnose Kiri service failures
         if: failure()
