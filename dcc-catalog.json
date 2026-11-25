@@ -2250,21 +2250,21 @@
     },
     {
       "name": "DCC Kiri Manager",
-      "version": "0.1.1",
-      "image": "ghcr.io/hattimon/dcc-kiri-manager:0.1.1",
+      "version": "0.1.2",
+      "image": "ghcr.io/hattimon/dcc-kiri-manager:0.1.2",
       "category": "DCC",
       "category_en": "DCC",
       "description": "Samodzielny panel Kiri do monitorowania zasobów i usług Compose.",
       "description_en": "Standalone Kiri dashboard for observing resources and Compose services.",
-      "store_description": "Panel tylko do odczytu z kreatorem połączeń, diagnostyką i interfejsem PL/EN. Przy pierwszym logowaniu ustawisz własną nazwę użytkownika i hasło.",
-      "store_description_en": "Read-only dashboard with a connection wizard, diagnostics and a Polish/English UI. Set your own username and password at first sign-in.",
+      "store_description": "Panel PL/EN wykrywa zatwierdzone połączenia Kiri i pokazuje Połącz lub wskazówki konfiguracji. Sklep DCC na Windows sprawdza tożsamość Kiri przez lokalny potok; dostęp kontenera do socketu WSL wymaga testu przed instalacją.",
+      "store_description_en": "PL/EN dashboard detects verified Kiri endpoints and shows Connect or setup guidance. DCC Store on Windows verifies the local Kiri pipe; the WSL container socket requires a successful preflight before installation.",
       "default_name": "dcc-kiri-manager",
       "container_port": "8796",
       "host_port": "",
       "extra": "--publish 127.0.0.1:8796:8796 --volume dcc_kiri_manager_data:/data --cap-drop=ALL --security-opt=no-new-privileges:true --read-only --tmpfs /tmp:size=8m,mode=1777 --pids-limit=40 --memory=192m --restart unless-stopped",
       "command": "",
-      "notes": "Nowa instalacja: zaloguj się przez admin/admin i od razu ustaw własne dane. Pomoc z konfiguracją terminala i resetem hasła jest ukryta na ekranie logowania. Aktualizacja zachowuje konto i ustawienia; przy ponownej instalacji zachowaj volume dcc_kiri_manager_data. Połączenie z Kiri wymaga jego osobnego socketu.",
-      "notes_en": "New install: sign in with admin/admin and immediately choose your own credentials. Terminal setup and password reset help is tucked away on the sign-in screen. Updates preserve the account and settings; keep the dcc_kiri_manager_data volume when reinstalling. Connecting to Kiri requires its dedicated socket.",
+      "notes": "Sklep DCC sprawdza Kiri na Windows, proponuje Połącz, a po zgodzie administratora testuje socket w kontenerze i dostępność panelu na Windows. Nieudany test zatrzymuje instalację i usuwa jedynie nowy kontener. Dane dcc_kiri_manager_data i istniejące panele pozostają bez zmian. Pełne połączenie Windows/WSL niezweryfikowane na żywym silniku.",
+      "notes_en": "DCC Store verifies Kiri on Windows and offers Connect; with administrator consent it checks the socket inside a container and panel reachability from Windows. Failed checks remove only the new container. Existing panels and dcc_kiri_manager_data remain intact. Full Windows/WSL connection has no live-engine verification yet.",
       "engines": [
         "docker"
       ],
@@ -2273,21 +2273,23 @@
         "arm64"
       ],
       "lightweight": true,
-      "source_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.1/apps/kiri-manager",
-      "docs_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.1/apps/kiri-manager/docs",
+      "source_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.2/apps/kiri-manager",
+      "docs_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.2/apps/kiri-manager/docs",
       "homepage_url": "https://hattimon.github.io/DCC/kiri-manager/",
       "icon_text": "◇",
       "post_install_hints": [
-        "Otwórz http://127.0.0.1:8796 na hoście Docker. Przy pierwszym logowaniu użyj admin/admin, a następnie od razu ustaw własne dane.",
-        "Aktualizacja zachowuje konto i ustawienia, jeśli pozostawisz volume dcc_kiri_manager_data. Szczegóły konfiguracji i resetu hasła znajdziesz w ukrytej pomocy na ekranie logowania."
+        "Otwórz http://127.0.0.1:8796 na hoście Docker lub użyj portu wybranego podczas instalacji.",
+        "Na nowym wolumenie zaloguj się jako admin z hasłem admin. Ustaw własne hasło i w razie potrzeby zmień nazwę użytkownika.",
+        "Po zalogowaniu wybierz Połącz przy zweryfikowanym Kiri; gdy transport nie jest dostępny, użyj instrukcji konfiguracji."
       ],
       "post_install_hints_en": [
-        "Open http://127.0.0.1:8796 on the Docker host. On first sign-in use admin/admin, then immediately choose your own credentials.",
-        "Updates preserve the account and settings when the dcc_kiri_manager_data volume is kept. Sign-in help contains terminal setup and password reset details."
+        "Open http://127.0.0.1:8796 on the Docker host, using the published port selected during installation.",
+        "On a new volume, sign in with admin / admin. Set your own password and optionally change the username.",
+        "After signing in, choose Connect for verified Kiri or follow the setup guidance when transport is unavailable."
       ],
       "upstream_repo": "hattimon/DCC",
-      "latest_release": "kiri-manager-v0.1.1",
-      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.1",
+      "latest_release": "kiri-manager-v0.1.2",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.2",
       "release_tag_pattern": "kiri-manager-v[0-9]+\\.[0-9]+\\.[0-9]+",
       "image_tag_from_release": "strip-prefix:kiri-manager-v"
     }
