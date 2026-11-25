@@ -308,6 +308,39 @@ class WebTests(unittest.TestCase):
         self.assertIn('attachment',raw.headers['Content-Disposition'])
         self.assertNotIn('fixture-secret',raw.get_data(as_text=True))
 
+    def test_structured_log_credentials_are_revealed_only_by_the_authorized_action(self):
+        raw = json.dumps({
+            'credentials': {'adminUser': 'fixture-admin', 'adminPassword': 'mock "quoted" secret!'},
+            'msg': 'initial accessToken => mock-token-123',
+        })
+        with patch.object(FakeBackend, 'logs', return_value=raw):
+            output = self.client.get('/api/logs/redis').json['logs']
+            self.assertEqual(json.loads(output)['credentials']['adminPassword'], '••••')
+            self.assertNotIn('mock-token-123', output)
+            exported = self.client.get('/api/logs/redis?download=1').get_data(as_text=True)
+            self.assertEqual(exported, output)
+            grant = self.request('mcp/grants', {'profiles': ['local']}).json
+            mcp_result = MCPService(self.state, grant['token'], FakeBackend).call(
+                'container_logs', {'profile': 'local', 'container': 'redis'}
+            )
+            self.assertNotIn('mock-token-123', str(mcp_result))
+            self.assertNotIn('quoted', str(mcp_result))
+
+            access = self.request('logs/redis/access')
+            self.assertEqual(access.status_code, 200)
+            self.assertEqual({item['value'] for item in access.json['details']},
+                             {'fixture-admin', 'mock "quoted" secret!', 'mock-token-123'})
+            self.state.save_profile('local', {'name': 'Read only', 'kind': 'local', 'permissions': ['read']})
+            self.assertEqual(self.request('logs/redis/access').status_code, 403)
+
+    def test_remove_container_uses_docker_rm_without_removing_volumes(self):
+        nonce = self.confirmation('container.remove', 'redis')
+        self.assertEqual(self.request('containers/redis/remove', {'confirmation': nonce}).status_code, 200)
+        self.assertIn(['remove', 'redis'], FakeBackend.commands)
+        with patch.object(DockerBackend, 'run') as run:
+            DockerBackend({'kind': 'local'}).action('redis', 'remove')
+        run.assert_called_once_with(['rm', 'redis'])
+
     def test_resources_volume_protection_and_confirmed_pull(self):
         for kind in ('images','volumes','networks'):
             self.assertEqual(self.client.get('/api/resources/'+kind).status_code,200)
@@ -885,6 +918,25 @@ class WebTests(unittest.TestCase):
         self.assertEqual(type(client.set_missing_host_key_policy.call_args.args[0]).__name__,'RejectPolicy')
         client.close.assert_called_once()
 
+    def test_ssh_logs_read_both_streams_without_the_stderr_limit(self):
+        client = MagicMock()
+        channel = client.get_transport.return_value.open_session.return_value
+        stdout = channel.makefile.return_value
+        stdout.channel = channel.makefile_stdin.return_value.channel = channel
+        channel.recv_exit_status.return_value = 0
+        log = b'2026-11-01T12:00:00Z ERROR Example message\n' * 220 + b'2026-11-01T12:01:00Z INFO Latest entry\n'
+        stdout.read.return_value = log
+        channel.exec_command.side_effect = lambda _: channel.set_combine_stderr.assert_called_once_with(True)
+
+        with patch('engine.paramiko.SSHClient', return_value=client):
+            result = DockerBackend({'kind': 'ssh', 'host': 'example', 'username': 'review'}).logs('fixture', 500)
+
+        self.assertEqual(result, log.decode('utf-8'))
+        channel.exec_command.assert_called_once_with('docker logs --timestamps --tail 500 fixture')
+        stdout.read.assert_called_once_with(4_000_001)
+        client.exec_command.assert_not_called()
+        client.close.assert_called_once()
+
     def test_ssh_docker_info_passes_json_format_as_one_windows_argument(self):
         client = MagicMock()
         stdin, stdout, stderr = MagicMock(), MagicMock(), MagicMock()
@@ -991,6 +1043,35 @@ class WebTests(unittest.TestCase):
             info.assert_not_called()
         response = self.request('profiles/check', {'configuration': {'name': 'Local', 'kind': 'local'}, 'transport': 'ssh'})
         self.assertEqual(response.status_code, 400)
+
+    def test_image_actions_use_existing_updater_selection_and_report_failures(self):
+        client = MagicMock()
+        service = MagicMock()
+        candidate = {'current_image': 'example/web:1', 'target_image': 'example/web:2',
+                     'check_error': False, 'update_available': True}
+        service.scan.return_value = [candidate]
+        service.update_selected.return_value = [{'ok': True, 'result': 'Updated example/web:2'}]
+        module = SimpleNamespace(UpdateService=MagicMock(return_value=service))
+        with patch('docker.from_env', return_value=client), patch.dict(sys.modules, {'dcc_shared_update_service': module}):
+            check = self.confirmation('update.check', 'fixture')
+            self.assertEqual(self.wait(self.request('updates/fixture/check', {'confirmation': check})), [candidate])
+            service.scan.assert_called_once_with(container_ids=['fixture'])
+            service.update_selected.assert_not_called()
+
+            apply = self.confirmation('update.apply', 'fixture')
+            self.assertEqual(self.wait(self.request('updates/fixture/apply', {'confirmation': apply})), 'Updated example/web:2')
+            service.update_selected.assert_called_once_with(['fixture'])
+            service.update_one.assert_not_called()
+
+            service.update_selected.return_value = [{'ok': False, 'result': 'No verified update is available'}]
+            apply = self.confirmation('update.apply', 'fixture')
+            error = self.wait_failure(self.request('updates/fixture/apply', {'confirmation': apply}))
+            self.assertEqual(error['error'], 'No verified update is available')
+            service.scan.return_value = [{'check_error': True, 'message': 'Registry unavailable'}]
+            check = self.confirmation('update.check', 'fixture')
+            error = self.wait_failure(self.request('updates/fixture/check', {'confirmation': check}))
+            self.assertEqual(error['error'], 'Registry unavailable')
+        self.assertEqual(client.close.call_count, 4)
 
     def test_configuration_delegates_to_existing_updater_and_retains_environment(self):
         container=SimpleNamespace(attrs={'Config':{'Image':'demo:1','Env':['OLD=retained','CHANGE=old']}},image=SimpleNamespace(id='sha256:existing'))

@@ -2,7 +2,7 @@
 import json
 import re
 import time
-from dcc_catalog import parse_access_details,image_repository
+from dcc_catalog import parse_access_details, redact_log_access_details, image_repository
 from engine import EngineError
 from ports import enrich_containers
 from security import redact
@@ -15,6 +15,8 @@ def execute_install(engine,plan,entry,report,vault,trusted=None,language='EN'):
         if found:
             values=[{'label':label,'value':value} for label,value in found]
             report(access_blob=vault.encrypt(json.dumps(values).encode()).decode(),access_count=len(values))
+        raw=redact_log_access_details(raw)
+        if found:
             for _,value in found:raw=raw.replace(value,'••••')
         report(log=redact(raw)+'\n')
         return found

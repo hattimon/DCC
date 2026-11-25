@@ -73,12 +73,12 @@ jobs:
           python apps/container-updater/tests/docker_web_https_smoke.py \
             --target-image dcc-web:release-candidate --expected-version "$(cat apps/dcc-web/VERSION)" \
             --local-target --with-tunnel-resume
-      - name: Upgrade published Web 0.3.3 and 0.3.4 and preserve the tunnel and running project
+      - name: Upgrade published Web 0.3.3, 0.3.4 and 0.3.6 and preserve the tunnel and running project
         run: |
           version="$(tr -d '\r\n' < apps/dcc-web/VERSION)"
           target="ghcr.io/hattimon/dcc-web:$version"
           docker tag dcc-web:release-candidate "$target"
-          for source_version in 0.3.3 0.3.4; do
+          for source_version in 0.3.3 0.3.4 0.3.6; do
             python apps/container-updater/tests/docker_web_https_smoke.py \
               --old-image "ghcr.io/hattimon/dcc-web:$source_version" --target-image "$target" \
               --expected-version "$version" --local-target --expect-remote-access --verify-release-candidate \

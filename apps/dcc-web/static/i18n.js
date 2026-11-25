@@ -440,6 +440,8 @@ Szukaj w logach|Search logs
 Szukaj w logach…|Search logs…
 Liczba linii|Line count
 Na żywo|Live
+Odświeżanie logów|Log refresh interval
+Co {seconds} s|Every {seconds} s
 Pobierz .log|Download .log
 Wyjście kontenera|Container output
 Ładowanie logów…|Loading logs…

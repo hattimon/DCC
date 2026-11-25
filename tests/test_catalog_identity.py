@@ -2,10 +2,36 @@ import json
 from pathlib import Path
 import unittest
 
-from dcc_catalog import catalog_application_key, catalog_image_is_older, validate_catalog_uniqueness
+from dcc_catalog import catalog_application_key, catalog_image_is_older, parse_access_details, redact_log_access_details, validate_catalog_uniqueness
 
 
 class CatalogIdentityTests(unittest.TestCase):
+    def test_access_details_preserve_quoted_values_and_ignore_metadata(self):
+        structured = json.dumps({
+            'password_hash': 'ignored-hash',
+            'token_type': 'Bearer',
+            'credentials': [{'userName': 'fixture user', 'initialAdminPassword': ' [Czy to "hasło"?]; '}],
+            'message': json.dumps({'apiKey': 'fixture-key==', 'password': '[REDACTED]'}),
+        })
+        log = ('2026-11-25T14:55:00.123Z INFO ' + structured
+               + '\nPGPASSWORD => fixture-db-pass!\n'
+                 'A temporary password is provided for this session: fixture-once!\n'
+                 '{"password": false}\n')
+        self.assertEqual(parse_access_details(log, lang='PL'), [
+            ('Login', 'fixture user'),
+            ('Hasło', ' [Czy to "hasło"?]; '),
+            ('Klucz API', 'fixture-key=='),
+            ('Hasło', 'fixture-db-pass!'),
+            ('Hasło', 'fixture-once!'),
+        ])
+        masked = redact_log_access_details(log)
+        self.assertIn('ignored-hash', masked)
+        self.assertIn('Bearer', masked)
+        self.assertNotIn('fixture-db-pass!', masked)
+        self.assertNotIn('fixture-once!', masked)
+        self.assertNotIn('fixture-key==', masked)
+        self.assertNotIn('Czy to', masked)
+
     def test_published_catalog_defines_each_application_once(self):
         apps = json.loads((Path(__file__).resolve().parents[1] / 'dcc-catalog.json').read_text(encoding='utf-8'))['apps']
         validate_catalog_uniqueness(apps)

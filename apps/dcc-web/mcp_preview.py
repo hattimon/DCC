@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 from flask import abort, g, jsonify, request, send_file
 
 from engine import DockerBackend, ProfileOperationBusy, profile_operation
+from dcc_catalog import redact_log_access_details
 from client_adapters import (
     CONFIG_PATHS, MANUAL_INSTRUCTIONS, agent_instructions, client_project_archive,
     codex_marketplace_archive, configuration_text, export_client, export_public_client, instruction_path,
@@ -569,7 +570,7 @@ class MCPService:
             return _mcp_container_inspect(engine.inspect(_container_id(arguments.get("container"))))
         if name == "container_logs":
             target = _container_id(arguments.get("container"))
-            return engine.logs(target, max(1, min(int(arguments.get("tail", 200)), 2000)))
+            return redact_log_access_details(engine.logs(target, max(1, min(int(arguments.get("tail", 200)), 2000))))
         if name == "container_stats":
             return _mcp_docker_rows(name, engine.stats())
         return _mcp_docker_rows(name, engine.resources(name.removeprefix("list_")))

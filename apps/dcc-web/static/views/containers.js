@@ -164,12 +164,85 @@ async function exec(target){await openDialog('Polecenie wewnątrz kontenera',htm
 export async function manualCreate(ctx){const {installForm}=await import('./store.js');return installForm(null,ctx);}
 
 export async function logs(root,ctx){
- const values=(await api('containers')).containers;if(!ctx.valid())return;const target=state.target||values[0]?.ID;
+ const values=(await api('containers',{signal:ctx.signal})).containers;
+ if(!ctx.valid())return;
+ const target=state.target||values[0]?.ID;
  if(!target){root.innerHTML=heading('Logi i diagnostyka','Bieżący strumień zdarzeń z wybranego kontenera.')+notice('Brak kontenerów w tym profilu.');return;}
- root.innerHTML=heading('Logi i diagnostyka','Automatyczne odświeżanie, wyszukiwanie i pobieranie logów.')+html`<div class="toolbar"><select id="logs-container" aria-label="Kontener">${values.map(v=>html`<option value="${esc(v.ID)}" ${v.ID===target?'selected':''}>${esc(v.Names)}</option>`).join('')}</select><input id="logs-search" aria-label="Szukaj w logach" placeholder="Szukaj w logach…" value="${esc(state.logQuery||'')}"><select id="logs-tail" aria-label="Liczba linii">${[100,200,500,2000].map(v=>html`<option ${v===(state.logTail||200)?'selected':''}>${v}</option>`).join('')}</select><label class="check"><input type="checkbox" id="logs-live" ${state.logLive!==false?'checked':''}>Na żywo</label><button id="logs-copy">Kopiuj logi</button><button id="logs-download">Pobierz .log</button>${state.features?.access_details?literal('<button id="logs-access">Wykryj dane dostępowe</button>'):''}</div><section class="panel"><div class="panel-header"><h2>Wyjście kontenera</h2><span class="fine" id="log-count"></span></div><pre class="log-view" id="logs-output">Ładowanie logów…</pre></section>`;
- const access=root.querySelector('#logs-access');if(access)access.onclick=async()=>{try{const data=await post('logs/'+encodeURIComponent(target)+'/access',{});await openDialog('Dane dostępowe wykryte w logach',data.details.length?html`<div class="stack">${data.details.map((v,i)=>html`<label>${esc(v.label)}<span class="access-value"><input readonly name="access-${i}" value="${esc(v.value)}"><button type="button" data-copy-access="${i}">Kopiuj</button></span></label>`).join('')}</div>`:notice('Nie wykryto gotowych danych logowania. Utwórz konto w aplikacji przy pierwszym uruchomieniu.'),{onReady:form=>form.querySelectorAll('[data-copy-access]').forEach(b=>b.onclick=()=>copyText(form.elements['access-'+b.dataset.copyAccess].value))});}catch(e){notify(e.message,'error');}};root.querySelector('#logs-copy').onclick=()=>copyText(root.querySelector('#logs-output').innerText);
- let timer;const load=async()=>{try{const data=await api(html`logs/${encodeURIComponent(target)}?tail=${state.logTail||200}&q=${encodeURIComponent(state.logQuery||'')}`);if(!ctx.valid())return;root.querySelector('#logs-output').innerHTML=data.logs.split('\n').map(line=>html`<span class="${/error|fatal|exception|traceback/i.test(line)?'log-error':/warn/i.test(line)?'log-warning':''}">${esc(line)}</span>`).join('\n');root.querySelector('#log-count').textContent=data.lines+t(' linii');}catch(e){notify(e.message,'error');}};
- root.querySelector('#logs-container').onchange=e=>location.hash='logs/'+encodeURIComponent(e.target.value);root.querySelector('#logs-search').oninput=e=>{state.logQuery=e.target.value;clearTimeout(timer);timer=setTimeout(load,300);};root.querySelector('#logs-tail').onchange=e=>{state.logTail=Number(e.target.value);load();};root.querySelector('#logs-live').onchange=e=>state.logLive=e.target.checked;root.querySelector('#logs-download').onclick=()=>window.open(html`/api/logs/${encodeURIComponent(target)}?profile=${encodeURIComponent(state.profile)}&tail=${state.logTail||200}&download=1`,'_blank','noopener');await load();
+ const intervalOptions=[...new Set([1,3,5,10,15,30,60,ctx.defaultRefreshSeconds])].sort((a,b)=>a-b);
+ const selectedInterval=state.logRefreshSeconds??ctx.defaultRefreshSeconds;
+ root.innerHTML=heading('Logi i diagnostyka','Automatyczne odświeżanie, wyszukiwanie i pobieranie logów.')+html`
+  <div class="toolbar">
+   <select id="logs-container" aria-label="Kontener">${values.map(v=>html`<option value="${esc(v.ID)}" ${v.ID===target?'selected':''}>${esc(v.Names)}</option>`).join('')}</select>
+   <input id="logs-search" aria-label="Szukaj w logach" placeholder="Szukaj w logach…" value="${esc(state.logQuery||'')}">
+   <select id="logs-tail" aria-label="Liczba linii">${[30,50,100,200,500,2000].map(v=>html`<option ${v===(state.logTail||200)?'selected':''}>${v}</option>`).join('')}</select>
+   <label class="check"><input type="checkbox" id="logs-live" ${state.logLive!==false?'checked':''}>Na żywo</label>
+   <select id="logs-refresh" aria-label="Odświeżanie logów">${intervalOptions.map(seconds=>html`<option value="${seconds}" ${seconds===selectedInterval?'selected':''}>${t('Co {seconds} s').replace('{seconds}',seconds)}</option>`).join('')}</select>
+   <button id="logs-copy">Kopiuj logi</button><button id="logs-download">Pobierz .log</button>${state.features?.access_details?literal('<button id="logs-access">Wykryj dane dostępowe</button>'):''}
+  </div>
+  <section class="panel">
+   <div class="panel-header"><h2>Wyjście kontenera</h2><span class="fine" id="log-count"></span></div>
+   <pre class="log-view" id="logs-output">Ładowanie logów…</pre>
+  </section>`;
+ const access=root.querySelector('#logs-access');if(access)access.onclick=async()=>{try{const data=await post('logs/'+encodeURIComponent(target)+'/access',{});await openDialog('Dane dostępowe wykryte w logach',data.details.length?html`<div class="stack">${data.details.map((v,i)=>html`<label>${esc(v.label)}<span class="access-value"><input readonly name="access-${i}" value="${esc(v.value)}"><button type="button" data-copy-access="${i}">Kopiuj</button></span></label>`).join('')}</div>`:notice('Nie wykryto gotowych danych logowania. Utwórz konto w aplikacji przy pierwszym uruchomieniu.'),{onReady:form=>form.querySelectorAll('[data-copy-access]').forEach(b=>b.onclick=()=>copyText(form.elements['access-'+b.dataset.copyAccess].value))});}catch(e){notify(e.message,'error');}};
+
+ const output=root.querySelector('#logs-output');
+ const count=root.querySelector('#log-count');
+ const modal=document.querySelector('#modal');
+ const path='logs/'+encodeURIComponent(target);
+ let refreshTimer,searchTimer,request,lastLogs;
+
+ async function load(){
+  clearTimeout(searchTimer);
+  searchTimer=undefined;
+  request?.abort();
+  const controller=new AbortController();
+  request=controller;
+  const query=new URLSearchParams({tail:state.logTail||200,q:state.logQuery||''});
+  try{
+   const data=await api(path+'?'+query,{signal:controller.signal});
+   if(controller.signal.aborted)return;
+   if(data.logs!==lastLogs){
+    output.innerHTML=data.logs.split('\n').map(line=>html`<span class="${/error|fatal|exception|traceback/i.test(line)?'log-error':/warn/i.test(line)?'log-warning':''}">${esc(line)}</span>`).join('\n');
+    count.textContent=data.lines+t(' linii');
+    lastLogs=data.logs;
+   }
+   output.scrollTop=output.scrollHeight;
+   ctx.markRefreshed();
+  }catch(error){
+   if(!controller.signal.aborted)notify(error.message,'error');
+  }finally{
+   if(request===controller)request=null;
+  }
+ }
+
+ function scheduleRefresh(){
+  clearInterval(refreshTimer);
+  if(state.logLive===false)return;
+  refreshTimer=setInterval(()=>{
+   if(!document.hidden&&!modal.open&&!request&&!searchTimer)load();
+  },(state.logRefreshSeconds??ctx.defaultRefreshSeconds)*1000);
+ }
+
+ root.querySelector('#logs-container').onchange=e=>location.hash='logs/'+encodeURIComponent(e.target.value);
+ root.querySelector('#logs-search').oninput=e=>{
+  state.logQuery=e.target.value;
+  request?.abort();
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(load,300);
+ };
+ root.querySelector('#logs-tail').onchange=e=>{state.logTail=Number(e.target.value);load();};
+ root.querySelector('#logs-live').onchange=e=>{state.logLive=e.target.checked;scheduleRefresh();};
+ root.querySelector('#logs-refresh').onchange=e=>{state.logRefreshSeconds=Number(e.target.value);scheduleRefresh();};
+ root.querySelector('#logs-copy').onclick=()=>copyText(output.innerText);
+ root.querySelector('#logs-download').onclick=()=>window.open('/api/'+path+'?'+new URLSearchParams({profile:state.profile,tail:state.logTail||200,download:'1'}),'_blank','noopener');
+ ctx.signal.addEventListener('abort',()=>{
+  clearInterval(refreshTimer);
+  clearTimeout(searchTimer);
+  request?.abort();
+ },{once:true});
+
+ scheduleRefresh();
+ await load();
 }
 
 export async function monitoring(root,ctx){

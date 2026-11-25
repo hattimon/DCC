@@ -23,6 +23,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from catalogs import Catalogs, InstalledCatalogScans, app_id, install_plan, validate_catalog
+from dcc_catalog import parse_access_details, redact_log_access_details
 from markdown_render import render_markdown
 from engine import DockerBackend, EngineError, Jobs, StatsSampler, check_ssh_connection
 from security import initialize_security, admin, authorize, redact, validate_profile, CAPABILITIES, trusted_https_request
@@ -711,7 +712,7 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
     def logs(target):
         engine = backend()
         tail = int(request.args.get("tail",200))
-        text = redact(engine.logs(target,tail))
+        text = redact(redact_log_access_details(engine.logs(target,tail)))
         query = request.args.get("q","").casefold()
         if query:
             text = "\n".join(line for line in text.splitlines() if query in line.casefold())
@@ -945,7 +946,6 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
         admin()
         data=body()
         engine=backend(data.get('profile'),'install')
-        from dcc_catalog import parse_access_details
         details=parse_access_details(engine.logs(target,300),lang=ui_language())
         state.audit(g.user['id'],'container.access.reveal',target,200)
         return jsonify(details=[{'label':label,'value':value} for label,value in details])
@@ -1011,12 +1011,14 @@ def create_app(config=None, backend_factory=None, terminal_factory=None):
             service,client=updater_service(p)
             try:
                 if action=="check":
-                    return service.scan(container_ids=[target])
-                container=client.containers.get(target)
-                image=container.attrs.get("Config",{}).get("Image")
-                if not image:
-                    raise ValueError("Container image is unavailable")
-                return service.update_one(container,image)
+                    results = service.scan(container_ids=[target])
+                    if results[0]["check_error"]:
+                        raise EngineError(results[0]["message"])
+                    return results
+                result = service.update_selected([target])[0]
+                if not result["ok"]:
+                    raise EngineError(result["result"])
+                return result["result"]
             finally:
                 client.close()
         # Validate adapter compatibility synchronously, before queuing an operation.
