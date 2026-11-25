@@ -1,4 +1,6 @@
-# DCC Web 0.3.6
+# DCC Web 0.3.7
+
+Web 0.3.7 recognizes access details in structured and plain-text logs, adds live log controls and applies the image selected by DCC Updater. [Release notes](RELEASE_NOTES_0.3.7.md)
 
 Web 0.3.6 fixes Docker CLI argument quoting over SSH (including JSON views and container restart policies), adds a Windows PowerShell remote-shell choice, and uses that choice for Docker API operations over SSH. Existing Linux, Balena and SSH profiles default to the POSIX shell. In **Profiles**, select **Add profile → SSH**, supply the host, account, port, remote shell and credentials, then run **Check SSH** and **Check Docker** separately. [Profile configuration](docs/configuration.md).
 
@@ -46,7 +48,7 @@ For a fresh checkout, create a Python 3.12 environment and install `apps/dcc-web
 
 ## Install on Windows, macOS or Linux
 
-Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.6/DCC-Web-0.3.6-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.3.6` directory:
+Download the [DCC Web source package](https://github.com/hattimon/DCC/releases/download/dcc-web-v0.3.7/DCC-Web-0.3.7-source.zip), extract it, and run the bundled installer from the extracted `DCC-Web-0.3.7` directory:
 
 ```powershell
 py -3.12 apps/dcc-web/install.py

@@ -172,18 +172,31 @@ class DockerBackend:
             raise ValueError("Invalid Docker arguments")
         profile, credentials = self.profile, self.profile.get("credentials", {})
         kind = profile.get("kind", "local")
+        container_logs = args[:1] == ["logs"]
         if kind in {"ssh", "balena"}:
             client = paramiko.SSHClient()
             try:
                 _connect_ssh(client, profile)
                 cli = profile.get('cli') or ("balena" if kind == "balena" else "docker")
                 try:
-                    stdin, stdout, stderr = client.exec_command(_ssh_docker_command(cli, args, profile.get('ssh_shell', 'posix')), timeout=timeout)
+                    command = _ssh_docker_command(cli, args, profile.get('ssh_shell', 'posix'))
+                    if container_logs:
+                        # Docker writes container records to both streams. Combine them before the command starts.
+                        channel = client.get_transport().open_session(timeout=timeout)
+                        channel.settimeout(timeout)
+                        channel.set_combine_stderr(True)
+                        channel.exec_command(command)
+                        stdin, stdout, stderr = channel.makefile_stdin("wb"), channel.makefile("rb"), None
+                    else:
+                        stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
                     if input_data is not None:
                         stdin.write(input_data)
                         stdin.flush()
                     stdin.channel.shutdown_write()
-                    output, error = stdout.read(4_000_001), stderr.read(8192)
+                    output = stdout.read(4_000_001)
+                    if container_logs and len(output) > 4_000_000:
+                        raise EngineError("Docker response is too large; reduce the requested range")
+                    error = stderr.read(8192) if stderr is not None else b""
                     code = stdout.channel.recv_exit_status()
                 except (paramiko.SSHException, OSError, EOFError) as error:
                     raise EngineError(_ssh_error_message(error, "command")) from error
@@ -191,22 +204,25 @@ class DockerBackend:
                 client.close()
         else:
             command,environment,flags=self._local_command()
+            capture = {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT} if container_logs else {"capture_output": True}
             try:
-                result = subprocess.run([*command, *args], input=input_data, capture_output=True, timeout=timeout, encoding="utf-8", errors="replace", env=environment, creationflags=flags)
+                result = subprocess.run([*command, *args], input=input_data, timeout=timeout, encoding="utf-8", errors="replace", env=environment, creationflags=flags, **capture)
             except (OSError, subprocess.TimeoutExpired) as error:
                 raise EngineError("Docker is unavailable or the operation timed out. Check the selected profile.") from error
-            output, error, code = result.stdout, result.stderr, result.returncode
+            output, error, code = result.stdout, result.stderr or "", result.returncode
         if isinstance(output, bytes):
             output = output.decode("utf-8", "replace")
             error = error.decode("utf-8", "replace")
         if code:
             # Do not reflect a command line, credentials or environment into logs/API errors.
+            if container_logs:
+                error = output
             if "conflict" in error.lower() or "already in use" in error.lower():
                 raise EngineError("A name, port or resource conflict prevented the operation")
             if "permission" in error.lower():
                 raise EngineError("Docker access denied; check this profile's host permissions")
             raise EngineError("Docker rejected the operation. Check the profile and resource state.")
-        if args and (args[0]=="logs" or args[0]=="compose" and "logs" in args):
+        if args and args[0]=="compose" and "logs" in args:
             output += error
         if len(output) > 4_000_000:
             raise EngineError("Docker response is too large; reduce the requested range")
