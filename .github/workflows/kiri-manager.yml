@@ -61,6 +61,8 @@ jobs:
           python tools/catalog_review.py
           python tools/prepare_pages.py "$RUNNER_TEMP/kiri-pages-verify"
       - name: Python unit and security tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           python -m pip install -r requirements.txt
           python -m pip check
@@ -71,6 +73,7 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
+          node --test tests/frontend_auto.mjs
           KIRI_PYTHON="$(which python)" npm test
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -130,7 +133,7 @@ jobs:
         with:
           name: kiri-manager-verified-oci
           path: ${{ runner.temp }}
-      - name: Start and restart the exact built archive in Docker
+      - name: Start, restart, upgrade and roll back the exact built archive in Docker
         working-directory: apps/kiri-manager
         env:
           IMAGE_ARCH: ${{ matrix.arch }}
@@ -139,7 +142,11 @@ jobs:
           sudo apt-get install -y -qq skopeo
           skopeo --override-arch "$IMAGE_ARCH" copy "oci-archive:$RUNNER_TEMP/kiri-manager.oci.tar" \
             docker-daemon:dcc-kiri-manager:verify
+          previous="$IMAGE:0.1.1@sha256:35d9f0e08ff5a6b16f8ffb949609185aef7a817710cd2d7080ed0f27cb8a3b11"
+          docker pull "$previous"
           PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify
+          PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify \
+            --previous-image "$previous" --previous-version 0.1.1
 
   live_kiri:
     name: Kiri 0.2.2 integration · ${{ matrix.arch }}

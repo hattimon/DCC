@@ -9,6 +9,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import resources
 from .config import ROOT, VERSION, Config
+from .discovery import discover
 from .kiri_client import Connector, KiriError, validate_key
 from .security import (UNSAFE_NAME, LoginGate, begin_setup, csrf_token, default_gateway,
                        enforce_access, local_setup_peer, setup_pending, valid_password, valid_username)
@@ -147,11 +148,36 @@ def create_app(config=None, *, connector=None, demo=False):
 
     @app.get("/healthz")
     def healthz():
-        return jsonify(status="ok")
+        response = jsonify(status="ok")
+        response.headers["X-DCC-Panel"] = "kiri-manager"
+        return response
 
     @app.get("/api/session")
     def session_info():
         return session_payload()
+
+    @app.get("/api/discovery")
+    def discovery():
+        return jsonify(discover(connector))
+
+    @app.post("/api/discovery/connect")
+    def auto_connect():
+        json_object(set())
+        found = discover(connector)
+        if found["status"] != "ready":
+            raise KiriError("transport_not_configured" if found["status"] == "unconfigured"
+                            else found["reason"], 409)
+        alias = found["endpoint"]
+        saved = next((row for row in store.profiles() if row["endpoint"] == alias), None)
+        if saved is None:
+            saved = store.create_profile({"name": "Kiri (auto)", "host": "linux",
+                                         "runtime": "kiri", "endpoint": alias})
+            if saved is None:
+                raise KiriError("profile_limit", 409)
+        if not store.activate(saved["id"]):
+            raise KiriError("profile_conflict", 409)
+        store.update_preferences({"onboarded": True})
+        return jsonify(profile=saved["id"], engine=found["engine"])
 
     @app.get("/api/install/linux")
     def linux_setup():

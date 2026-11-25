@@ -15,6 +15,8 @@ When `setup_available` is true, an initial local login returns `setup_pending: t
 | POST `/api/logout` | Revoke the session, accepts an empty object |
 | PUT `/api/preferences` | Any of `language` (en/pl), `theme` (dark/light), `interval` (0/15/30/60/120 s), `onboarded` (boolean) |
 | GET `/api/install/linux` | Authenticated download of the optional Linux install helper |
+| GET `/api/discovery` | Authenticated inspection of administrator-configured socket endpoints; `ready` includes verified Kiri identity, `blocked` names the transport failure, `unconfigured` means no socket is mounted |
+| POST `/api/discovery/connect` | Authenticated, CSRF-protected empty object; repeats identity and inventory checks, reuses or creates a profile for the verified endpoint, activates it and marks onboarding complete |
 | POST `/api/profiles` | Add a profile using `name`, `host`, `runtime`, `endpoint` |
 | POST `/api/profiles/test` | Read availability without creating a profile |
 | PUT `/api/profiles/{id}` | Edit using the four fields and the current `revision` |
@@ -22,6 +24,8 @@ When `setup_available` is true, an initial local login returns `setup_pending: t
 | PUT `/api/profiles/{id}/active` | Select the profile, accepts an empty object |
 
 The endpoint field is a configured alias. Host values are `linux`, `wsl` and `macos`. Runtime values are `docker`, `kiri` and `native`. Profile IDs are local hexadecimal identifiers.
+
+Automatic discovery never scans paths or enables a socket on the host; only administrator-provisioned `KIRI_SOCKETS` aliases are considered. A failed discovery cannot create a profile. The Windows DCC Store connects to the host's Kiri named pipe independently of this Linux web-panel API.
 
 ## Engine reads
 

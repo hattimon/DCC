@@ -19,7 +19,7 @@ function tip() {
 function setupHelp(host, runtime) {
   const standard = `https://docs.runkiri.com/${hosts[host] ?? "install"}/`;
   const hint = {linux: "installLinux", wsl: "installWsl", macos: "installMacos"}[host] ?? "installLinux";
-  const docs = `https://github.com/hattimon/DCC/blob/kiri-manager-v0.1.1/apps/kiri-manager/docs/installation${language === "pl" ? ".pl" : ""}.md`;
+  const docs = `https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation${language === "pl" ? ".pl" : ""}.md`;
   const grantAccess = host === "linux" && runtime !== "native";
   const accessOption = grantAccess ? " --grant-panel-access" : "";
   return `<section class="card pad stack-sm notice">
@@ -30,9 +30,9 @@ function setupHelp(host, runtime) {
     <div class="actions"><a class="button" target="_blank" rel="noopener noreferrer" href="${standard}">${esc(t("upstream"))}</a>
     ${host === "linux" ? `<a class="button" download href="/api/install/linux">${esc(t("linuxHelper"))}</a>` : ""}
     <a target="_blank" rel="noopener noreferrer" href="${docs}">${esc(t("installGuide"))}</a></div>
-    ${host === "linux" ? `<p><code>bash setup-kiri-linux.sh --plan${accessOption}</code></p>
+    ${host === "linux" ? `<details class="tip"><summary>${esc(t("advancedCommands"))}</summary><p><code>bash setup-kiri-linux.sh --plan${accessOption}</code></p>
     ${grantAccess ? `<p>${esc(t("linuxPanelAccess"))}</p>` : ""}
-    <p><code>bash setup-kiri-linux.sh --apply${accessOption}</code></p>` : ""}
+    <p><code>bash setup-kiri-linux.sh --apply${accessOption}</code></p></details>` : ""}
   </section>`;
 }
 
@@ -64,7 +64,8 @@ export function wizard(wizard, endpoints) {
       ${result?.engine ? "" : `<div>${elButton(t("test"), "wizard-test", {disabled: !endpoints.length, symbol: "diagnostics"})}</div>`}</div>`,
   ];
   const title = step === 0 ? t("welcome") : t("setup");
-  return `<div class="wizard">
+  return `<div class="stack">${automaticConnection(wizard.discovery, true)}
+    ${wizard.advanced ? `<div class="wizard">
     <section class="card pad stack">
       <h2 class="section-title">${icon("connections")}${esc(title)}</h2><p>${esc(t("wizardHint"))}</p>
       <ol class="steps" aria-label="${esc(t("wizardStep", {step: step + 1}))}">${["host", "runtime", "transport", "diagnostics"].map((part, index) =>
@@ -84,7 +85,32 @@ export function wizard(wizard, endpoints) {
       <section class="card pad stack-sm"><h2 class="section-title">${icon("diagnostics")}${esc(t("checks"))}</h2><div id="wizard-result" aria-live="polite">${testReport(result)}</div></section>
       ${step >= 1 || !endpoints.length ? setupHelp(draft.host, draft.runtime) : ""}
     </div>
-    </div>`;
+    </div>` : `<div>${elButton(t("advancedOptions"), "wizard-advanced")}</div>`}</div>`;
+}
+
+export function automaticConnection(discovery, showSkip = false) {
+  if (discovery == null) return `<section class="card pad stack-sm" aria-live="polite">${openingNotice()}</section>`;
+  const ready = discovery.status === "ready";
+  const configured = discovery.status !== "unconfigured";
+  const text = ready ? t("autoFound", {version: discovery.engine?.version ?? ""})
+    : configured ? `${t("autoBlocked")} ${esc(problem(discovery.reason))}`
+      : t("autoUnconfigured");
+  return `<section class="card pad stack-sm" aria-live="polite">
+    <h2 class="section-title">${icon("connections")}${esc(t("autoTitle"))}</h2>
+    <p role="status">${ready ? badge(t("autoReady"), "good") : badge(t("autoNeedsAction"), "warn")} ${ready ? esc(text) : text}</p>
+    ${ready ? `<p>${esc(t("autoAccessGranted"))}</p>` : `<p>${esc(t("autoNext"))}</p>`}
+    <div class="actions">
+      ${ready ? elButton(t("autoConnect"), "auto-connect", {cls: "primary"}) : `
+        <a class="button primary" href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation${language === "pl" ? ".pl" : ""}.md" target="_blank" rel="noopener noreferrer">${esc(t("autoSetupHelp"))}</a>
+        <a class="button" href="https://docs.runkiri.com/install/" target="_blank" rel="noopener noreferrer">${esc(t("autoInstall"))}</a>`}
+      ${elButton(t("autoCheck"), "auto-check")}
+      ${showSkip ? elButton(t("skipSetup"), "auto-skip", {cls: "quiet"}) : ""}
+    </div>
+  </section>`;
+}
+
+function openingNotice() {
+  return `<p role="status">${esc(t("autoChecking"))}</p>`;
 }
 
 export function wizardForm(wizard, form) {
@@ -105,7 +131,7 @@ export function profileForm(profile, endpoints) {
   </form>`;
 }
 
-export function connections(profiles, active, statuses, endpoints, activeStatus) {
+export function connections(profiles, active, statuses, endpoints, activeStatus, discovery = null) {
   const start = elButton(t("wizard"), "wizard", {symbol: "connections", cls: "primary"});
   const add = elButton(t("newProfile"), "profile-edit", {symbol: "plus", disabled: !endpoints.length});
   const cards = profiles.map((profile) => {
@@ -122,7 +148,7 @@ export function connections(profiles, active, statuses, endpoints, activeStatus)
         ${elButton(t("remove"), "profile-remove", {key: profile.id, cls: "danger quiet"})}
       </div></section>`;
   });
-  return `<div class="stack"><div class="actions">${start}${add}</div>
+  return `<div class="stack">${automaticConnection(discovery)}<div class="actions">${start}${add}</div>
     ${profiles.length ? `<div class="grid2">${cards.join("")}</div>` : empty(t("noProfile"), t("noProfileHint"))}
     ${endpoints.length && activeStatus !== "offline" ? "" : setupHelp(profiles.find((row) => row.id === active)?.host ?? "linux", "docker")}</div>`;
 }

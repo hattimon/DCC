@@ -14,6 +14,17 @@ class CatalogRepositoryTests(unittest.TestCase):
         self.assertEqual(dcc.store_catalog([bundled], [live]), [live])
         self.assertEqual(dcc.store_catalog([bundled], []), [bundled])
 
+    def test_stale_official_catalog_preserves_bundled_kiri_onboarding(self):
+        manager = next(item for item in dcc.load_bundled_deployment_catalog()
+                       if dcc.is_manager_template(item))
+        removed = dcc.image_template_from_dict({'name': 'Removed app', 'image': 'example/removed:1'})
+        cached = dcc.image_template_from_dict({'name': 'Cached app', 'image': 'example/cached:1'},
+                                              dcc.DEFAULT_DEPLOYMENT_REPOSITORY)
+        catalog = dcc.store_catalog([removed, manager], [cached])
+        self.assertIn(manager, catalog)
+        self.assertIn(cached, catalog)
+        self.assertNotIn(removed, catalog)
+
     def test_stale_cache_cannot_replace_newer_bundled_version(self):
         new = dcc.image_template_from_dict({'name': 'DCC Web', 'image': 'ghcr.io/hattimon/dcc-web:0.1.3'})
         old = dcc.image_template_from_dict({'name': 'DCC Web', 'image': 'ghcr.io/hattimon/dcc-web:0.1.1'})

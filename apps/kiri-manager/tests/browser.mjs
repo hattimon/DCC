@@ -97,23 +97,12 @@ async function firstLogin(page, base) {
 }
 
 async function wizard(page, saveShots = false) {
-  await match(page.getByRole("heading", {name: "Welcome to DCC Kiri Manager"}));
-  await page.getByRole("button", {name: "Next"}).click();
-  await page.getByRole("button", {name: "Back"}).click();
-  await match(page.getByRole("heading", {name: "Welcome to DCC Kiri Manager"}));
-  await page.getByRole("button", {name: "Next"}).click();
-  await page.getByRole("button", {name: "Next"}).click();
-  await match(page.getByText("bash setup-kiri-linux.sh --plan --grant-panel-access", {exact: true}));
-  await match(page.getByText("bash setup-kiri-linux.sh --apply --grant-panel-access", {exact: true}));
-  await page.getByLabel("Profile name").fill("Workshop · Local Kiri");
-  await page.getByLabel("Socket alias").selectOption("test-engine");
-  await page.getByText("How does socket access work?").click();
-  await match(page.getByText("The mounted socket itself", {exact: false}));
-  await page.getByText("How does socket access work?").click();
+  await match(page.getByRole("heading", {name: "Automatic Kiri connection"}));
+  await match(page.getByText("Kiri verified", {exact: true}));
+  assert.equal(await page.getByLabel("Socket alias").count(), 0);
+  assert.equal(await page.getByText("bash setup-kiri-linux.sh", {exact: false}).count(), 0);
   if (saveShots) await shot(page, "wizard");
-  await page.getByRole("button", {name: "Test connection"}).click();
-  await match(page.getByText("Kiri identified", {exact: true}));
-  await page.getByRole("button", {name: "Open overview"}).click();
+  await page.getByRole("button", {name: "Connect to detected Kiri"}).click();
   await match(page.getByRole("heading", {name: "Container inventory"}));
 }
 

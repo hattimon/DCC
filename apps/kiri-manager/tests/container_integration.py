@@ -17,7 +17,7 @@ def verify(args):
     if args.runtime == "kiri":
         cmd = ["sudo", "-n", "docker", "--host", "unix://" + args.socket]
     else:
-        cmd = ["docker", "--context", "default"]
+        cmd = ["docker", "--context", args.docker_context]
 
     def docker(*arguments, **options):
         return subprocess.run([*cmd, *arguments], check=True, text=True, stdout=subprocess.PIPE, **options).stdout.strip()
@@ -34,21 +34,39 @@ def verify(args):
     created = None
     volume_created = False
     client = PanelHTTP(f"http://127.0.0.1:{args.port}")
+    username = "ci-panel-operator"
+    original_preferences = {"language": "pl", "theme": "light"}
     try:
         docker("volume", "create", "--label", "dev.dcc.kiri-ci=" + name, volume)
         volume_created = True
+        if args.previous_image:
+            created = docker("create", *params, args.previous_image)
+            docker("start", created)
+            wait_ready(client, seconds=20)
+            evidence = client.setup(username)
+            assert evidence["version"] == args.previous_version
+            client.request("/api/preferences", original_preferences, "PUT")
+            docker("stop", created)
+            docker("rm", created)
+            created = None
+            client = PanelHTTP(client.url)
         created = docker("create", *params, args.image)
         started = time.monotonic()
         docker("start", created)
         wait_ready(client, seconds=20)
         print(f"Readiness {time.monotonic() - started:.3f} s ({args.runtime})")
         assert docker("exec", created, "python", "-c", "import os; print(os.geteuid())") == "10001"
-        assert "admin / admin" in docker("logs", created, stderr=subprocess.STDOUT)
-        username = "ci-panel-operator"
-        evidence = client.setup(username)
+        if args.previous_image:
+            assert not client.get("/api/session")["setup_available"]
+            evidence = client.login(username)
+            assert all(evidence["preferences"][key] == value for key, value in original_preferences.items())
+            print(f"Upgrade {args.previous_version} -> {VERSION}: account and preferences preserved")
+        else:
+            assert "admin / admin" in docker("logs", created, stderr=subprocess.STDOUT)
+            evidence = client.setup(username)
         assert not evidence["demo"] and evidence["version"] == VERSION
         assert evidence["endpoints"] == (["test"] if args.socket else [])
-        client.request("/api/preferences", {"language": "pl", "theme": "light"}, "PUT")
+        client.request("/api/preferences", original_preferences, "PUT")
         profile = None
         if args.socket:
             configured = {"name": "CI Kiri", "host": "linux", "runtime": args.runtime, "endpoint": "test"}
@@ -88,6 +106,20 @@ def verify(args):
         if args.runtime == "docker":
             sample = json.loads(docker("stats", "--no-stream", "--format", "{{json .}}", created))
             print(json.dumps({key: sample.get(key) for key in ("CPUPerc", "MemUsage", "PIDs")}))
+        if args.previous_image:
+            client.request("/api/preferences", {"language": "en", "theme": "dark"}, "PUT")
+            docker("stop", created)
+            docker("rm", created)
+            created = None
+            created = docker("create", *params, args.previous_image)
+            docker("start", created)
+            client = PanelHTTP(client.url)
+            wait_ready(client, seconds=20)
+            assert not client.get("/api/session")["setup_available"]
+            evidence = client.login(username, reset_password)
+            assert evidence["version"] == args.previous_version
+            assert evidence["preferences"]["language"] == "en" and evidence["preferences"]["theme"] == "dark"
+            print(f"Rollback {VERSION} -> {args.previous_version}: updated password and preferences preserved")
     finally:
         if created:
             docker("rm", "-f", created)
@@ -98,6 +130,9 @@ def verify(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
+    parser.add_argument("--previous-image")
+    parser.add_argument("--previous-version")
+    parser.add_argument("--docker-context", default="default")
     parser.add_argument("--runtime", choices=["docker", "kiri"], default="docker")
     parser.add_argument("--socket")
     parser.add_argument("--version", default="0.2.2")
@@ -105,4 +140,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.runtime == "kiri" and args.socket != "/run/kiri/docker.sock":
         parser.error("Kiri CI requires the dedicated native Linux socket")
+    if bool(args.previous_image) != bool(args.previous_version):
+        parser.error("Use --previous-image and --previous-version together")
     verify(args)

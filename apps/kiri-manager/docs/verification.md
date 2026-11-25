@@ -1,3 +1,19 @@
+# Weryfikacja 0.1.2
+
+25 listopada 2026, izolowany worktree `codex/kiri-auto-detection`.
+
+- Windows / PowerShell: bezpośredni odczyt przez `npipe:////./pipe/kiri` potwierdził nagłówek `Server`, odpowiedź `/version` i dostęp do listy kontenerów w rzeczywistym Kiri 0.2.2. Osobne testy syntetyczne sprawdziły odmowę dostępu i błędną tożsamość silnika.
+- Instalator panelu: testy imitujące kontenery i wolumeny w izolacji; wymagana zgoda operatora w GUI, test dostępu w tymczasowym kontenerze przed utworzeniem panelu, ochrona istniejących paneli i `dcc_kiri_manager_data`. Dodatkowy test potwierdza, że brak dostępności HTTP nowego panelu z Windows usuwa tylko utworzony kontener, a odpowiedź usługi bez nagłówka `X-DCC-Panel: kiri-manager` nie przechodzi kontroli gotowości. Testy imitowane nie poświadczają uprawnień UID 10001 do socketu WSL ani przekierowania portu w rzeczywistym Kiri.
+- Panel WWW: backend automatycznie rozpoznaje wyłącznie zatwierdzone endpointy po tożsamości Kiri i odczycie zasobów; połączenie wymaga zalogowanego administratora i CSRF. Alias, socket i terminal pozostają w opcjach zaawansowanych.
+- Python: 54 zaliczone, 3 pominięte (testy Unix socket na Windows). Node: 3/3. Playwright 1.62.1: 13/13 scenariuszy dla panelu i witryny.
+- Windows: oba EXE przeszły self-check. Kompilacja NSIS i regresja restartu instalatora przeszły. Pełnej aktualizacji zainstalowanej aplikacji desktopowej nie wykonywano.
+- OCI: zweryfikowano konfigurację, manifesty i warstwy lokalnego archiwum dla linux/amd64 i linux/arm64. SHA-256 archiwum: `db893ec77622e90535b875bdb4687e450f4f8eafc7ee6e6ba61e3f0367145a97`.
+- Aktualizacja na Docker Desktop (linux/amd64): kontener z opublikowanym obrazem 0.1.1, wymiana na lokalny obraz 0.1.2, restart i powrót do 0.1.1 na tym samym, izolowanym wolumenie. 0.1.2 zachowało konto i ustawienia. Po rollbacku login działał z hasłem zmienionym w 0.1.2, a wybrany język i motyw zostały zachowane.
+- Oficjalna dokumentacja Kiri 0.2.2 potwierdza `npipe:////./pipe/kiri` na Windows oraz `/var/lib/kiri-daemon/.kiri/run/docker.sock` w dystrybucji WSL silnika. To nie dowodzi dostępności socketu z Docker Desktop lub innego WSL. Instalacja panelu zatrzymuje się, gdy test socketu w docelowym kontenerze nie przejdzie.
+
+**Windows/WSL – NOT VERIFIED.** System odmówił dostępu do zarządzania Hyper-V, więc nie uruchomiono odizolowanego silnika Windows/WSL. Istniejąca instalacja Kiri posłużyła wyłącznie do odczytowej kontroli potoku.
+
+---
 # Weryfikacja wydania 0.1.0
 
 Wyniki określają zakres dowodów dla wersji **EXPERIMENTAL**.

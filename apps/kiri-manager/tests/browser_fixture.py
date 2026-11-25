@@ -15,7 +15,9 @@ from fixtures import FixtureTransport
 
 def main():
     with tempfile.TemporaryDirectory(prefix="dcc-kiri-browser-") as root:
-        endpoints = {"test-engine": "kiri", "offline-test": "offline", "partial-test": "partial"}
+        # Discovery sorts aliases. Keep the fully available test engine before
+        # the deliberately incomplete fixture used for failure scenarios.
+        endpoints = {"test-engine": "kiri", "offline-test": "offline", "z-partial-test": "partial"}
         app = create_app(Config(root, endpoints), connector=Connector(endpoints, FixtureTransport), demo=True)
         storage = Storage(root)
         test_hash = generate_password_hash("TEST-only-kiri-passphrase")

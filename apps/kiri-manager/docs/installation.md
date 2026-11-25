@@ -2,6 +2,14 @@
 
 The panel listens internally on 8796/tcp. The supplied mappings expose it on the host's loopback interface. It runs without Kiri and opens configuration after administrator sign-in.
 
+## Preferred automatic flow (DCC Windows + panel)
+
+Open **DCC Store → DCC Kiri Manager**. The desktop app probes `npipe:////./pipe/kiri` directly, confirms Kiri's `/version` identity and reads the container inventory. It then offers **Connect**. If the pipe is absent, it offers **Install Kiri** with the [official Windows installation guide](https://docs.runkiri.com/windows/). Access denied or a non-Kiri endpoint shows a specific reason and a next step. Switching Docker contexts is not required.
+
+After connecting to Kiri in DCC, reopen the Store entry to install the panel. The desktop app asks for administrator consent before mounting the engine socket, pulls the approved panel image and launches a disposable Kiri container to test the *actual* WSL socket bind, Kiri identity and inventory as panel UID 10001. Only a successful test permits panel creation with `dcc_kiri_manager_data:/data`. DCC then requests `http://127.0.0.1:8796/healthz` from Windows and verifies both a panel-specific response header and JSON payload. If the WSL port is not reachable from Windows, it removes only the new container and preserves the data volume; check WSL port forwarding and port 8796 conflicts before retrying. Failed tests do not change existing installations. Docker Desktop cannot automatically access the Windows named pipe or an unrelated WSL distribution's socket. Full Windows/WSL panel installation is **not yet verified on a real Windows host**.
+
+Inside the web panel, **Connect** appears automatically if the administrator already supplied an accessible, verified Kiri socket. Otherwise the page explains whether transport is missing, access was refused or engine identity failed, and links to setup guidance. The manual alias and terminal wizard is under **Advanced manual configuration**. A browser cannot install a host runtime or change container mounts on its own.
+
 ## Docker and the DCC Store
 
 From the module directory on the intended Docker host:
@@ -23,7 +31,7 @@ docker run -d --name dcc-kiri-manager --restart unless-stopped \
   -p 127.0.0.1:8796:8796 --volume dcc_kiri_manager_data:/data \
   --read-only --tmpfs /tmp:size=8m,mode=1777 --cap-drop ALL \
   --security-opt no-new-privileges:true --memory 192m --pids-limit 40 \
-  ghcr.io/hattimon/dcc-kiri-manager:0.1.1
+  ghcr.io/hattimon/dcc-kiri-manager:0.1.2
 ```
 
 ## Terminal setup and password reset
@@ -95,7 +103,7 @@ docker --host "unix://$socket" run -d --name dcc-kiri-manager \
   --group-add "$gid" -e 'KIRI_SOCKETS={"local":"/run/dcc-kiri/engine.sock"}' \
   --cap-drop ALL --security-opt no-new-privileges:true --read-only \
   --tmpfs /tmp:size=8m,mode=1777 --restart unless-stopped \
-  ghcr.io/hattimon/dcc-kiri-manager:0.1.1
+  ghcr.io/hattimon/dcc-kiri-manager:0.1.2
 ```
 
 The integration run confirmed the socket mount, loopback port, non-root startup and retained configuration after a panel restart on both architectures. It loaded the image from the verified archive on each runner. [Integration results](verification.md#integracja-na-github-actions).
@@ -107,6 +115,8 @@ Use Raspberry Pi OS **64-bit** and the arm64 image. Verify the board's kernel, s
 ## Windows 10/11 AMD64 and WSL2
 
 Install through [Kiri's Windows setup](https://docs.runkiri.com/windows/). Choose Kiri Linux for a dedicated WSL distribution or Ubuntu if you plan to inspect the daemon from a standard Linux shell. Use localhost for a loopback panel. Verify Windows CLI with `docker --context kiri version` before any run command. The official native named pipe is `npipe:////./pipe/kiri`.
+
+Kiri documents its WSL daemon at `/var/lib/kiri-daemon/.kiri/run/docker.sock`. DCC uses that as a **candidate bind within Kiri's own runtime only**, then tests the mount and effective panel permissions before installation. This does not authorize Docker Desktop to mount a foreign WSL file. A failed test means the operator must review Kiri's WSL socket access with the administrator; DCC never changes WSL ownership, permissions, or an installed manager automatically. The installer/WSL setup may request Windows administrator elevation; DCC does not silently approve it.
 
 - **Docker Desktop running the panel** can use the default Docker installation in configuration mode. Connecting through the Windows named pipe or a socket in another WSL distribution is outside the OCI connector's supported paths.
 - **Kiri running the panel directly** uses `docker --context kiri` with the loopback port, named volume and security options shown in the CLI command above. Connection requires access to `/var/lib/kiri-daemon/.kiri/run/docker.sock` inside Kiri's own WSL installation. Treat socket permissions and mount visibility as **NOT VERIFIED**. Inspect them on a test installation before applying the Linux bind configuration. Use admin credentials from that same engine.

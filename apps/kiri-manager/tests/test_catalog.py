@@ -8,7 +8,7 @@ from tools.catalog_review import REPO, candidate, prepare
 
 
 class CatalogTest(unittest.TestCase):
-    def test_candidate_changes_only_the_kiri_manager_entry(self):
+    def test_candidate_replaces_only_kiri_and_is_idempotent(self):
         raw = (REPO / "dcc-catalog.json").read_text(encoding="utf-8")
         base = json.loads(raw)
         preview = prepare(raw)
