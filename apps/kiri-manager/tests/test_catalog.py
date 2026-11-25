@@ -8,14 +8,17 @@ from tools.catalog_review import REPO, candidate, prepare
 
 
 class CatalogTest(unittest.TestCase):
-    def test_candidate_is_a_single_compatible_append(self):
+    def test_candidate_changes_only_the_kiri_manager_entry(self):
         raw = (REPO / "dcc-catalog.json").read_text(encoding="utf-8")
         base = json.loads(raw)
         preview = prepare(raw)
         final = json.loads(preview)
         entry = candidate()
         self.assertEqual(final["apps"].count(entry), 1)
-        self.assertEqual(final["apps"][:-1], [item for item in base["apps"] if item != entry])
+        self.assertEqual(
+            [item for item in final["apps"] if item["name"] != entry["name"]],
+            [item for item in base["apps"] if item["name"] != entry["name"]],
+        )
         self.assertEqual(prepare(preview), preview)
         self.assertTrue(entry["homepage_url"].endswith("/DCC/kiri-manager/"))
 

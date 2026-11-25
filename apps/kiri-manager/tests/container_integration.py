@@ -7,7 +7,8 @@ import time
 from urllib.error import HTTPError
 from uuid import uuid4
 
-from image_smoke import PASSWORD, PanelHTTP, wait_ready
+from backend.config import VERSION
+from image_smoke import PanelHTTP, wait_ready
 
 
 def verify(args):
@@ -42,9 +43,10 @@ def verify(args):
         wait_ready(client, seconds=20)
         print(f"Readiness {time.monotonic() - started:.3f} s ({args.runtime})")
         assert docker("exec", created, "python", "-c", "import os; print(os.geteuid())") == "10001"
-        docker("exec", "-i", created, "python", "-m", "backend.admin", "--password-stdin", input=PASSWORD + "\n")
-        evidence = client.login()
-        assert not evidence["demo"] and evidence["version"] == "0.1.0"
+        assert "admin / admin" in docker("logs", created, stderr=subprocess.STDOUT)
+        username = "ci-panel-operator"
+        evidence = client.setup(username)
+        assert not evidence["demo"] and evidence["version"] == VERSION
         assert evidence["endpoints"] == (["test"] if args.socket else [])
         client.request("/api/preferences", {"language": "pl", "theme": "light"}, "PUT")
         profile = None
@@ -73,11 +75,16 @@ def verify(args):
 
         docker("restart", created)
         wait_ready(client)
-        evidence = client.login()
+        evidence = client.login(username)
         assert evidence["preferences"]["language"] == "pl" and evidence["preferences"]["theme"] == "light"
         if profile:
             assert evidence["preferences"]["active"] == profile["id"]
             assert client.get(endpoint + "/status")["engine"]["version"] == args.version
+        reset_password = "isolated-cli-reset-test-only"
+        docker("exec", "-i", created, "python", "-m", "backend.admin", "--reset", "--password-stdin",
+               input=reset_password + "\n")
+        assert not client.get("/api/session")["authenticated"]
+        assert client.login(username, reset_password)["preferences"]["theme"] == "light"
         if args.runtime == "docker":
             sample = json.loads(docker("stats", "--no-stream", "--format", "{{json .}}", created))
             print(json.dumps({key: sample.get(key) for key in ("CPUPerc", "MemUsage", "PIDs")}))

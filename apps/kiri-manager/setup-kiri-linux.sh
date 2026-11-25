@@ -104,4 +104,4 @@ fi
 
 printf 'Kiri socket ready. Use these values with compose.kiri-socket.yaml and then run the connection test.\n'
 printf 'KIRI_SOCKET_PATH=%s\nKIRI_SOCKET_GID=%s\n' "$socket" "$(stat -c %g -- "$socket")"
-printf 'Panel setup: https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.0/apps/kiri-manager/docs\n'
+printf 'Panel setup: https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.1/apps/kiri-manager/docs\n'

@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 DEFAULTS = {"language": "en", "theme": "dark", "interval": 30, "onboarded": False}
+DEFAULT_ADMIN_USERNAME = "admin"
 SESSION_TTL = 8 * 60 * 60
 
 MIGRATIONS = (
@@ -25,6 +26,7 @@ MIGRATIONS = (
         "CREATE TABLE sessions (digest TEXT PRIMARY KEY, expires INTEGER NOT NULL)",
         "INSERT INTO preferences (id, payload) VALUES (1, '{}')",
     ),
+    ("ALTER TABLE admin ADD COLUMN username TEXT NOT NULL DEFAULT 'admin'",),
 )
 
 
@@ -125,18 +127,21 @@ class Storage:
                 "DELETE FROM profiles WHERE id=? AND revision=?", (profile_id, revision),
             ).rowcount == 1
 
-    def password_hash(self):
+    def credentials(self):
         with closing(self.connect()) as conn:
-            row = conn.execute("SELECT password_hash FROM admin WHERE id=1").fetchone()
-        return row[0] if row else None
+            return conn.execute("SELECT username, password_hash FROM admin WHERE id=1").fetchone()
 
-    def set_password(self, password_hash, *, replace=False):
+    def set_password(self, password_hash, *, username=None, replace=False):
         with self.transaction() as conn:
-            if conn.execute("SELECT 1 FROM admin WHERE id=1").fetchone() and not replace:
+            current = conn.execute("SELECT username FROM admin WHERE id=1").fetchone()
+            if current and not replace:
                 return False
+            if username is None:
+                username = current["username"] if current else DEFAULT_ADMIN_USERNAME
             conn.execute(
-                "INSERT INTO admin VALUES (1,?) ON CONFLICT(id) DO UPDATE SET password_hash=excluded.password_hash",
-                (password_hash,),
+                """INSERT INTO admin (id, username, password_hash) VALUES (1,?,?)
+                   ON CONFLICT(id) DO UPDATE SET username=excluded.username, password_hash=excluded.password_hash""",
+                (username, password_hash),
             )
             conn.execute("DELETE FROM sessions")
             return True

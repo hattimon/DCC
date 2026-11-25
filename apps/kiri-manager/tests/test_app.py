@@ -1,13 +1,14 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from werkzeug.security import generate_password_hash
 
 from backend.app import create_app
 from backend.config import Config
 from backend.kiri_client import Connector
-from backend.storage import Storage
+from backend.storage import MIGRATIONS, Storage
 from fixtures import CID, IMAGES, NETWORKS, SECRET, FixtureTransport
 
 
@@ -19,11 +20,11 @@ class AppTest(unittest.TestCase):
         self.config = Config(Path(self.temp.name), self.sockets)
         self.connector = Connector(self.sockets, FixtureTransport)
         self.store = Storage(self.config.data_dir)
-        self.app = create_app(self.config, connector=self.connector)
-        self.web = self.app.test_client()
         self.secret = "a correct test-only password"
         self.credential_hash = generate_password_hash(self.secret)
         self.store.set_password(self.credential_hash)
+        self.app = create_app(self.config, connector=self.connector)
+        self.web = self.app.test_client()
         self.csrf = self.web.get("/api/session").json["csrf"]
 
     def change(self, path, body=None, method="POST", origin="http://localhost"):
@@ -42,12 +43,87 @@ class AppTest(unittest.TestCase):
         return response.json
 
     def test_unconfigured_health_and_session(self):
-        blank = create_app(Config(self.config.data_dir / "blank", {})).test_client()
+        with self.assertLogs("backend.app", "WARNING") as startup:
+            blank = create_app(Config(self.config.data_dir / "blank", {})).test_client()
+        self.assertIn("admin / admin", startup.output[0])
         with blank.get("/") as page:
             self.assertEqual(page.status_code, 200)
         self.assertEqual(blank.get("/healthz").json, {"status": "ok"})
         self.assertFalse(blank.get("/api/session").json["admin_ready"])
         self.assertEqual(blank.get("/api/install/linux").status_code, 401)
+
+    def test_browser_setup_upgrades_an_empty_volume_and_locks_default_credentials(self):
+        config = Config(self.config.data_dir / "old-empty", {})
+        with patch("backend.storage.MIGRATIONS", MIGRATIONS[:1]):
+            Storage(config.data_dir)
+        app = create_app(config)
+        self.web = app.test_client()
+        first = self.web.get("/api/session").json
+        self.assertTrue(first["setup_available"])
+        self.assertFalse(first["setup_pending"])
+        self.csrf = first["csrf"]
+        new_account = {"username": "Operator", "password": self.secret, "confirmation": self.secret}
+        self.assertEqual(self.change("/api/setup", new_account).json["error"], "setup_expired")
+        response = self.change("/api/login", {"username": "admin", "password": "admin"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json["setup_pending"])
+        self.assertFalse(response.json["authenticated"])
+        self.assertNotIn("endpoints", response.json)
+        self.assertEqual(self.web.get("/api/install/linux").status_code, 401)
+        self.assertEqual(self.change("/api/setup", new_account).json["error"], "csrf")
+        self.csrf = response.json["csrf"]
+        self.assertEqual(self.change("/api/setup", {**new_account, "password": "short"}).json["error"], "invalid_password")
+        self.assertEqual(self.change("/api/setup", {**new_account, "confirmation": "different"}).json["error"], "password_mismatch")
+        with self.web.session_transaction() as pending:
+            pending["setup_until"] = 0
+        self.assertEqual(self.change("/api/setup", new_account).json["error"], "setup_expired")
+        response = self.change("/api/login", {"username": "admin", "password": "admin"})
+        self.csrf = response.json["csrf"]
+        configured = self.change("/api/setup", new_account)
+        self.assertTrue(configured.json["authenticated"])
+        self.assertFalse(configured.json["setup_available"])
+        self.assertFalse(configured.json["setup_pending"])
+        self.csrf = configured.json["csrf"]
+        self.assertEqual(self.change("/api/setup", new_account).status_code, 409)
+        self.assertEqual(self.change("/api/login", {"username": "admin", "password": "admin"}).status_code, 401)
+        with self.assertNoLogs("backend.app", "WARNING"):
+            self.web = create_app(config).test_client()
+        self.csrf = self.web.get("/api/session").json["csrf"]
+        self.assertTrue(self.change("/api/login", {"username": "Operator", "password": self.secret}).json["authenticated"])
+
+    def test_default_login_is_unavailable_to_remote_peers_and_public_origin(self):
+        config = Config(self.config.data_dir / "blank", {}, bind="0.0.0.0")
+        with patch("backend.app.default_gateway", return_value=None):
+            remote = create_app(config).test_client()
+        peer = {"REMOTE_ADDR": "192.0.2.10"}
+        state = remote.get("/api/session", environ_overrides=peer).json
+        self.assertFalse(state["setup_available"])
+        rejected = remote.post("/api/login", environ_overrides=peer, json={"username": "admin", "password": "admin"},
+                               headers={"Origin": "http://localhost", "X-CSRF-Token": state["csrf"],
+                                        "X-Forwarded-For": "127.0.0.1"})
+        self.assertEqual(rejected.json["error"], "setup_required")
+        with self.assertNoLogs("backend.app", "WARNING"):
+            public = create_app(Config(config.data_dir, {}, public_origin="https://panel.invalid")).test_client()
+        state = public.get("/api/session", base_url="https://panel.invalid").json
+        self.assertFalse(state["setup_available"])
+        rejected = public.post("/api/login", base_url="https://panel.invalid", json={"username": "admin", "password": "admin"},
+                               headers={"Origin": "https://panel.invalid", "X-CSRF-Token": state["csrf"]})
+        self.assertEqual(rejected.json["error"], "setup_required")
+
+    def test_upgrade_preserves_existing_login_and_configuration(self):
+        config = Config(self.config.data_dir / "old-admin", {})
+        with patch("backend.storage.MIGRATIONS", MIGRATIONS[:1]):
+            old = Storage(config.data_dir)
+            old.update_preferences({"language": "pl"})
+            with old.transaction() as conn:
+                conn.execute("INSERT INTO admin VALUES (1,?)", (self.credential_hash,))
+        self.web = create_app(config).test_client()
+        state = self.web.get("/api/session").json
+        self.assertTrue(state["admin_ready"])
+        self.assertFalse(state["setup_available"])
+        self.csrf = state["csrf"]
+        self.assertEqual(self.login().json["preferences"]["language"], "pl")
+        self.assertEqual(len(list(config.data_dir.glob("config-v1-*.sqlite3"))), 1)
 
     def test_install_download_is_auth_only(self):
         self.login()

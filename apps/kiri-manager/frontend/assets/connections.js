@@ -19,7 +19,7 @@ function tip() {
 function setupHelp(host, runtime) {
   const standard = `https://docs.runkiri.com/${hosts[host] ?? "install"}/`;
   const hint = {linux: "installLinux", wsl: "installWsl", macos: "installMacos"}[host] ?? "installLinux";
-  const docs = `https://github.com/hattimon/DCC/blob/kiri-manager-v0.1.0/apps/kiri-manager/docs/installation${language === "pl" ? ".pl" : ""}.md`;
+  const docs = `https://github.com/hattimon/DCC/blob/kiri-manager-v0.1.1/apps/kiri-manager/docs/installation${language === "pl" ? ".pl" : ""}.md`;
   const grantAccess = host === "linux" && runtime !== "native";
   const accessOption = grantAccess ? " --grant-panel-access" : "";
   return `<section class="card pad stack-sm notice">

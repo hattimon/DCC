@@ -71,7 +71,10 @@ figure { min-width: 0; }
 figcaption { color: var(--muted); margin-top: 5px; font-size: .85rem; }
 .section-heading { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 6px 16px; margin-bottom: 16px; }
 .ways { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 13px; }
-.ways article,.resource,.road { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.ways article,.resource,.road,.install-help { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.install-help { margin-top: 13px; }
+.install-help summary { cursor: pointer; font-weight: 650; }
+.install-help p { margin-top: 8px; }
 .platform { margin-top: 30px; grid-template-columns: repeat(2,minmax(0,1fr)); }
 .platform a,.resource p + a { display: inline-block; margin-top: 6px; }
 .matrix { border-collapse: collapse; width: 100%; table-layout: fixed; margin: 17px 0 7px; font-size: .89rem; }

@@ -217,6 +217,11 @@ input[type="radio"] { width: 17px; min-height: 17px; accent-color: var(--accent)
 }
 .auth-card { width: min(100%, 440px); }
 .auth-quick { display: flex; gap: 5px; flex-wrap: wrap; }
+.auth-help { border-top: 1px solid var(--stroke); padding-top: 12px; }
+.auth-help summary { color: var(--muted); cursor: pointer; font-size: .86rem; }
+.auth-help summary:hover { color: var(--text); }
+.auth-help p { font-size: .86rem; margin: 10px 0; }
+.auth-help .compact { white-space: pre-wrap; overflow-wrap: anywhere; }
 dialog {
   width: min(calc(100% - 24px), 680px); max-height: calc(100dvh - 24px); padding: 0;
   border: 1px solid var(--stroke); border-radius: 15px; background: var(--surface);

@@ -16,21 +16,23 @@ const timeout = 10000;
 const tested = [];
 await mkdir(join(output, "source"), {recursive: true});
 
-const server = spawn(process.env.KIRI_PYTHON || (process.platform === "win32" ? "python.exe" : "python3"),
-  ["-B", join("tests", "browser_fixture.py")],
-  {cwd: root, stdio: ["ignore", "pipe", "inherit"], windowsHide: true, env: {...process.env, PYTHONPATH: root}});
-const ready = new Promise((resolvePort, reject) => {
-  const timer = setTimeout(() => reject(Error("Fixture did not start")), 15000);
-  const lines = createInterface({input: server.stdout});
-  lines.on("line", (line) => {
-    if (line.startsWith("PORT=")) {
+async function fixture(run) {
+  const server = spawn(process.env.KIRI_PYTHON || (process.platform === "win32" ? "python.exe" : "python3"),
+    ["-B", join("tests", "browser_fixture.py")],
+    {cwd: root, stdio: ["ignore", "pipe", "inherit"], windowsHide: true, env: {...process.env, PYTHONPATH: root}});
+  const port = new Promise((resolvePort, reject) => {
+    const timer = setTimeout(() => reject(Error("Fixture did not start")), 15000);
+    createInterface({input: server.stdout}).on("line", (line) => {
+      if (!line.startsWith("PORT=")) return;
       clearTimeout(timer);
       resolvePort(Number(line.slice(5)));
-    }
+    });
+    server.once("error", (error) => { clearTimeout(timer); reject(error); });
+    server.once("exit", (code) => { clearTimeout(timer); reject(Error("Fixture exited " + code)); });
   });
-  server.once("error", (error) => { clearTimeout(timer); reject(error); });
-  server.once("exit", (code) => { clearTimeout(timer); reject(Error("Fixture exited " + code)); });
-});
+  try { await run("http://127.0.0.1:" + await port); }
+  finally { server.kill(); }
+}
 
 async function match(locator, expected) {
   await locator.waitFor({state: "visible", timeout});
@@ -47,8 +49,50 @@ async function nav(page, view) {
 
 async function login(page, base) {
   await page.goto(base);
+  await page.getByLabel("Username").fill("admin");
   await page.locator('[name="password"]').fill("TEST-only-kiri-passphrase");
   await page.locator("#login-form button").click();
+  await match(page.locator("#main h1"));
+}
+
+async function firstLogin(page, base) {
+  assert.equal((await page.request.post(base + "/__fixture/reset?blank=1")).status(), 204);
+  await page.goto(base);
+  await match(page.getByRole("heading", {name: "First sign-in"}));
+  await page.getByRole("button", {name: "Polski"}).click();
+  await match(page.getByRole("heading", {name: "Pierwsze logowanie"}));
+  assert.equal(await page.getByLabel("Nazwa użytkownika").inputValue(), "admin");
+  const terminal = page.locator(".auth-help");
+  assert.equal(await terminal.locator("pre").isVisible(), false);
+  await terminal.locator("summary").click();
+  await match(terminal.locator("pre"), "python -m backend.admin");
+  await overflow(page, "terminal setup");
+  await terminal.locator("summary").click();
+  await page.getByLabel("Hasło", {exact: true}).fill("admin");
+  await page.getByRole("button", {name: "Zaloguj się"}).click();
+  await match(page.getByRole("heading", {name: "Zabezpiecz konto"}));
+  assert.equal(await page.locator("#workspace").isVisible(), false);
+  await page.reload();
+  await match(page.getByRole("heading", {name: "Zabezpiecz konto"}));
+  const password = "TEST-first-login-passphrase";
+  await page.getByLabel("Nazwa użytkownika").fill("Operator");
+  await page.getByLabel("Nowe hasło").fill(password);
+  await page.getByLabel("Powtórz hasło").fill(password);
+  await overflow(page, "first password");
+  await page.getByRole("button", {name: "Zapisz i przejdź dalej"}).click();
+  await match(page.locator("#main h1"));
+  await page.locator('header [data-action="menu"]').click();
+  await page.getByRole("button", {name: "Wyloguj"}).click();
+  await match(page.getByRole("heading", {name: "Zaloguj się"}));
+  assert.equal(await page.getByText("Zaloguj się jako admin z hasłem admin.").isVisible(), false);
+  assert.equal(await terminal.locator("pre").isVisible(), false);
+  await terminal.locator("summary").click();
+  await match(terminal.locator("pre"), "--reset");
+  await overflow(page, "terminal reset");
+  await terminal.locator("summary").click();
+  await page.getByLabel("Nazwa użytkownika").fill("Operator");
+  await page.getByLabel("Hasło", {exact: true}).fill(password);
+  await page.getByRole("button", {name: "Zaloguj się"}).click();
   await match(page.locator("#main h1"));
 }
 
@@ -230,6 +274,12 @@ async function siteSize(page, base, width, height) {
   assert.equal(await page.locator("html").getAttribute("lang"), "en");
   await page.waitForFunction(() => document.querySelector("#hero-image").naturalWidth > 0);
   await overflow(page, "site dark");
+  const signInHelp = page.locator(".install-help");
+  assert.equal(await signInHelp.locator("code").isVisible(), false);
+  await signInHelp.locator("summary").click();
+  await match(signInHelp.locator("code"), "admin / admin");
+  await overflow(page, "site sign-in help");
+  await signInHelp.locator("summary").click();
   if (width < 700) {
     await page.locator("#menu").click();
     await match(page.locator("#navigation"));
@@ -258,6 +308,8 @@ async function siteSize(page, base, width, height) {
   assert.equal(await page.locator("html").getAttribute("lang"), "pl");
   assert.ok((await page.locator("meta[name='description']").getAttribute("content")).includes("Niezależny"));
   assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
+  await match(signInHelp.locator("summary"), "Pierwsze logowanie i reset hasła");
+  assert.equal(await signInHelp.locator("code").isVisible(), false);
   await page.goto(base + "/project/");
   await page.waitForURL("**/project/pl/");
   await theme(page, "dark", "#theme");
@@ -268,11 +320,13 @@ async function siteSize(page, base, width, height) {
 
 let browser;
 try {
-  const base = "http://127.0.0.1:" + await ready;
   browser = await chromium.launch({headless: true});
-  if (!onlySite) for (const [w, h] of sizes) await scenario(browser, "panel", w, h, (page) => panelSize(page, base, w, h));
-  if (!onlyPanel) for (const [w, h] of sizes) await scenario(browser, "site", w, h, (page) => siteSize(page, base, w, h));
+  if (!onlySite) await fixture((base) => scenario(browser, "first-login", 390, 844, (page) => firstLogin(page, base)));
+  await fixture(async (base) => {
+    if (!onlySite) for (const [w, h] of sizes) await scenario(browser, "panel", w, h, (page) => panelSize(page, base, w, h));
+    if (!onlyPanel) for (const [w, h] of sizes) await scenario(browser, "site", w, h, (page) => siteSize(page, base, w, h));
+  });
 } finally {
-  try { await browser?.close(); } finally { server.kill(); }
+  await browser?.close();
   await writeFile(join(output, onlySite ? "site-results.json" : onlyPanel ? "panel-results.json" : "results.json"), JSON.stringify(tested, null, 2));
 }

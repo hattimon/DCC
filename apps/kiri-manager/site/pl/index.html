@@ -55,8 +55,13 @@
       <div class="ways">
         <article><h3>Docker Compose</h3><p>Uruchom panel z nazwanym wolumenem i portem lokalnym. Na zgodnym hoście Linux dołącz konfigurację socketu.</p></article>
         <article><h3>Bezpośrednio w Kiri</h3><p>Użyj zgodnego CLI, wskazując kontekst Kiri. Montowanie socketu zależy od hosta.</p></article>
-        <article><h3>Sklep DCC</h3><p>Przygotowany wpis instaluje panel w Dockerze. Dostępność w sklepie zależy od zweryfikowanego wydania OCI.</p></article>
+        <article><h3>Sklep DCC</h3><p>DCC Kiri Manager znajdziesz w kategorii DCC. Po instalacji otwórz podany adres lokalny.</p></article>
       </div>
+      <details class="install-help" id="pierwsze-logowanie">
+        <summary>Pierwsze logowanie i reset hasła</summary>
+        <p>W lokalnym panelu bez skonfigurowanego konta zaloguj się danymi <code>admin / admin</code>. Te same dane startowe znajdziesz w logu uruchomienia. Ustaw własne hasło, aby wejść do panelu. W tym samym formularzu możesz zmienić nazwę użytkownika.</p>
+        <p>Aby ustawić lub zresetować hasło z terminala, rozwiń pomoc na ekranie logowania. <a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.pl.md#konfiguracja-i-reset-z-terminala">Instrukcja konfiguracji i resetu ↗</a></p>
+      </details>
       <div class="pitch platform">
         <div><h2>Platformy docelowe</h2><p>Linux amd64 i arm64, Windows/WSL2, macOS oraz Raspberry Pi OS. Uruchomienie panelu i łączność z Kiri mają osobne wymagania.</p><a href="https://runkiri.com/download/">Oficjalne pliki Kiri ↗</a></div>
         <div><h2>Bezpieczeństwo</h2><p>Lokalne sesje administratora, ochrona CSRF i lista zatwierdzonych socketów. Zamontowany socket zachowuje uprawnienia silnika. Poza hostem używaj HTTPS.</p><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/security.md">Dokumentacja ↗</a></div>
@@ -86,12 +91,12 @@
     </div></section>
     <section class="section divider"><div class="frame resource-grid">
       <article class="resource"><h2><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.pl.md">Dokumentacja ↗</a></h2><p>Instalacja, konfiguracja i diagnostyka.</p></article>
-      <article class="resource"><h2><a href="https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.0">Wydanie ↗</a></h2><p>Wydanie GitHub i obraz OCI.</p><a href="https://github.com/hattimon/DCC/pkgs/container/dcc-kiri-manager">GHCR ↗</a></article>
+      <article class="resource"><h2><a href="https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.1">Wydanie ↗</a></h2><p>Wydanie GitHub i obraz OCI.</p><a href="https://github.com/hattimon/DCC/pkgs/container/dcc-kiri-manager">GHCR ↗</a></article>
       <article class="resource"><h2><a href="https://github.com/hattimon/DCC/tree/main/apps/kiri-manager">Otwarty kod ↗</a></h2><p>Projekt DCC autorstwa hattimon na licencji MIT.</p></article>
       <article class="resource"><h2><a href="https://ko-fi.com/hattimon">Wsparcie na Ko-fi ↗</a></h2><p>Wesprzyj autora i projekty DCC.</p></article>
     </div></section>
   </main>
-  <footer class="frame foot"><a class="brand" href="https://github.com/hattimon/DCC"><img src="../assets/mark.svg" width="34" height="34" alt="">Ekosystem DCC</a><span>v0.1.0 · EKSPERYMENTALNA</span>
+  <footer class="frame foot"><a class="brand" href="https://github.com/hattimon/DCC"><img src="../assets/mark.svg" width="34" height="34" alt="">Ekosystem DCC</a><span>v0.1.1 · EKSPERYMENTALNA</span>
     <nav><a href="https://github.com/hattimon/DCC">GitHub</a><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.pl.md">Dokumentacja</a><a href="https://github.com/hattimon/DCC/blob/main/LICENSE">Licencja</a></nav>
   </footer>
   <dialog id="lightbox" aria-labelledby="shot-title">

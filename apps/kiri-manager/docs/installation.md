@@ -1,6 +1,6 @@
 # Installation
 
-The panel listens internally on 8796/tcp. The supplied mappings expose it on the host's loopback interface. It runs without Kiri and opens configuration after administrator sign-in. Official releases will be linked from GitHub and GHCR once approved.
+The panel listens internally on 8796/tcp. The supplied mappings expose it on the host's loopback interface. It runs without Kiri and opens configuration after administrator sign-in.
 
 ## Docker and the DCC Store
 
@@ -8,21 +8,43 @@ From the module directory on the intended Docker host:
 
 ```sh
 docker compose up -d
-docker compose exec panel python -m backend.admin
 ```
 
-Open http://127.0.0.1:8796/ on that host. To use a different host port, set `KIRI_PANEL_HOST_PORT` before Compose. Authorize a local password of at least 14 characters. For a CLI install of the approved release:
+Open http://127.0.0.1:8796/ on that host. To use a different host port, set `KIRI_PANEL_HOST_PORT` before Compose. In the Store, choose **DCC → DCC Kiri Manager** and use the local address shown after installation. The **Website** button opens the project site.
+
+### First sign-in
+
+When the volume has no administrator, sign in locally with username `admin` and password `admin`. The startup logs show those temporary credentials. Before entering the panel, choose a password of 14–128 characters and optionally change the username. Upgrading an existing volume preserves configured credentials and settings.
+
+### Install from the command line
 
 ```sh
 docker run -d --name dcc-kiri-manager --restart unless-stopped \
   -p 127.0.0.1:8796:8796 --volume dcc_kiri_manager_data:/data \
   --read-only --tmpfs /tmp:size=8m,mode=1777 --cap-drop ALL \
   --security-opt no-new-privileges:true --memory 192m --pids-limit 40 \
-  ghcr.io/hattimon/dcc-kiri-manager:0.1.0
-docker exec -it dcc-kiri-manager python -m backend.admin
+  ghcr.io/hattimon/dcc-kiri-manager:0.1.1
 ```
 
-After the public Store entry appears, choose **DCC → DCC Kiri Manager** and review the loopback port in the installation preview. The Store's **Website** button points to the project site. Open the published loopback address on the Docker host for the installed panel. Run the same administrator command on that host using the actual container name. The default install has a data volume and no approved engine endpoint.
+## Terminal setup and password reset
+
+Expand the help on the sign-in screen to see commands for the host. For a reset, run the command for your runtime using the actual panel container name.
+
+```sh
+# Docker
+docker exec -it dcc-kiri-manager python -m backend.admin --reset
+
+# Kiri with the kiri context
+docker --context kiri exec -it dcc-kiri-manager python -m backend.admin --reset
+
+# Kiri on native Linux
+docker --host unix:///run/kiri/docker.sock exec -it dcc-kiri-manager python -m backend.admin --reset
+
+# Native Python, from the panel directory with the same KIRI_PANEL_DATA
+python -m backend.admin --reset
+```
+
+Enter and confirm the new password in the terminal. Resetting revokes active sessions and preserves the username, profiles and settings. Add `--username operator` to change the username. For first-time terminal setup, use `python -m backend.admin` as the command in the container or directly from the native Python environment. Provision the account before exposing the panel through a configured HTTPS reverse proxy.
 
 ## Linux, Ubuntu or Debian
 
@@ -73,8 +95,7 @@ docker --host "unix://$socket" run -d --name dcc-kiri-manager \
   --group-add "$gid" -e 'KIRI_SOCKETS={"local":"/run/dcc-kiri/engine.sock"}' \
   --cap-drop ALL --security-opt no-new-privileges:true --read-only \
   --tmpfs /tmp:size=8m,mode=1777 --restart unless-stopped \
-  ghcr.io/hattimon/dcc-kiri-manager:0.1.0
-docker --host "unix://$socket" exec -it dcc-kiri-manager python -m backend.admin
+  ghcr.io/hattimon/dcc-kiri-manager:0.1.1
 ```
 
 The integration run confirmed the socket mount, loopback port, non-root startup and retained configuration after a panel restart on both architectures. It loaded the image from the verified archive on each runner. [Integration results](verification.md#integracja-na-github-actions).
@@ -87,14 +108,14 @@ Use Raspberry Pi OS **64-bit** and the arm64 image. Verify the board's kernel, s
 
 Install through [Kiri's Windows setup](https://docs.runkiri.com/windows/). Choose Kiri Linux for a dedicated WSL distribution or Ubuntu if you plan to inspect the daemon from a standard Linux shell. Use localhost for a loopback panel. Verify Windows CLI with `docker --context kiri version` before any run command. The official native named pipe is `npipe:////./pipe/kiri`.
 
-- **Docker Desktop running the panel** can use the default Docker installation in configuration mode. Its Linux container does not see a Windows named pipe or another WSL distribution's socket. OCI connectivity for that arrangement is unsupported in 0.1.0.
+- **Docker Desktop running the panel** can use the default Docker installation in configuration mode. Connecting through the Windows named pipe or a socket in another WSL distribution is outside the OCI connector's supported paths.
 - **Kiri running the panel directly** uses `docker --context kiri` with the loopback port, named volume and security options shown in the CLI command above. Connection requires access to `/var/lib/kiri-daemon/.kiri/run/docker.sock` inside Kiri's own WSL installation. Treat socket permissions and mount visibility as **NOT VERIFIED**. Inspect them on a test installation before applying the Linux bind configuration. Use admin credentials from that same engine.
 
 ## macOS Intel and Apple Silicon
 
 Install Kiri on macOS 14 or later with the official Intel or ARM64 package. macOS applications can use `$HOME/.kiri/run/docker.sock` after Kiri starts. Both a Docker Desktop panel and a Kiri-hosted Linux panel can use the respective CLI to run in configuration mode. They have a separate guest kernel. A native host Unix socket is not an OCI connection method across that boundary in this version. [Official macOS installation](https://docs.runkiri.com/install/) · [Kiri architecture](https://docs.runkiri.com/how-it-works/).
 
-An **experimental native Python** variant keeps the process and socket on macOS. Use Python 3.12, install the module's requirements in a virtual environment and start `python -m backend.admin` followed by `python -m backend`. Set `KIRI_SOCKETS` to a JSON mapping with an absolute canonical path to the dedicated socket, for example `{"mac":"/Users/alex/.kiri/run/docker.sock"}`. The default listener is loopback. This variant is separate from the OCI release.
+An **experimental native Python** variant keeps the process and socket on macOS. Use Python 3.12, install the module's requirements in a virtual environment and start `python -m backend`. Set `KIRI_SOCKETS` to a JSON mapping with an absolute canonical path to the dedicated socket, for example `{"mac":"/Users/alex/.kiri/run/docker.sock"}`. Open the local address to set up the administrator.
 
 ## Diagnose, update, remove
 

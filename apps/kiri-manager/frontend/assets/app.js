@@ -56,27 +56,58 @@ function notify(message) {
   state.toast = setTimeout(() => { $("toast").textContent = ""; }, 4300);
 }
 
+function terminalHelp(adminReady) {
+  const option = adminReady ? " --reset" : "";
+  return `<details class="auth-help">
+    <summary>${esc(t(adminReady ? "resetInTerminal" : "setupInTerminal"))}</summary>
+    <p>${esc(t("terminalHelp"))}</p>
+    <pre class="compact">Docker
+docker exec -it dcc-kiri-manager python -m backend.admin${option}
+
+Kiri
+docker --context kiri exec -it dcc-kiri-manager python -m backend.admin${option}
+
+Kiri (Linux)
+docker --host unix:///run/kiri/docker.sock exec -it dcc-kiri-manager python -m backend.admin${option}
+
+Python
+python -m backend.admin${option}</pre>
+    <p>${esc(t("terminalUsername"))} <code>--username operator</code>.</p>
+    ${adminReady ? `<p>${esc(t("terminalResetResult"))}</p>` : ""}
+    </details>`;
+}
+
+function credentialsForm(firstLogin, setup) {
+  const passwordHint = setup ? `<small id="password-hint">${esc(t("passwordLength"))}</small>` : "";
+  return `<form id="${setup ? "setup-form" : "login-form"}" class="stack">
+    <label>${esc(t("account"))}<input name="username" autocomplete="username" maxlength="64"${firstLogin ? ' value="admin"' : ""} required></label>
+    <label>${esc(t(setup ? "newPassword" : "password"))}
+      <input name="password" type="password" autocomplete="${setup ? "new-password" : "current-password"}"
+      maxlength="128" ${setup ? 'minlength="14" aria-describedby="password-hint"' : ""} required>${passwordHint}</label>
+    ${setup ? `<label>${esc(t("confirmPassword"))}<input name="confirmation" type="password"
+      autocomplete="new-password" minlength="14" maxlength="128" required></label>` : ""}
+    <div><button class="primary" type="submit">${esc(t(setup ? "saveAccount" : "signIn"))}${icon("arrow")}</button></div>
+    </form>`;
+}
+
 function showAuth(error) {
   $("boot").hidden = true;
   $("workspace").hidden = true;
   $("auth").hidden = false;
   const adminReady = state.auth?.admin_ready;
+  const firstLogin = state.auth?.setup_available;
+  const setup = state.auth?.setup_pending;
+  const heading = setup ? "secureAccount" : firstLogin ? "firstLogin" : adminReady ? "signIn" : state.auth ? "firstAdmin" : "offline";
+  const hint = setup ? "secureAccountHint" : firstLogin ? "firstLoginHint" : "firstAdminText";
   $("auth").innerHTML = `<main class="auth-layout" id="auth-main" tabindex="-1"><section class="auth-card card pad stack">
     <div class="brand"><img src="/assets/mark.svg" alt="" width="34" height="34"> DCC Kiri Manager</div>
     <div class="actions">${quickControls()}</div>
-    <h1>${esc(t(adminReady ? "signIn" : state.auth ? "firstAdmin" : "offline"))}</h1>
-    ${adminReady ? `<p>${esc(t("anonymous"))}</p><form id="login-form" class="stack">
-      <label>${esc(t("account"))}<input name="username" autocomplete="username" maxlength="64" value="admin" required></label>
-      <label>${esc(t("password"))}<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
-      <div><button class="primary" type="submit">${esc(t("signIn"))}${icon("arrow")}</button></div></form>` :
-      state.auth ? `<p>${esc(t("firstAdminText"))}</p><pre class="compact">Docker
-docker exec -it dcc-kiri-manager python -m backend.admin
-
-Kiri
-docker --context kiri exec -it dcc-kiri-manager python -m backend.admin</pre>
-      <div>${elButton(t("reload"), "bootstrap", {symbol: "refresh"})}</div>` :
-      `<div>${elButton(t("retry"), "bootstrap", {symbol: "refresh"})}</div>`}
+    <h1>${esc(t(heading))}</h1>
+    ${state.auth && !adminReady ? `<p>${esc(t(hint))}</p>` : ""}
+    ${adminReady || firstLogin ? credentialsForm(firstLogin, setup) :
+      `<div>${elButton(t(state.auth ? "reload" : "retry"), "bootstrap", {symbol: "refresh"})}</div>`}
     <p class="error" id="login-error" role="alert" ${error ? "" : "hidden"}>${error ? esc(problem(error)) : ""}</p>
+    ${state.auth ? terminalHelp(adminReady) : ""}
     </section></main>`;
 }
 
@@ -421,9 +452,15 @@ async function openDetail(spec) {
 }
 
 async function submit(form) {
-  if (form.id === "login-form") {
+  if (form.id === "login-form" || form.id === "setup-form") {
     const preferred = {language, theme: document.documentElement.dataset.theme};
-    applySession(await api("/api/login", {method: "POST", data: newProfileBody(form)}));
+    const endpoint = form.id === "setup-form" ? "/api/setup" : "/api/login";
+    applySession(await api(endpoint, {method: "POST", data: newProfileBody(form)}));
+    if (!state.auth.authenticated) {
+      showAuth(state.auth.setup_pending ? undefined : "setup_complete");
+      $("auth-main").focus();
+      return;
+    }
     if (!state.preferences.onboarded && Object.entries(preferred).some(([key, value]) => state.preferences[key] !== value)) {
       await updatePreferences(preferred);
     }
@@ -577,7 +614,10 @@ document.addEventListener("submit", async (event) => {
   if (button) button.disabled = true;
   try { await submit(form); }
   catch (error) {
-    if (form.id === "login-form" && $("login-error")) {
+    if (error.code === "setup_expired" || error.code === "setup_complete") {
+      await bootstrap(error.code);
+      $("auth-main")?.focus();
+    } else if ((form.id === "login-form" || form.id === "setup-form") && $("login-error")) {
       $("login-error").hidden = false;
       $("login-error").textContent = problem(error.code);
     } else notify(problem(error.code));

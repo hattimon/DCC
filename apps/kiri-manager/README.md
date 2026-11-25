@@ -1,10 +1,10 @@
-# DCC Kiri Manager 0.1.0
+# DCC Kiri Manager 0.1.1
 
 **Experimental**. An independent, read-only browser workspace for the Kiri engine, maintained in the Docker Control Center (DCC) repository. Kiri is developed by libracoder. References to Kiri and Docker identify the software used by the panel.
 
 ![DCC Kiri Manager dark overview with synthetic test data](site/assets/screenshots/dashboard-dark.webp)
 
-[Polski](README.pl.md) · [Project site after deployment](https://hattimon.github.io/DCC/kiri-manager/) · [GitHub release after approval](https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.0) · [GHCR package](https://github.com/hattimon/DCC/pkgs/container/dcc-kiri-manager) · [Support the author on Ko-fi](https://ko-fi.com/hattimon)
+[Polski](README.pl.md) · [Project site](https://hattimon.github.io/DCC/kiri-manager/) · [GitHub release](https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.1) · [GHCR package](https://github.com/hattimon/DCC/pkgs/container/dcc-kiri-manager) · [Support the author on Ko-fi](https://ko-fi.com/hattimon)
 
 ## What it does
 
@@ -15,7 +15,7 @@
 
 ## Install and connect
 
-After the image is published, run `docker compose up -d` from this directory for the Docker installation. Create the local administrator with `docker compose exec panel python -m backend.admin` and open [the loopback panel](http://127.0.0.1:8796). The image uses `dcc_kiri_manager_data` and defines its own healthcheck. Install from the DCC Store once the catalog entry appears. The Website action opens the project site. Use the loopback address on the Docker host for the installed panel.
+Install from the DCC Store under **DCC**, or run `docker compose up -d` from this directory. Open the panel on the Docker host. If no administrator has been configured, enter `admin` as the username and password. Choose a new password and optionally change the username before entering the panel. Expand the terminal help on the sign-in screen for account setup or recovery. [Local panel](http://127.0.0.1:8796) · [Installation and reset instructions](docs/installation.md).
 
 The wizard offers the platform-specific official Kiri installer. The Debian/Ubuntu helper verifies the architecture-specific upstream package before installing and starting Kiri after host approval. For a directly mounted socket, the administrator attaches the dedicated Kiri socket and selects its configured alias in the wizard.
 

@@ -1,6 +1,6 @@
 services:
   panel:
-    image: ghcr.io/hattimon/dcc-kiri-manager:0.1.0
+    image: ghcr.io/hattimon/dcc-kiri-manager:0.1.1
     container_name: dcc-kiri-manager
     ports:
       - "127.0.0.1:${KIRI_PANEL_HOST_PORT:-8796}:8796"
