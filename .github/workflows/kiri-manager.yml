@@ -143,7 +143,11 @@ jobs:
 
   live_kiri:
     name: Kiri 0.2.2 integration · ${{ matrix.arch }}
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'hattimon/DCC' && (inputs.live || inputs.publish)
+    if: >-
+      github.repository == 'hattimon/DCC' &&
+      ((github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+       (github.event_name == 'workflow_dispatch' && (inputs.live || inputs.publish)))
     needs: [build, smoke]
     strategy:
       fail-fast: false
