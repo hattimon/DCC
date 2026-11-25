@@ -15,6 +15,7 @@ from pathlib import Path
 KIRI_PIPE = "npipe:////./pipe/kiri"
 KIRI_MANAGER_NAME = "dcc-kiri-manager"
 KIRI_MANAGER_VOLUME = "dcc_kiri_manager_data"
+KIRI_MANAGER_INSTALL_IMAGE = "ghcr.io/hattimon/dcc-kiri-manager:0.1.2"
 KIRI_MANAGER_IMAGE = re.compile(r"ghcr\.io/hattimon/dcc-kiri-manager:[0-9]+\.[0-9]+\.[0-9]+")
 KIRI_CONTAINER_SOCKET = "/run/dcc-kiri/engine.sock"
 # The documented Kiri Windows WSL daemon socket. This is a candidate bind

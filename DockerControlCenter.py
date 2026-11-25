@@ -19,7 +19,7 @@ import uuid
 import webbrowser
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from kiri_host import (KIRI_INSTALL_URL, KIRI_PIPE, KiriPanelInstallError,
+from kiri_host import (KIRI_INSTALL_URL, KIRI_MANAGER_INSTALL_IMAGE, KIRI_PIPE, KiriPanelInstallError,
                        install_panel_on_verified_kiri, is_manager_template,
                        probe_windows_kiri, store_action, verify_kiri_client)
 from dcc_catalog import DCC_CATEGORY, category_group, localized_categories, catalog_category_sort_key, catalog_application_key, catalog_image_is_older
@@ -7113,7 +7113,7 @@ class NewContainerDialog(QDialog):
             self._kiri_install_active = True
             self.update_store_description(template)
             thread = QThread(QApplication.instance())
-            worker = KiriStoreInstallWorker(self.client, template.image)
+            worker = KiriStoreInstallWorker(self.client)
             self._kiri_install_thread = thread
             self._kiri_install_worker = worker
             worker.moveToThread(thread)
@@ -8370,10 +8370,10 @@ class KiriStoreProbeWorker(QObject):
 class KiriStoreInstallWorker(QObject):
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, client, image: str):
+    def __init__(self, client):
         super().__init__()
         self.client = client
-        self.image = image
+        self.image = KIRI_MANAGER_INSTALL_IMAGE
 
     def run(self):
         try:

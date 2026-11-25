@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from kiri_host import (KIRI_CONTAINER_SOCKET, KIRI_MANAGER_NAME, KIRI_MANAGER_VOLUME,
+from kiri_host import (KIRI_CONTAINER_SOCKET, KIRI_MANAGER_INSTALL_IMAGE, KIRI_MANAGER_NAME, KIRI_MANAGER_VOLUME,
                        KIRI_PIPE, KIRI_RUNTIME_SOCKET, KiriPanelInstallError,
                        check_identity, install_panel_on_verified_kiri,
                        probe_windows_kiri, store_action, _pipe_failure, _panel_http_ready)
@@ -94,6 +94,10 @@ class FakeClient:
 
 
 class WindowsKiriTest(unittest.TestCase):
+    def test_store_install_image_matches_this_release(self):
+        version = (Path(__file__).resolve().parents[1] / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertEqual(KIRI_MANAGER_INSTALL_IMAGE, f"ghcr.io/hattimon/dcc-kiri-manager:{version}")
+
     def test_engine_identity_is_not_a_context_name(self):
         self.assertEqual(check_identity(ENGINE, VERSION), "0.2.2")
         self.assertIsNone(check_identity("Docker/27.5.1", VERSION))

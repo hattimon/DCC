@@ -67,7 +67,8 @@ class KiriStoreQtTest(unittest.TestCase):
                 dialog.close()
 
     def test_install_worker_reports_safe_failure_and_success(self):
-        worker = dcc.KiriStoreInstallWorker(object(), "image:fixture")
+        worker = dcc.KiriStoreInstallWorker(object())
+        self.assertEqual(worker.image, dcc.KIRI_MANAGER_INSTALL_IMAGE)
         events = []
         worker.finished.connect(lambda success, detail: events.append((success, detail)))
         with patch.object(dcc, "install_panel_on_verified_kiri", side_effect=dcc.KiriPanelInstallError("socket_preflight_failed")):
