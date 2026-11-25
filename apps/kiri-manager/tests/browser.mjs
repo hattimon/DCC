@@ -59,6 +59,8 @@ async function wizard(page, saveShots = false) {
   await match(page.getByRole("heading", {name: "Welcome to DCC Kiri Manager"}));
   await page.getByRole("button", {name: "Next"}).click();
   await page.getByRole("button", {name: "Next"}).click();
+  await match(page.getByText("bash setup-kiri-linux.sh --plan --grant-panel-access", {exact: true}));
+  await match(page.getByText("bash setup-kiri-linux.sh --apply --grant-panel-access", {exact: true}));
   await page.getByLabel("Profile name").fill("Workshop · Local Kiri");
   await page.getByLabel("Socket alias").selectOption("test-engine");
   await page.getByText("How does socket access work?").click();

@@ -28,7 +28,7 @@ Ten sam obraz przygotowano do uruchomienia przez zgodne CLI Kiri. [Instrukcja in
 - [API panelu](docs/api.md)
 - [Bezpieczeństwo](docs/security.md)
 - [Procedura wydania](docs/release.md)
-- [Lokalna weryfikacja](docs/verification.md)
+- [Weryfikacja lokalna i w GitHub Actions](docs/verification.md)
 
 Aby zaktualizować panel, pobierz zatwierdzoną wersję i odtwórz jego kontener z dotychczasowym wolumenem. Przed aktualizacją zrób kopię danych panelu. `docker compose down` usuwa kontener panelu z zachowaniem wolumenu. Instrukcja opisuje również cofnięcie wersji i instalację przez CLI.
 

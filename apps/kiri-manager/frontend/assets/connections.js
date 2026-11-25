@@ -20,6 +20,8 @@ function setupHelp(host, runtime) {
   const standard = `https://docs.runkiri.com/${hosts[host] ?? "install"}/`;
   const hint = {linux: "installLinux", wsl: "installWsl", macos: "installMacos"}[host] ?? "installLinux";
   const docs = `https://github.com/hattimon/DCC/blob/kiri-manager-v0.1.0/apps/kiri-manager/docs/installation${language === "pl" ? ".pl" : ""}.md`;
+  const grantAccess = host === "linux" && runtime !== "native";
+  const accessOption = grantAccess ? " --grant-panel-access" : "";
   return `<section class="card pad stack-sm notice">
     <h2 class="section-title">${icon("connections")}${esc(t("installKiri"))}</h2>
     ${badge(t("notVerified"), "warn")}<p>${esc(t(hint))}</p>
@@ -28,7 +30,9 @@ function setupHelp(host, runtime) {
     <div class="actions"><a class="button" target="_blank" rel="noopener noreferrer" href="${standard}">${esc(t("upstream"))}</a>
     ${host === "linux" ? `<a class="button" download href="/api/install/linux">${esc(t("linuxHelper"))}</a>` : ""}
     <a target="_blank" rel="noopener noreferrer" href="${docs}">${esc(t("installGuide"))}</a></div>
-    ${host === "linux" ? `<p><code>bash setup-kiri-linux.sh --apply</code></p>` : ""}
+    ${host === "linux" ? `<p><code>bash setup-kiri-linux.sh --plan${accessOption}</code></p>
+    ${grantAccess ? `<p>${esc(t("linuxPanelAccess"))}</p>` : ""}
+    <p><code>bash setup-kiri-linux.sh --apply${accessOption}</code></p>` : ""}
   </section>`;
 }
 

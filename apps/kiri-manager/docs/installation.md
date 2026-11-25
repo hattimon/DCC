@@ -59,9 +59,9 @@ docker compose -f compose.yaml -f compose.kiri-socket.yaml up -d
 
 Choose alias `local` in the wizard. The overlay attaches one socket file and the corresponding supplementary group. Avoid permissive socket modes, privileged containers and aliases that point at Docker. A file bind can retain the old inode when the engine recreates its socket. Recheck Kiri, then recreate only the panel while retaining the data volume. For a Store-installed panel, have the administrator recreate that panel only using its existing data volume and the reviewed socket options, or use a separately approved same-host native panel. The browser cannot change a running container's mounts.
 
-### Panel directly on Kiri (NOT VERIFIED)
+### Panel directly on Kiri
 
-After candidate checks in [compatibility](compatibility.md), use the compatible CLI with the explicit Kiri endpoint. Docker Engine isn't required. This example uses the official Linux socket and requires an authorized client.
+Use the Docker-compatible CLI with the explicit Kiri endpoint. This example uses the official Linux socket and requires an authorized client. The runtime settings passed integration with Kiri Lite 0.2.2 on Ubuntu 24.04.5 LTS for amd64 and arm64. [Compatibility](compatibility.md).
 
 ```sh
 socket=/run/kiri/docker.sock
@@ -77,7 +77,7 @@ docker --host "unix://$socket" run -d --name dcc-kiri-manager \
 docker --host "unix://$socket" exec -it dcc-kiri-manager python -m backend.admin
 ```
 
-Kiri documents the restart policy, volume and port inputs. The panel's socket mount, named-volume permissions, health and restart behavior require live Kiri testing on each architecture. If it cannot run with these minimum permissions, stop and review the diagnostic evidence. [Kiri Docker compatibility](https://docs.runkiri.com/features/).
+The integration run confirmed the socket mount, loopback port, non-root startup and retained configuration after a panel restart on both architectures. It loaded the image from the verified archive on each runner. [Integration results](verification.md#integracja-na-github-actions).
 
 ### Raspberry Pi 4/5
 

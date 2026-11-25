@@ -28,7 +28,7 @@ The same image is prepared for direct use with Kiri’s Docker-compatible CLI. C
 - [HTTP API](docs/api.md)
 - [Security](docs/security.md)
 - [Release procedure](docs/release.md)
-- [Local validation](docs/verification.md)
+- [Local and GitHub Actions verification](docs/verification.md)
 
 Update by pulling an approved version and recreating only the panel using its existing volume. Back up the panel’s data before upgrading. To remove the panel, run `docker compose down` without volume removal. See the installation guide for rollback and standalone CLI installs.
 

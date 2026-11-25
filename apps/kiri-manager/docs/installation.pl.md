@@ -55,9 +55,9 @@ docker compose -f compose.yaml -f compose.kiri-socket.yaml up -d
 
 Wybierz alias `local` i przetestuj połączenie w kreatorze. Montowanie zachowuje uprawnienia API silnika. Jeżeli panel zainstalowano ze Sklepu DCC, operator może odtworzyć wyłącznie ten panel z tym samym wolumenem i zweryfikowanymi opcjami socketu. Zmiana montowania wymaga odtworzenia kontenera. Po wymianie pliku socketu przez Kiri sprawdź usługę i w razie potrzeby odtwórz sam panel.
 
-### Bezpośrednio w Kiri (NOT VERIFIED)
+### Bezpośrednio w Kiri
 
-Użyj zgodnego CLI i wskaż dedykowany endpoint. Poniższy wariant dotyczy natywnego Linuxa:
+Użyj CLI zgodnego z Dockerem i wskaż dedykowany socket Kiri. Ustawienia panelu przeszły testy z Kiri Lite 0.2.2 na Ubuntu 24.04.5 LTS na amd64 i arm64. [Wyniki integracji](verification.md#integracja-na-github-actions).
 
 ```sh
 socket=/run/kiri/docker.sock

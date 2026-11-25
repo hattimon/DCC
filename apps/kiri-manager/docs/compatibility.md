@@ -4,14 +4,16 @@ Panel version 0.1.0. Audited upstream Kiri 0.2.2. **SUPPORTED** requires a compl
 
 Local OCI builds covered `linux/amd64` and `linux/arm64`. A Windows/amd64 operator confirmed that the native Docker CLI connected to Kiri 0.2.2 in context `kiri`, negotiated API 1.47 (server range 1.24–1.47) and saw Kiri's Linux/amd64 engine. That CLI observation is separate from the panel's own socket, API reads and OCI checks.
 
+The supported rows cover panel 0.1.0 with Kiri Lite 0.2.2 on Ubuntu 24.04.5 LTS. The GitHub runners used a dedicated Unix socket and mapped the panel's UID 10001 directly to an authorized host account. [Integration results](verification.md#integracja-na-github-actions).
+
 | System | Arch | Panel runtime | Upstream Kiri | Connection | Status |
 | --- | --- | --- | --- | --- | --- |
 | Windows 10/11 | amd64 | Docker Desktop | Official WSL2 installer | Windows pipe and cross-WSL/VM socket | UNSUPPORTED |
 | Windows 10/11 | amd64 | Kiri / WSL2 | Official WSL2 installer | Same-distribution Unix mount only | NOT VERIFIED |
-| Ubuntu | amd64 | Docker | Official package | Dedicated same-host socket | NOT VERIFIED |
-| Ubuntu | amd64 | Kiri | Official package | Dedicated same-host socket | NOT VERIFIED |
-| Ubuntu | arm64 | Docker | Official package | Dedicated same-host socket | NOT VERIFIED |
-| Ubuntu | arm64 | Kiri | Official package | Dedicated same-host socket | NOT VERIFIED |
+| Ubuntu 24.04.5 LTS | amd64 | Docker | Kiri Lite 0.2.2 | Dedicated same-host socket | SUPPORTED |
+| Ubuntu 24.04.5 LTS | amd64 | Kiri | Kiri Lite 0.2.2 | Dedicated same-host socket | SUPPORTED |
+| Ubuntu 24.04.5 LTS | arm64 | Docker | Kiri Lite 0.2.2 | Dedicated same-host socket | SUPPORTED |
+| Ubuntu 24.04.5 LTS | arm64 | Kiri | Kiri Lite 0.2.2 | Dedicated same-host socket | SUPPORTED |
 | Debian | amd64 | Docker | Official package | Dedicated same-host socket | NOT VERIFIED |
 | Debian | amd64 | Kiri | Official package | Dedicated same-host socket | NOT VERIFIED |
 | Debian | arm64 | Docker | Official package | Dedicated same-host socket | NOT VERIFIED |
