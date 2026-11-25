@@ -48,7 +48,9 @@ class AppTest(unittest.TestCase):
         self.assertIn("admin / admin", startup.output[0])
         with blank.get("/") as page:
             self.assertEqual(page.status_code, 200)
-        self.assertEqual(blank.get("/healthz").json, {"status": "ok"})
+        health = blank.get("/healthz")
+        self.assertEqual(health.json, {"status": "ok"})
+        self.assertEqual(health.headers["X-DCC-Panel"], "kiri-manager")
         self.assertFalse(blank.get("/api/session").json["admin_ready"])
         self.assertEqual(blank.get("/api/install/linux").status_code, 401)
 
@@ -193,6 +195,51 @@ class AppTest(unittest.TestCase):
         for alias in ("https://example.invalid/anything", "/var/run/docker.sock", "../kiri", "159.0.2.1"):
             response = self.change("/api/profiles/test", {"name": "invalid", "host": "linux", "runtime": "native", "endpoint": alias})
             self.assertEqual(response.json, {"error": "endpoint_disabled"})
+
+    def test_automatic_discovery_auth_csrf_and_idempotent_connect(self):
+        self.assertEqual(self.web.get("/api/discovery").status_code, 401)
+        self.assertEqual(self.change("/api/discovery/connect").status_code, 401)
+        self.login()
+        detected = self.web.get("/api/discovery")
+        self.assertEqual(detected.status_code, 200)
+        self.assertEqual(detected.json["status"], "ready")
+        self.assertEqual(detected.json["endpoint"], "local")
+        self.assertEqual(detected.json["engine"]["version"], "0.2.2")
+        bad_csrf = self.web.post("/api/discovery/connect", json={},
+                                 headers={"X-CSRF-Token": "invalid", "Origin": "http://localhost"})
+        self.assertEqual(bad_csrf.status_code, 403)
+        self.assertEqual(self.change("/api/discovery/connect", {"endpoint": "docker"}).status_code, 400)
+        connected = self.change("/api/discovery/connect")
+        self.assertEqual(connected.status_code, 200)
+        self.assertEqual(connected.json["engine"]["version"], "0.2.2")
+        first = connected.json["profile"]
+        self.assertEqual(self.change("/api/discovery/connect").json["profile"], first)
+        saved = Storage(self.config.data_dir)
+        self.assertEqual(len(saved.profiles()), 1)
+        self.assertEqual(saved.profiles()[0]["endpoint"], "local")
+        self.assertEqual(saved.preferences()["active"], first)
+        self.assertTrue(saved.preferences()["onboarded"])
+
+    def test_automatic_discovery_preserves_user_profile_and_denies_bad_engine(self):
+        self.login()
+        own = self.profile("local", "My verified Kiri")
+        other = self.profile("offline", "My saved offline profile")
+        self.assertEqual(self.change(f"/api/profiles/{other['id']}/active", method="PUT").status_code, 200)
+        response = self.change("/api/discovery/connect")
+        self.assertEqual(response.json["profile"], own["id"])
+        stored = Storage(self.config.data_dir)
+        self.assertEqual(len(stored.profiles()), 2)
+        self.assertEqual(stored.profile(own["id"])["name"], "My verified Kiri")
+        self.assertEqual(stored.preferences()["active"], own["id"])
+        self.connector.sockets = {"docker": "docker", "offline": "offline"}
+        found = self.web.get("/api/discovery").json
+        self.assertEqual(found, {"status": "blocked", "reason": "bad_engine"})
+        self.assertEqual(self.change("/api/discovery/connect").status_code, 409)
+        self.assertEqual(len(Storage(self.config.data_dir).profiles()), 2)
+        self.connector.sockets.clear()
+        self.assertEqual(self.web.get("/api/discovery").json,
+                         {"status": "unconfigured", "reason": "transport_not_configured"})
+        self.assertEqual(self.change("/api/discovery/connect").json["error"], "transport_not_configured")
 
     def test_wrong_engine_offline_permissions_and_partial(self):
         self.login()

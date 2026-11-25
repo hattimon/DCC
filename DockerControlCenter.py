@@ -19,6 +19,9 @@ import uuid
 import webbrowser
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from kiri_host import (KIRI_INSTALL_URL, KIRI_MANAGER_INSTALL_IMAGE, KIRI_PIPE, KiriPanelInstallError,
+                       install_panel_on_verified_kiri, is_manager_template,
+                       probe_windows_kiri, store_action, verify_kiri_client)
 from dcc_catalog import DCC_CATEGORY, category_group, localized_categories, catalog_category_sort_key, catalog_application_key, catalog_image_is_older
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
@@ -2347,10 +2350,13 @@ def save_cached_deployment_catalog(items: List[ImageTemplate]) -> None:
 
 def store_catalog(base, external):
     # A fetched/cached official catalog owns membership, including removals.
+    # Keep the bundled Kiri onboarding card available during a stale cache:
+    # it is needed to detect/connect Kiri even when the online Store is old.
     official = normalize_deployment_repository_source(DEFAULT_DEPLOYMENT_REPOSITORY)
     if any(normalize_deployment_repository_source(item.repository_source) == official for item in external):
         keys = {catalog_application_key(item.name, item.image, item.default_name) for item in external}
-        base = [item for item in base if catalog_application_key(item.name, item.image, item.default_name) in keys]
+        base = [item for item in base if is_manager_template(item)
+                or catalog_application_key(item.name, item.image, item.default_name) in keys]
     return merge_catalog_lists(base, external)
 
 
@@ -5443,6 +5449,14 @@ class NewContainerDialog(QDialog):
     def __init__(self, client, texts: Dict[str, str], run_command_callback=None, parent=None, initial_args: Optional[List[str]] = None, edit_mode: bool = False, existing_name: str = "", llm_settings_getter=None, ai_command_callback=None, build_image_callback=None, lang: str = "EN", cli_command: str = "docker", cli_choices: Optional[List[str]] = None, remote_arch: str = "", target_host_label: str = ""):
         super().__init__(parent)
         self.client = client
+        self._kiri_probe_time = 0.0
+        self._kiri_probe_result = None
+        self._kiri_probe_thread = None
+        self._kiri_probe_worker = None
+        self._kiri_install_thread = None
+        self._kiri_install_worker = None
+        self._kiri_install_active = False
+        self._kiri_store_action = "help"
         self.texts = texts
         self.run_command_callback = run_command_callback
         self.base_catalog = merge_catalog_lists(default_image_catalog(), load_bundled_deployment_catalog())
@@ -6690,8 +6704,118 @@ class NewContainerDialog(QDialog):
         self.btn_quick_deploy.setText(
             self.texts["wizard_apply"] if self.edit_mode else self.texts["wizard_quick_deploy"]
         )
-        self.btn_quick_deploy.setEnabled(True)
+        self.btn_quick_deploy.setEnabled(self.client is not None)
         self.update_store_description(template)
+        if is_manager_template(template) and not self.edit_mode:
+            self.btn_quick_deploy.setText(self.btn_store_primary.text())
+            self.btn_quick_deploy.setEnabled(self.btn_store_primary.isEnabled())
+
+    def kiri_store_probe(self):
+        if self._kiri_probe_result is not None and time.monotonic() - self._kiri_probe_time <= 8:
+            return self._kiri_probe_result
+        if self._kiri_probe_thread is None:
+            self._kiri_probe_result = None
+            # Use the app as parent so closing the Store does not delete a live thread.
+            thread = QThread(QApplication.instance())
+            worker = KiriStoreProbeWorker()
+            self._kiri_probe_thread = thread
+            self._kiri_probe_worker = worker
+            worker.moveToThread(thread)
+            thread.started.connect(worker.run)
+            worker.finished.connect(self.on_kiri_probe_finished)
+            worker.finished.connect(thread.quit)
+            worker.finished.connect(worker.deleteLater)
+            thread.finished.connect(self.on_kiri_probe_thread_finished)
+            thread.finished.connect(thread.deleteLater)
+            thread.start()
+        return None
+
+    def on_kiri_probe_finished(self, result):
+        self._kiri_probe_result = result
+        self._kiri_probe_time = time.monotonic()
+        selected = self.selected_catalog_template()
+        if is_manager_template(selected) and not self.edit_mode:
+            self.update_store_card(selected)
+
+    def on_kiri_probe_thread_finished(self):
+        self._kiri_probe_thread = None
+        self._kiri_probe_worker = None
+
+    def on_kiri_install_finished(self, success: bool, detail: str):
+        self._kiri_install_active = False
+        if success:
+            QMessageBox.information(self, self.texts["msg_info"], self.kiri_store_copy("done"))
+            self.accept()
+            return
+        code = detail if detail in {"socket_preflight_failed", "panel_not_reachable", "already_installed", "invalid_image"} else "engine_or_transport_error"
+        QMessageBox.warning(self, self.texts["msg_error"], self.kiri_store_copy(code))
+        selected = self.selected_catalog_template()
+        if selected is not None:
+            self.update_store_card(selected)
+
+    def on_kiri_install_thread_finished(self):
+        self._kiri_install_thread = None
+        self._kiri_install_worker = None
+
+    def reject(self):
+        if self._kiri_install_active:
+            return
+        super().reject()
+
+    def closeEvent(self, event):
+        if self._kiri_install_active:
+            event.ignore()
+            return
+        super().closeEvent(event)
+
+    def kiri_store_connected(self):
+        host = self.parent()
+        profile = getattr(host, "active_remote_profile", None)
+        return bool(getattr(host, "current_backend", "") == "remote"
+                    and profile is not None and profile.resolved_base_url() == KIRI_PIPE)
+
+    def kiri_store_copy(self, key):
+        labels = {
+            "connect": ("Connect", "Połącz"),
+            "install_panel": ("Install panel", "Zainstaluj panel"),
+            "install_kiri": ("Install Kiri", "Zainstaluj Kiri"),
+            "help": ("Installation help", "Pomoc instalacji"),
+            "installed": ("Already installed", "Już zainstalowano"),
+            "checking": ("Checking Kiri engine…", "Sprawdzanie silnika Kiri…"),
+            "installing": ("Verifying container socket and installing the panel…", "Testowanie socketu kontenera i instalacja panelu…"),
+            "ready": ("Kiri {version} verified on the Windows pipe. DCC can connect directly.",
+                      "Zweryfikowano Kiri {version} na potoku Windows. DCC może połączyć się bezpośrednio."),
+            "missing": ("The Kiri Windows pipe was not found and no user installation was detected. Open the official installation guide.",
+                        "Brak potoku Kiri i instalacji w katalogu użytkownika. Otwórz oficjalną instrukcję instalacji."),
+            "stopped": ("Kiri's Windows pipe did not respond. Open Kiri from the Windows tray, select Start, then check again.",
+                        "Potok Kiri nie odpowiada. Otwórz Kiri w zasobniku Windows, wybierz Start i sprawdź ponownie."),
+            "blocked": ("Kiri's pipe access is denied. Ask the Windows administrator to grant access.",
+                        "Odmowa dostępu do potoku Kiri. Poproś administratora Windows o uprawnienia."),
+            "engine_unreachable": ("The Kiri endpoint could not be reached or tested. Open Kiri, check the engine status and try again.",
+                                   "Nie udało się połączyć z potokiem Kiri ani przetestować silnika. Otwórz Kiri, sprawdź stan silnika i ponów próbę."),
+            "identity_unverified": ("The endpoint responded, but its Kiri identity was not confirmed. Check the selected engine.",
+                                    "Endpoint odpowiada, lecz nie potwierdzono tożsamości Kiri. Sprawdź wybrany silnik."),
+            "unsupported": ("A verified Windows Kiri pipe is required; Docker Desktop cannot access it from its Linux container.",
+                            "Wymagany jest zweryfikowany potok Kiri na Windows; kontener Docker Desktop nie widzi go automatycznie."),
+            "panel": ("Panel installation requires confirmed Kiri socket access inside a Kiri container. An isolated preflight will verify it before deployment.",
+                      "Instalacja panelu wymaga dostępu do socketu wewnątrz kontenera Kiri. Test w izolacji sprawdzi to przed wdrożeniem."),
+            "existing": ("Existing DCC Kiri Manager on this engine is preserved; its data volume will not be modified.",
+                         "Istniejący DCC Kiri Manager pozostaje bez zmian, w tym jego wolumen danych."),
+            "consent": ("Allow the new panel to access the Kiri engine socket? This grants engine-level control. DCC will run a disposable socket preflight, then install the panel with the persistent dcc_kiri_manager_data volume only if verification succeeds. Existing installations will be preserved.",
+                        "Zezwolić nowemu panelowi na dostęp do socketu silnika Kiri? To daje uprawnienia do sterowania silnikiem. DCC uruchomi tymczasowy test socketu, a po sukcesie zainstaluje panel z wolumenem dcc_kiri_manager_data. Istniejące instalacje pozostaną bez zmian."),
+            "socket_preflight_failed": ("The Kiri socket is inaccessible inside the container as the panel user. No panel was installed. Check WSL socket permissions with the administrator.",
+                                        "Socket Kiri jest niedostępny wewnątrz kontenera dla użytkownika panelu. Panelu nie zainstalowano. Sprawdź uprawnienia WSL z administratorem."),
+            "panel_not_reachable": ("The new panel did not respond on Windows at 127.0.0.1:8796. The new container was removed without deleting its data volume. Check Kiri WSL port forwarding and whether this port is occupied, then retry.",
+                                    "Nowy panel nie odpowiedział w Windows pod 127.0.0.1:8796. Usunięto nowy kontener bez kasowania wolumenu danych. Sprawdź przekierowanie portu Kiri WSL i czy port jest zajęty, a potem ponów próbę."),
+            "already_installed": ("An existing Kiri Manager was detected; it has not been modified.",
+                                  "Wykryto istniejący Kiri Manager. Pozostawiono go bez zmian."),
+            "engine_or_transport_error": ("The engine, image pull or container socket preflight failed. No existing panel was changed. See Kiri status and logs.",
+                                          "Silnik, pobieranie obrazu lub test socketu nie powiodły się. Istniejący panel pozostał bez zmian. Sprawdź status i logi Kiri."),
+            "invalid_image": ("Unapproved panel image.", "Nieautoryzowany obraz panelu."),
+            "done": ("Panel installed on Kiri with a verified socket. Open http://127.0.0.1:8796 in your browser.",
+                     "Panel zainstalowano w Kiri ze sprawdzonym socketem. Otwórz http://127.0.0.1:8796 w przeglądarce."),
+        }
+        return labels[key][1 if self.lang == "PL" else 0]
 
     def update_manual_store_card(self):
         image = self.image_edit.text().strip()
@@ -6712,7 +6836,7 @@ class NewContainerDialog(QDialog):
         self.btn_quick_deploy.setText(
             self.texts["wizard_apply"] if self.edit_mode else self.texts["wizard_run"]
         )
-        self.btn_quick_deploy.setEnabled(True)
+        self.btn_quick_deploy.setEnabled(self.client is not None)
         self.update_store_description(None)
 
     def matching_installed_containers(self, template: Optional[ImageTemplate]) -> List[object]:
@@ -6861,6 +6985,45 @@ class NewContainerDialog(QDialog):
         self.btn_store_docs.setEnabled(bool(template.docs_url))
         self.btn_store_homepage.setEnabled(bool(template.homepage_url))
         installed = self.matching_installed_containers(template)
+        if is_manager_template(template) and not self.edit_mode:
+            if self._kiri_install_active:
+                self.store_install_state_label.setText(self.kiri_store_copy("installing"))
+                self.btn_store_primary.setText(self.kiri_store_copy("install_panel"))
+                self.btn_store_primary.setEnabled(False)
+                self.btn_quick_deploy.setEnabled(False)
+                return
+            probe = self.kiri_store_probe()
+            if probe is None:
+                self.store_install_state_label.setText(self.kiri_store_copy("checking"))
+                self.btn_store_primary.setText(self.kiri_store_copy("connect"))
+                self.btn_store_primary.setEnabled(False)
+                self.btn_quick_deploy.setEnabled(False)
+                return
+            connected = self.kiri_store_connected()
+            self._kiri_store_action = store_action(probe, connected=connected, installed=bool(installed))
+            status = probe.get("status", "unsupported")
+            if self._kiri_store_action in ("install_panel", "installed"):
+                notice = self.kiri_store_copy("existing" if installed else "panel")
+            elif status == "ready":
+                notice = self.kiri_store_copy("ready").format(version=probe.get("version", ""))
+            else:
+                reason = probe.get("reason", "")
+                notice = self.kiri_store_copy(
+                    reason if reason in {"engine_unreachable", "identity_unverified"}
+                    else status if status in ("missing", "stopped", "blocked") else "unsupported")
+            if installed and not connected:
+                notice += " " + self.kiri_store_copy("existing")
+            self.store_install_state_label.setText(notice)
+            self.btn_store_primary.setText(self.kiri_store_copy(self._kiri_store_action))
+            self.btn_store_primary.setEnabled(self._kiri_store_action != "installed")
+            self._fit_editor_tabs_height()
+            return
+        if self.client is None:
+            self.store_install_state_label.setText(self.texts["docker_not_available"])
+            self.btn_store_primary.setText(self.texts["wizard_store_install"])
+            self.btn_store_primary.setEnabled(False)
+            self._fit_editor_tabs_height()
+            return
         if installed:
             self.store_install_state_label.setText(self.texts["wizard_store_installed"] + f" · {len(installed)}")
             self.btn_store_primary.setText(self.texts["wizard_store_uninstall"])
@@ -6873,6 +7036,12 @@ class NewContainerDialog(QDialog):
     def on_store_primary_action(self):
         template = self.selected_catalog_template()
         if template is None:
+            return
+        if is_manager_template(template) and not self.edit_mode:
+            self.on_kiri_store_action(template)
+            return
+        if self.client is None:
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_not_available"])
             return
         installed = self.matching_installed_containers(template)
         if not installed:
@@ -6902,6 +7071,68 @@ class NewContainerDialog(QDialog):
         QMessageBox.information(self, self.texts["msg_info"], self.texts["wizard_store_uninstall_done"])
         if self.category_combo.currentText().strip() == self.texts["wizard_installed_category"]:
             self.filter_catalog()
+        else:
+            self.update_store_description(template)
+
+    def on_kiri_store_action(self, template):
+        probe = self.kiri_store_probe()
+        if probe is None or self._kiri_install_active:
+            self.update_store_description(template)
+            return
+        connected = self.kiri_store_connected()
+        installed = bool(self.matching_installed_containers(template))
+        action = store_action(probe, connected=connected, installed=installed)
+        if action == "connect":
+            parent = self.parent()
+            if parent is None or not hasattr(parent, "connect_remote_docker"):
+                QMessageBox.warning(self, self.texts["msg_error"], self.kiri_store_copy("unsupported"))
+                return
+            # Probe verified the dedicated pipe and actual inventory rights.
+            existing = next((p for p in parent.remote_profiles if p.resolved_base_url() == KIRI_PIPE), None)
+            if existing is None:
+                name = "Kiri (Windows)"
+                if any(p.name == name for p in parent.remote_profiles):
+                    name = "Kiri (Windows auto)"
+                existing = RemoteProfile(name=name, mode="tunnel", base_url=KIRI_PIPE, tunnel_command="")
+                parent.remote_profiles.append(existing)
+                parent.profile_store.save(parent.remote_profiles)
+                parent.reload_profiles_ui()
+            parent.settings.setValue("last_remote_profile", existing.name)
+            parent.reload_profiles_ui()
+            parent.connect_remote_docker(existing)
+            self.reject()
+            return
+        if action == "install_panel":
+            consent = QMessageBox.question(
+                self, self.texts["msg_info"], self.kiri_store_copy("consent"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if consent != QMessageBox.StandardButton.Yes:
+                return
+            self._kiri_install_active = True
+            self.update_store_description(template)
+            thread = QThread(QApplication.instance())
+            worker = KiriStoreInstallWorker(self.client)
+            self._kiri_install_thread = thread
+            self._kiri_install_worker = worker
+            worker.moveToThread(thread)
+            thread.started.connect(worker.run)
+            worker.finished.connect(self.on_kiri_install_finished)
+            worker.finished.connect(thread.quit)
+            worker.finished.connect(worker.deleteLater)
+            thread.finished.connect(self.on_kiri_install_thread_finished)
+            thread.finished.connect(thread.deleteLater)
+            thread.start()
+            return
+        if action in {"install_kiri", "help"}:
+            reason = probe.get("reason", "")
+            message = self.kiri_store_copy(
+                reason if reason in {"engine_unreachable", "identity_unverified"}
+                else probe["status"] if probe["status"] in {"missing", "blocked", "stopped"} else "unsupported")
+            QMessageBox.information(self, self.texts["msg_info"], message)
+            if action == "install_kiri":
+                webbrowser.open(KIRI_INSTALL_URL)
         else:
             self.update_store_description(template)
 
@@ -7486,6 +7717,12 @@ class NewContainerDialog(QDialog):
 
     def on_run_clicked(self):
         selected_template = self.selected_catalog_template()
+        if is_manager_template(selected_template) and not self.edit_mode:
+            self.on_kiri_store_action(selected_template)
+            return
+        if self.client is None:
+            QMessageBox.warning(self, self.texts["msg_error"], self.texts["docker_not_available"])
+            return
         image = self.image_edit.text().strip()
         if not image:
             QMessageBox.warning(self, self.texts["msg_error"], self.texts["wizard_image"])
@@ -8123,6 +8360,31 @@ class RefreshWorker(QObject):
             self.finished.emit([], f"{type(exc).__name__}: {exc}")
 
 
+class KiriStoreProbeWorker(QObject):
+    finished = pyqtSignal(object)
+
+    def run(self):
+        self.finished.emit(probe_windows_kiri())
+
+
+class KiriStoreInstallWorker(QObject):
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, client):
+        super().__init__()
+        self.client = client
+        self.image = KIRI_MANAGER_INSTALL_IMAGE
+
+    def run(self):
+        try:
+            installed_name = install_panel_on_verified_kiri(self.client, self.image)
+            self.finished.emit(True, installed_name)
+        except KiriPanelInstallError as error:
+            self.finished.emit(False, str(error))
+        except Exception:
+            self.finished.emit(False, "engine_or_transport_error")
+
+
 class RemoteConnectWorker(QObject):
     finished = pyqtSignal(object, str, str, str)
 
@@ -8139,6 +8401,8 @@ class RemoteConnectWorker(QObject):
             else:
                 client = docker.DockerClient(base_url=self.profile.resolved_base_url(), timeout=self.timeout)
             client.ping()
+            if self.profile.resolved_base_url() == KIRI_PIPE:
+                verify_kiri_client(client)
 
             os_name, arch = detect_remote_system_info(client)
             self.finished.emit(client, "", os_name.strip(), arch.strip().lower())
@@ -11326,7 +11590,8 @@ try {
         if not profile:
             self.remote_hint.setText(self.texts["profile_no_profiles"])
             return
-        self.remote_hint.setText(profile.resolved_base_url() if profile.mode == "ssh" else profile.tunnel_command)
+        self.remote_hint.setText(profile.resolved_base_url() if profile.mode == "ssh" or
+                                 profile.resolved_base_url() == KIRI_PIPE else profile.tunnel_command)
 
     def decode_wsl_output(self, data: bytes) -> str:
         for encoding in ("utf-16", "utf-16le", "utf-8", "cp852", "cp1250"):
@@ -13028,7 +13293,7 @@ try {
             )
             if self.restart_watch_active and not same_restart_profile:
                 self.stop_restart_watch(close_notice=True)
-            if profile.mode == "tunnel":
+            if profile.mode == "tunnel" and profile.resolved_base_url() != KIRI_PIPE:
                 self.start_hidden_tunnel(profile)
                 self.statusBar().showMessage(self.texts["profile_started"])
                 QTimer.singleShot(
@@ -14581,9 +14846,8 @@ try {
             self.refresh_containers()
 
     def open_new_container_wizard(self):
-        if not self.client:
-            self.show_local_docker_unavailable(self.texts["docker_not_available"])
-            return
+        # Browsing the Store, discovering Kiri and connecting its native pipe
+        # must work even when Docker Desktop is stopped or not installed.
         cli_command, cli_choices = self.wizard_cli_settings()
         dlg = NewContainerDialog(
             self.client,

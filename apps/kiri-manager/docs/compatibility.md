@@ -1,6 +1,6 @@
 # Platform compatibility
 
-Panel version 0.1.0. Audited upstream Kiri 0.2.2. **SUPPORTED** requires a complete, documented real-engine run on that configuration. **EXPERIMENTAL** is a limited candidate path, **NOT VERIFIED** lacks end-to-end evidence, and **UNSUPPORTED** has no transport or architecture in this release.
+Panel image 0.1.2; previously recorded native Linux integration used panel 0.1.0 with Kiri 0.2.2. **SUPPORTED** requires a complete, documented real-engine run on that configuration. **EXPERIMENTAL** is a limited candidate path, **NOT VERIFIED** lacks end-to-end evidence, and **UNSUPPORTED** has no transport or architecture in this release.
 
 Local OCI builds covered `linux/amd64` and `linux/arm64`. A Windows/amd64 operator confirmed that the native Docker CLI connected to Kiri 0.2.2 in context `kiri`, negotiated API 1.47 (server range 1.24–1.47) and saw Kiri's Linux/amd64 engine. That CLI observation is separate from the panel's own socket, API reads and OCI checks.
 
@@ -8,8 +8,9 @@ The supported rows cover panel 0.1.0 with Kiri Lite 0.2.2 on Ubuntu 24.04.5 LTS.
 
 | System | Arch | Panel runtime | Upstream Kiri | Connection | Status |
 | --- | --- | --- | --- | --- | --- |
+| Windows 10/11 | amd64 | DCC desktop (host client) | Official WSL2 installer | Direct `npipe:////./pipe/kiri` Kiri identity + inventory | EXPERIMENTAL (read-only check passed with Kiri 0.2.2) |
 | Windows 10/11 | amd64 | Docker Desktop | Official WSL2 installer | Windows pipe and cross-WSL/VM socket | UNSUPPORTED |
-| Windows 10/11 | amd64 | Kiri / WSL2 | Official WSL2 installer | Same-distribution Unix mount only | NOT VERIFIED |
+| Windows 10/11 | amd64 | Kiri / WSL2 | Official WSL2 installer | Same-engine Unix mount after disposable container preflight | NOT VERIFIED |
 | Ubuntu 24.04.5 LTS | amd64 | Docker | Kiri Lite 0.2.2 | Dedicated same-host socket | SUPPORTED |
 | Ubuntu 24.04.5 LTS | amd64 | Kiri | Kiri Lite 0.2.2 | Dedicated same-host socket | SUPPORTED |
 | Ubuntu 24.04.5 LTS | arm64 | Docker | Kiri Lite 0.2.2 | Dedicated same-host socket | SUPPORTED |

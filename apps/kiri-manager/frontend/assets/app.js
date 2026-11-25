@@ -17,6 +17,7 @@ const state = {
   auth: null, view: null, status: "disconnected", payload: null, error: null,
   preferences: {language: "en", theme: "dark", interval: 30, active: null},
   profiles: [], endpoints: [], checked: new Map(), query: filters(), wizard: null,
+  discovery: null,
   monitor: {id: null, samples: [], error: null}, disk: {},
   lastRead: null, request: null, timer: null, toast: null, modalRef: null,
 };
@@ -175,11 +176,13 @@ function navigate(view, focus = false) {
   state.disk = {};
   if (view === "wizard") {
     state.wizard = {
-      step: 0, draft: {name: "", host: "linux", runtime: "docker", endpoint: state.endpoints[0] ?? ""}, result: null,
+      step: 0, advanced: false, discovery: state.discovery,
+      draft: {name: "", host: "linux", runtime: "docker", endpoint: state.endpoints[0] ?? ""}, result: null,
     };
   }
   renderChrome();
   render();
+  if (view === "wizard" || view === "connections") void checkDiscovery();
   if (focus) $("main").focus({preventScroll: true});
   if (focus) window.scrollTo(0, 0);
   void refresh();
@@ -216,7 +219,7 @@ function render() {
   const profile = currentProfile();
   let page;
   if (view === "wizard") page = wizard(state.wizard, state.endpoints);
-  else if (view === "connections") page = connections(state.profiles, preferences.active, state.checked, state.endpoints, state.status);
+  else if (view === "connections") page = connections(state.profiles, preferences.active, state.checked, state.endpoints, state.status, state.discovery);
   else if (view === "settings") page = settings();
   else if (!profile) page = `<div class="stack">${engineCard(null, null, null, "disconnected")}${empty(t("noProfile"), t("noProfileHint"), navLink("connections"))}</div>`;
   else if (state.error) page = `<div class="stack">${engineCard(null, profile, null, state.status)}${failure(state.error, true)}${navLink("connections", "button")}</div>`;
@@ -396,6 +399,16 @@ async function rereadSession() {
   }
 }
 
+async function checkDiscovery() {
+  let result;
+  try { result = await api("/api/discovery"); }
+  catch (error) { result = {status: "blocked", reason: error.code}; }
+  if (!state.auth?.authenticated) return;
+  state.discovery = result;
+  if (state.wizard) state.wizard.discovery = result;
+  if (["wizard", "connections"].includes(state.view)) render();
+}
+
 function newProfileBody(form) {
   return Object.fromEntries(new FormData(form));
 }
@@ -523,6 +536,15 @@ async function action(name, key, button) {
       showAuth();
       break;
     case "wizard": navigate("wizard", true); break;
+    case "wizard-advanced": state.wizard.advanced = true; render(); break;
+    case "auto-check": await checkDiscovery(); break;
+    case "auto-connect":
+      await api("/api/discovery/connect", {method: "POST", data: {}});
+      await rereadSession();
+      notify(t("autoConnected"));
+      navigate("overview", true);
+      break;
+    case "auto-skip": await completeWizard(false); break;
     case "wizard-back":
       wizardForm(state.wizard, $("wizard-form"));
       state.wizard.step -= 1;
