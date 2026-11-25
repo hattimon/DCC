@@ -1,0 +1,15 @@
+# Opt in only on a Linux runtime that can bind the Kiri socket directly.
+# The effective host UID of the panel also needs a host account authorized by Kiri.
+services:
+  panel:
+    group_add:
+      - "${KIRI_SOCKET_GID:?set the GID of the Kiri socket}"
+    environment:
+      KIRI_SOCKETS: '{"local":"/run/dcc-kiri/engine.sock"}'
+    volumes:
+      - type: bind
+        source: "${KIRI_SOCKET_PATH:?set the absolute Kiri socket path}"
+        target: /run/dcc-kiri/engine.sock
+        read_only: true
+        bind:
+          create_host_path: false

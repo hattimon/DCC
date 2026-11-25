@@ -1,0 +1,58 @@
+name: DCC Kiri Manager Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Approve deployment of the Kiri Manager project site to GitHub Pages
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dcc-github-pages
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.repository == 'hattimon/DCC' && github.ref == 'refs/heads/main' && inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+        id: pages
+      - name: Check the current project site and build the Pages artifact
+        env:
+          PAGES_BASE: ${{ steps.pages.outputs.base_url }}
+        run: |
+          [[ "$PAGES_BASE" == "https://hattimon.github.io/DCC" ]]
+          status="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/current-pages.html" -w '%{http_code}' "$PAGES_BASE/")"
+          if [[ "$status" != 404 ]]; then
+            [[ "$status" == 200 ]]
+            grep -q 'name="dcc-pages-owner" content="kiri-manager"' "$RUNNER_TEMP/current-pages.html"
+          fi
+          python apps/kiri-manager/tools/prepare_pages.py "$RUNNER_TEMP/dcc-pages" --base-url "$PAGES_BASE"
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: ${{ runner.temp }}/dcc-pages
+  deploy:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: https://hattimon.github.io/DCC/kiri-manager/
+    steps:
+      - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        id: deployment
