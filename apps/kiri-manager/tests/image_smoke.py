@@ -37,10 +37,22 @@ class PanelHTTP:
         with self.opener.open(request, timeout=20) as answer:
             return json.load(answer)
 
-    def login(self):
+    def login(self, username="admin", password=PASSWORD):
         self.csrf = self.get("/api/session")["csrf"]
-        response = self.request("/api/login", {"username": "admin", "password": PASSWORD})
+        response = self.request("/api/login", {"username": username, "password": password})
         assert response["authenticated"]
+        self.csrf = response["csrf"]
+        return response
+
+    def setup(self, username):
+        before = self.get("/api/session")
+        assert before["setup_available"], "Host-loopback connection could not start browser setup"
+        self.csrf = before["csrf"]
+        first = self.request("/api/login", {"username": "admin", "password": "admin"})
+        assert first["setup_pending"] and not first["authenticated"]
+        self.csrf = first["csrf"]
+        response = self.request("/api/setup", {"username": username, "password": PASSWORD, "confirmation": PASSWORD})
+        assert response["authenticated"] and not response["setup_available"]
         self.csrf = response["csrf"]
         return response
 

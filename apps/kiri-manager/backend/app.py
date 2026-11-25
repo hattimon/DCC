@@ -5,13 +5,14 @@ import secrets
 
 from flask import Flask, g, jsonify, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import resources
 from .config import ROOT, VERSION, Config
 from .kiri_client import Connector, KiriError, validate_key
-from .security import LoginGate, csrf_token, enforce_access
-from .storage import SESSION_TTL, Storage
+from .security import (UNSAFE_NAME, LoginGate, begin_setup, csrf_token, default_gateway,
+                       enforce_access, local_setup_peer, setup_pending, valid_password, valid_username)
+from .storage import DEFAULT_ADMIN_USERNAME, SESSION_TTL, Storage
 
 HOSTS = {"linux", "wsl", "macos"}
 RUNTIMES = {"docker", "kiri", "native"}
@@ -19,7 +20,6 @@ PREFS = {"language", "theme", "interval", "onboarded"}
 PROFILE_FIELDS = {"name", "host", "runtime", "endpoint"}
 INTERVALS = {0, 15, 30, 60, 120}
 ID = re.compile(r"[a-f0-9]{32}")
-UNSAFE_NAME = re.compile(r"[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069\ud800-\udfff]")
 
 
 def json_object(fields, *, required=()):
@@ -41,6 +41,7 @@ def create_app(config=None, *, connector=None, demo=False):
     store = Storage(config.data_dir)
     connector = connector if connector is not None else Connector(config.sockets)
     gate = LoginGate()
+    gateway = default_gateway() if config.bind == "0.0.0.0" and not config.public_origin else None
     app = Flask(__name__, static_folder=str(ROOT / "frontend" / "assets"), static_url_path="/assets")
     app.config.update(
         SECRET_KEY=secrets.token_bytes(32), TRUSTED_HOSTS=config.trusted_hosts,
@@ -49,6 +50,8 @@ def create_app(config=None, *, connector=None, demo=False):
         SESSION_COOKIE_SECURE=bool(config.public_origin), SESSION_COOKIE_PATH="/",
         SESSION_REFRESH_EACH_REQUEST=False, PERMANENT_SESSION_LIFETIME=SESSION_TTL,
     )
+    if not demo and not config.public_origin and store.credentials() is None:
+        app.logger.warning("First sign-in from the host: admin / admin. Set your own password in the browser.")
 
     @app.before_request
     def authorize():
@@ -113,13 +116,30 @@ def create_app(config=None, *, connector=None, demo=False):
             raise KiriError("bad_input", 400)
         return value
 
+    def local_setup_available():
+        return not config.public_origin and local_setup_peer(gateway)
+
     def session_payload():
-        payload = {"authenticated": bool(g.sid), "admin_ready": bool(store.password_hash()),
+        admin_ready = store.credentials() is not None
+        setup_available = not admin_ready and local_setup_available()
+        payload = {"authenticated": bool(g.sid), "admin_ready": admin_ready,
+                   "setup_available": setup_available, "setup_pending": setup_available and setup_pending(),
                    "csrf": csrf_token(), "version": VERSION}
         if g.sid:
             payload.update(preferences=store.preferences(), profiles=store.profiles(),
                            endpoints=sorted(connector.sockets), demo=demo)
         return jsonify(payload)
+
+    def sign_in(password_hash):
+        token = secrets.token_urlsafe(32)
+        if not store.add_session(token, password_hash):
+            raise KiriError("credentials", 401)
+        if g.sid:
+            store.revoke_session(g.sid)
+        session.clear()
+        session.permanent = True
+        session["sid"] = g.sid = token
+        return session_payload()
 
     @app.get("/")
     def index():
@@ -141,24 +161,44 @@ def create_app(config=None, *, connector=None, demo=False):
     def login():
         body = json_object({"username", "password"}, required={"username", "password"})
         username, password = body["username"], body["password"]
-        if (not isinstance(username, str) or not isinstance(password, str) or len(username) > 64
-                or len(password) > 128 or UNSAFE_NAME.search(password)):
+        if not valid_username(username) or not valid_password(password, minimum=1):
             raise KiriError("bad_input", 400)
         with gate.allow():
-            password_hash = store.password_hash()
-            if not password_hash:
-                raise KiriError("setup_required", 403)
-            if not check_password_hash(password_hash, password) or username != "admin":
+            credentials = store.credentials()
+            if credentials is None:
+                if not local_setup_available():
+                    raise KiriError("setup_required", 403)
+                if (username, password) != (DEFAULT_ADMIN_USERNAME, "admin"):
+                    raise KiriError("credentials", 401)
+                begin_setup()
+                return session_payload()
+            password_hash = credentials["password_hash"]
+            if not check_password_hash(password_hash, password) or username != credentials["username"]:
                 raise KiriError("credentials", 401)
-            token = secrets.token_urlsafe(32)
-            if not store.add_session(token, password_hash):
-                raise KiriError("credentials", 401)
-        if g.sid:
-            store.revoke_session(g.sid)
-        session.clear()
-        session.permanent = True
-        session["sid"] = g.sid = token
-        return session_payload()
+            return sign_in(password_hash)
+
+    @app.post("/api/setup")
+    def setup():
+        if not local_setup_available():
+            raise KiriError("setup_required", 403)
+        if store.credentials() is not None:
+            raise KiriError("setup_complete", 409)
+        if not setup_pending():
+            raise KiriError("setup_expired", 403)
+        fields = {"username", "password", "confirmation"}
+        body = json_object(fields, required=fields)
+        username, password = body["username"], body["password"]
+        if not valid_username(username):
+            raise KiriError("invalid_username", 400)
+        if not valid_password(password):
+            raise KiriError("invalid_password", 400)
+        if body["confirmation"] != password:
+            raise KiriError("password_mismatch", 400)
+        with gate.allow():
+            password_hash = generate_password_hash(password)
+            if not store.set_password(password_hash, username=username):
+                raise KiriError("setup_complete", 409)
+            return sign_in(password_hash)
 
     @app.post("/api/logout")
     def logout():

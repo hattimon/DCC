@@ -8,21 +8,43 @@ W katalogu modułu na wybranym hoście Docker:
 
 ```sh
 docker compose up -d
-docker compose exec panel python -m backend.admin
 ```
 
-Otwórz http://127.0.0.1:8796/ na tym hoście. Zmienna `KIRI_PANEL_HOST_PORT` pozwala wybrać inny port. Utwórz hasło administratora o długości co najmniej 14 znaków. Instalacja przez CLI:
+Otwórz http://127.0.0.1:8796/ na tym hoście. Zmienna `KIRI_PANEL_HOST_PORT` pozwala wybrać inny port. W Sklepie DCC wybierz **DCC → DCC Kiri Manager** i skorzystaj z adresu lokalnego podanego przy instalacji. Przycisk **Website / Strona** prowadzi do wizytówki projektu.
+
+### Pierwsze logowanie
+
+Jeśli na wolumenie nie utworzono dotąd konta, zaloguj się lokalnie jako `admin` z hasłem `admin`. Te dane startowe znajdziesz też w logu uruchomienia panelu. Zanim wejdziesz do panelu, ustaw własne hasło od 14 do 128 znaków. W tym samym formularzu możesz zmienić nazwę użytkownika. Aktualizacja z zachowaniem wolumenu zachowuje także istniejące konto i ustawienia.
+
+### Instalacja przez CLI
 
 ```sh
 docker run -d --name dcc-kiri-manager --restart unless-stopped \
   -p 127.0.0.1:8796:8796 --volume dcc_kiri_manager_data:/data \
   --read-only --tmpfs /tmp:size=8m,mode=1777 --cap-drop ALL \
   --security-opt no-new-privileges:true --memory 192m --pids-limit 40 \
-  ghcr.io/hattimon/dcc-kiri-manager:0.1.0
-docker exec -it dcc-kiri-manager python -m backend.admin
+  ghcr.io/hattimon/dcc-kiri-manager:0.1.1
 ```
 
-Po publikacji wpisu wybierz **DCC → DCC Kiri Manager** i sprawdź mapowanie portu w podglądzie. Przycisk **Website / Strona** prowadzi do wizytówki produktu. Panel otwórz pod jego adresem loopback na hoście Docker. Użyj rzeczywistej nazwy kontenera w poleceniu konfiguracji hasła. Panel można otworzyć bez podłączenia silnika. Kreator wskaże odpowiedni instalator Kiri.
+## Konfiguracja i reset z terminala
+
+Rozwiń pomoc na ekranie logowania, aby zobaczyć polecenia do wykonania na hoście. Jeśli zapomnisz hasła, użyj polecenia dla swojego środowiska i rzeczywistej nazwy kontenera panelu.
+
+```sh
+# Docker
+docker exec -it dcc-kiri-manager python -m backend.admin --reset
+
+# Kiri z kontekstem kiri
+docker --context kiri exec -it dcc-kiri-manager python -m backend.admin --reset
+
+# Kiri na natywnym Linuxie
+docker --host unix:///run/kiri/docker.sock exec -it dcc-kiri-manager python -m backend.admin --reset
+
+# Natywny Python, w katalogu panelu z tą samą zmienną KIRI_PANEL_DATA
+python -m backend.admin --reset
+```
+
+Wpisz i potwierdź nowe hasło w terminalu. Reset wylogowuje aktywne sesje i zachowuje nazwę użytkownika, profile oraz ustawienia. Aby zmienić nazwę, dodaj `--username operator`. Do pierwszej konfiguracji konta użyj polecenia kończącego się na `python -m backend.admin`. Wariant terminalowy służy też do utworzenia konta przed udostępnieniem panelu przez skonfigurowane proxy HTTPS.
 
 ## Linux (Ubuntu, Debian, Raspberry Pi)
 
@@ -69,8 +91,7 @@ docker --host "unix://$socket" run -d --name dcc-kiri-manager \
   --group-add "$gid" -e 'KIRI_SOCKETS={"local":"/run/dcc-kiri/engine.sock"}' \
   --cap-drop ALL --security-opt no-new-privileges:true --read-only \
   --tmpfs /tmp:size=8m,mode=1777 --restart unless-stopped \
-  ghcr.io/hattimon/dcc-kiri-manager:0.1.0
-docker --host "unix://$socket" exec -it dcc-kiri-manager python -m backend.admin
+  ghcr.io/hattimon/dcc-kiri-manager:0.1.1
 ```
 
 Raspberry Pi 4/5 wymaga systemu 64-bitowego, obrazu arm64 i zgodnego jądra z systemd/cgroups. Dostępność pakietu upstream dla Linux ARM64 nie jest potwierdzeniem działania na Raspberry Pi. Oba modele mają status **NOT VERIFIED**. [Macierz zgodności](compatibility.md).
@@ -86,7 +107,7 @@ Użyj [oficjalnego instalatora Kiri](https://docs.runkiri.com/windows/). Wybierz
 
 Zainstaluj pakiet Kiri odpowiedni dla procesora na macOS 14 lub nowszym. Docker Desktop oraz Kiri mogą uruchomić panel konfiguracyjny przez właściwy kontekst CLI. Kontenery Linux działają wewnątrz VM. Socket hosta `$HOME/.kiri/run/docker.sock` jest dostępny dla procesów macOS. Połączenie OCI między tymi środowiskami pozostaje poza zakresem wersji. [Instalacja Kiri](https://docs.runkiri.com/install/) · [Architektura](https://docs.runkiri.com/how-it-works/).
 
-Eksperymentalna opcja zaawansowana to lokalny proces Python 3.12 z zależnościami modułu w środowisku wirtualnym. Skonfiguruj `KIRI_SOCKETS` jako JSON z bezwzględną ścieżką do socketu, np. `{"mac":"/Users/alex/.kiri/run/docker.sock"}`. Polecenia `python -m backend.admin` i `python -m backend` uruchamiają konto i panel na loopback.
+Eksperymentalna opcja zaawansowana to lokalny proces Python 3.12 z zależnościami modułu w środowisku wirtualnym. Skonfiguruj `KIRI_SOCKETS` jako JSON z bezwzględną ścieżką do socketu, np. `{"mac":"/Users/alex/.kiri/run/docker.sock"}`. Uruchom `python -m backend` i otwórz lokalny adres, aby skonfigurować konto.
 
 ## Problemy i aktualizacja
 

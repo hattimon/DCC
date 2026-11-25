@@ -11,10 +11,12 @@ from backend.storage import MIGRATIONS, Storage
 class StorageTest(unittest.TestCase):
     def test_migrations_keep_backup_and_roll_back_partial_changes(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = Storage(directory)
+            baseline = MIGRATIONS[:1]
+            with patch("backend.storage.MIGRATIONS", baseline):
+                store = Storage(directory)
             store.update_preferences({"theme": "light"})
             migration = ("ALTER TABLE profiles ADD COLUMN label TEXT", "invalid SQL")
-            with patch("backend.storage.MIGRATIONS", (*MIGRATIONS, migration)):
+            with patch("backend.storage.MIGRATIONS", (*baseline, migration)):
                 with self.assertRaises(sqlite3.OperationalError):
                     Storage(directory)
             saved, = Path(directory).glob("config-v1-*.sqlite3")
@@ -25,7 +27,7 @@ class StorageTest(unittest.TestCase):
             with closing(store.connect()) as connection:
                 self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
                 self.assertNotIn("label", {row["name"] for row in connection.execute("PRAGMA table_info(profiles)")})
-            with patch("backend.storage.MIGRATIONS", (*MIGRATIONS, (migration[0],))):
+            with patch("backend.storage.MIGRATIONS", (*baseline, (migration[0],))):
                 upgraded = Storage(directory)
                 with closing(upgraded.connect()) as connection:
                     self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)

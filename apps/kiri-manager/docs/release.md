@@ -1,15 +1,15 @@
 # Releasing Kiri Manager
 
-The independent tag is `kiri-manager-v0.1.0`. The target repository is `ghcr.io/hattimon/dcc-kiri-manager`. Maintain independent versioning and source paths under `apps/kiri-manager/`.
+The independent tag is `kiri-manager-v0.1.1`. The target repository is `ghcr.io/hattimon/dcc-kiri-manager`. Maintain independent versioning and source paths under `apps/kiri-manager/`.
 
 1. Review the application-only pull request. The Store entry is prepared as a separate local change, so the published catalog can follow the verified OCI image.
 2. Check the Kiri Manager workflow on the same-repository pull request. The integration jobs use disposable GitHub-hosted Linux runners for both architectures. They check Kiri identity, the real inventory, logs, stats and persistence from Docker and directly from Kiri. After the application lands, the same checks can also be dispatched from the default branch with `live=true` and `publish=false`.
 3. Resolve failures, update the compatibility matrix and record environment versions. After approval, create the independent tag at the reviewed source commit and manually dispatch publication at that exact tag. Configure required reviewers for `kiri-manager-release`. The PUBLISH job depends on VERIFY, BUILD, the Docker smoke jobs and real Kiri integration.
-4. Verify the registry's `0.1.0`, `latest` and `sha-<commit>` indexes against the OCI archive and both platform digests. The workflow compares them after upload. If a version or commit tag already exists, its digests must match.
-5. Set up and approve the initial GitHub Pages deployment only after checking the repository still has no unrelated Pages publisher. Set **Settings → Pages → Source → GitHub Actions** and review the `github-pages` environment. Dispatch the separate Pages workflow with `publish=true`. Its build confirms the Pages URL and refuses to overwrite an unrelated recognizable root. The deployment owns the project Pages artifact, including a root link to `kiri-manager/`.
-6. On the deployed project site, verify HTTPS, both locales, navigation at mobile width, images, all share metadata and browser console. The target URL is [hattimon.github.io/DCC/kiri-manager](https://hattimon.github.io/DCC/kiri-manager/). GitHub reported `has_pages=false` and returned 404 for the repository Pages resource on 2026-11-25. The target path is reserved by the build; the URL is public only after deployment. [GitHub Pages workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
-7. Publish the GitHub release using [English/Polish release notes](../RELEASE_NOTES_0.1.0.md). An approved publish uses `gh release … --notes-file` with UTF-8 input and a Unicode read-back. Verify the tag and selected OCI digests on GitHub.
-8. Merge the dedicated Store entry after the versioned image and project URL are verified. Use `python tools/catalog_review.py --output <new-file>` to preview the exact one-entry change against an updated catalog if needed. Check installation with the loopback port and dedicated volume. Existing entries should compare byte for byte.
+4. Verify the registry's version, `latest` and `sha-<commit>` indexes against the OCI archive and both platform digests. The workflow compares them after upload. A published version or commit tag requires a matching digest.
+5. Dispatch the Pages workflow with `publish=true` after approval. It confirms the Pages URL and the existing ownership marker before updating the project site. The deployment includes a root link to `kiri-manager/`.
+6. On the deployed project site, verify HTTPS, both locales, navigation at mobile width, images, share metadata and browser console. [Project site](https://hattimon.github.io/DCC/kiri-manager/).
+7. Publish the GitHub release using the English and Polish release notes. Use `gh release … --latest=false --notes-file` with UTF-8 input. Verify the tag and OCI digests on GitHub. [Release notes](../RELEASE_NOTES_0.1.1.md).
+8. Merge the dedicated Store change after the versioned image and project page are verified. Use `python tools/catalog_review.py --output <new-file>` to preview the change. Check the loopback port, dedicated volume and category **DCC**. Entries for other apps should compare byte for byte.
 
 ## Build the site locally
 

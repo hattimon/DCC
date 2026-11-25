@@ -1,6 +1,8 @@
 # DCC Kiri Manager HTTP API
 
-Requests and payloads use JSON. Open `GET /api/session` first to obtain `csrf`, whether the administrator is configured and the current session state. Once authenticated, the same endpoint returns preferences, configured socket aliases and profiles. Use the new token returned by `POST /api/login`. For all state changes send `Content-Type: application/json`, the exact `Origin`, and `X-CSRF-Token`. There is one local role. The UI uses this API directly.
+Requests and payloads use JSON. Open `GET /api/session` first to obtain the session state and `csrf`. Use the token from each login or setup response for subsequent state changes. For every mutation send `Content-Type: application/json`, the exact `Origin`, and `X-CSRF-Token`. The authenticated response includes preferences, configured socket aliases and profiles.
+
+When `setup_available` is true, an initial local login returns `setup_pending: true` and `authenticated: false`. Complete setup with the new token and your chosen credentials. The setup response returns the authenticated session. An expired setup or an already configured account returns an error.
 
 ## Panel and settings
 
@@ -9,6 +11,7 @@ Requests and payloads use JSON. Open `GET /api/session` first to obtain `csrf`, 
 | GET `/healthz` | Process liveness only |
 | GET `/api/session` | Session and bootstrap token |
 | POST `/api/login` | `username`, `password` |
+| POST `/api/setup` | Create the initial administrator with `username`, `password`, `confirmation` |
 | POST `/api/logout` | Revoke the session, accepts an empty object |
 | PUT `/api/preferences` | Any of `language` (en/pl), `theme` (dark/light), `interval` (0/15/30/60/120 s), `onboarded` (boolean) |
 | GET `/api/install/linux` | Authenticated download of the optional Linux install helper |

@@ -2,7 +2,7 @@
 import os
 import tempfile
 
-from flask import send_from_directory
+from flask import request, send_from_directory
 from waitress import create_server
 from werkzeug.security import generate_password_hash
 
@@ -18,7 +18,8 @@ def main():
         endpoints = {"test-engine": "kiri", "offline-test": "offline", "partial-test": "partial"}
         app = create_app(Config(root, endpoints), connector=Connector(endpoints, FixtureTransport), demo=True)
         storage = Storage(root)
-        storage.set_password(generate_password_hash("TEST-only-kiri-passphrase"))
+        test_hash = generate_password_hash("TEST-only-kiri-passphrase")
+        storage.set_password(test_hash)
 
         @app.post("/__fixture/reset")
         def reset():
@@ -26,6 +27,10 @@ def main():
                 connection.execute("DELETE FROM sessions")
                 connection.execute("DELETE FROM profiles")
                 connection.execute("UPDATE preferences SET payload='{}', active=NULL")
+                if request.args.get("blank") == "1":
+                    connection.execute("DELETE FROM admin")
+            if request.args.get("blank") != "1":
+                storage.set_password(test_hash, username="admin", replace=True)
             return "", 204
 
         @app.get("/project/")
