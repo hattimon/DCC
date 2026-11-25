@@ -2247,6 +2247,49 @@
         "Read initial_credentials from the container logs in DCC and change the password after signing in.",
         "Open the selected port on localhost or the host's private IP address. Connect X and AI in Integrations."
       ]
+    },
+    {
+      "name": "DCC Kiri Manager",
+      "version": "0.1.0",
+      "image": "ghcr.io/hattimon/dcc-kiri-manager:0.1.0",
+      "category": "DCC",
+      "category_en": "DCC",
+      "description": "Samodzielny panel Kiri do monitorowania zasobów i usług Compose.",
+      "description_en": "Standalone Kiri dashboard for observing resources and Compose services.",
+      "store_description": "Panel tylko do odczytu z kreatorem połączeń, diagnostyką i interfejsem PL/EN. Zgodność zależy od dostępu do osobnego socketu Kiri.",
+      "store_description_en": "Read-only dashboard with a connection wizard, diagnostics and a Polish/English UI. Compatibility depends on access to a dedicated Kiri socket.",
+      "default_name": "dcc-kiri-manager",
+      "container_port": "8796",
+      "host_port": "",
+      "extra": "--publish 127.0.0.1:8796:8796 --volume dcc_kiri_manager_data:/data --cap-drop=ALL --security-opt=no-new-privileges:true --read-only --tmpfs /tmp:size=8m,mode=1777 --pids-limit=40 --memory=192m --restart unless-stopped",
+      "command": "",
+      "notes": "Przycisk Website prowadzi do strony projektu. Panel otwórz pod adresem loopback na hoście Docker. Utwórz hasło przez docker exec -it dcc-kiri-manager python -m backend.admin. Panel działa także bez połączenia z Kiri. Aby aktywować połączenie, użyj instrukcji montowania dedykowanego socketu Kiri dla swojej platformy.",
+      "notes_en": "Website opens the project site. Open the panel at the loopback address on the Docker host. Set a password with docker exec -it dcc-kiri-manager python -m backend.admin. Setup works with no Kiri connection. To enable a connection, follow the dedicated Kiri socket instructions for your platform.",
+      "engines": [
+        "docker"
+      ],
+      "archs": [
+        "amd64",
+        "arm64"
+      ],
+      "lightweight": true,
+      "source_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.0/apps/kiri-manager",
+      "docs_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.0/apps/kiri-manager/docs",
+      "homepage_url": "https://hattimon.github.io/DCC/kiri-manager/",
+      "icon_text": "◇",
+      "post_install_hints": [
+        "Otwórz http://127.0.0.1:8796 na hoście Docker lub użyj portu wybranego podczas instalacji.",
+        "Skonfiguruj administratora i profil przez kreator. Wersja 0.1.0 obsługuje odczyt zasobów."
+      ],
+      "post_install_hints_en": [
+        "Open http://127.0.0.1:8796 on the Docker host, using the published port selected during installation.",
+        "Set up the administrator and open the profile wizard. Version 0.1.0 reads resource metadata."
+      ],
+      "upstream_repo": "hattimon/DCC",
+      "latest_release": "kiri-manager-v0.1.0",
+      "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.0",
+      "release_tag_pattern": "kiri-manager-v[0-9]+\\.[0-9]+\\.[0-9]+",
+      "image_tag_from_release": "strip-prefix:kiri-manager-v"
     }
   ]
 }
