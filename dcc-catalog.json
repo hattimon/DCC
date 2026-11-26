@@ -28,8 +28,8 @@
       "homepage_url": "https://www.agent-zero.ai/",
       "icon_text": "🤖",
       "upstream_repo": "agent0ai/agent-zero",
-      "latest_release": "v2.15",
-      "latest_release_url": "https://github.com/agent0ai/agent-zero/releases/tag/v2.15",
+      "latest_release": "v2.16",
+      "latest_release_url": "https://github.com/agent0ai/agent-zero/releases/tag/v2.16",
       "icon_url": "catalog/media/icons/agent-zero.png"
     },
     {
@@ -84,8 +84,8 @@
       "homepage_url": "https://nocodb.com/",
       "icon_text": "⚙",
       "upstream_repo": "nocodb/nocodb",
-      "latest_release": "2026.10.1",
-      "latest_release_url": "https://github.com/nocodb/nocodb/releases/tag/2026.10.1",
+      "latest_release": "2026.10.2",
+      "latest_release_url": "https://github.com/nocodb/nocodb/releases/tag/2026.10.2",
       "icon_url": "catalog/media/icons/nocodb.png"
     },
     {
@@ -112,8 +112,8 @@
       "homepage_url": "https://www.stirlingpdf.com/",
       "icon_text": "🧰",
       "upstream_repo": "Stirling-Tools/Stirling-PDF",
-      "latest_release": "v3.3.0",
-      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.3.0",
+      "latest_release": "v3.4.0",
+      "latest_release_url": "https://github.com/Stirling-Tools/Stirling-PDF/releases/tag/v3.4.0",
       "icon_url": "catalog/media/icons/stirling-pdf.png"
     },
     {
@@ -416,8 +416,8 @@
       "homepage_url": "https://changedetection.io/",
       "icon_text": "📊",
       "upstream_repo": "dgtlmoon/changedetection.io",
-      "latest_release": "0.70.3",
-      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.70.3",
+      "latest_release": "0.70.4",
+      "latest_release_url": "https://github.com/dgtlmoon/changedetection.io/releases/tag/0.70.4",
       "icon_url": "catalog/media/icons/changedetection-io.png"
     },
     {
@@ -816,8 +816,8 @@
       "homepage_url": "https://openwebui.com/",
       "icon_text": "💬",
       "upstream_repo": "open-webui/open-webui",
-      "latest_release": "v0.13.3",
-      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.13.3",
+      "latest_release": "v0.13.4",
+      "latest_release_url": "https://github.com/open-webui/open-webui/releases/tag/v0.13.4",
       "icon_url": "catalog/media/icons/open-webui.png"
     },
     {
@@ -892,8 +892,8 @@
       "homepage_url": "https://www.portainer.io/",
       "icon_text": "🛠",
       "upstream_repo": "portainer/portainer",
-      "latest_release": "2.45.3",
-      "latest_release_url": "https://github.com/portainer/portainer/releases/tag/2.45.3",
+      "latest_release": "2.45.4",
+      "latest_release_url": "https://github.com/portainer/portainer/releases/tag/2.45.4",
       "icon_url": "catalog/media/icons/portainer-ce.png"
     },
     {
@@ -1155,8 +1155,8 @@
       "homepage_url": "https://uptime.kuma.pet/",
       "icon_text": "📊",
       "upstream_repo": "louislam/uptime-kuma",
-      "latest_release": "2.5.11",
-      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.11",
+      "latest_release": "2.5.12",
+      "latest_release_url": "https://github.com/louislam/uptime-kuma/releases/tag/2.5.12",
       "icon_url": "catalog/media/icons/uptime-kuma.png"
     },
     {
@@ -1837,8 +1837,8 @@
       "security_exposure": "lan_only",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v1.19.0",
-      "latest_release_url": "https://github.com/Mintplex-Labs/anything-llm/releases/tag/v1.19.0",
+      "latest_release": "v1.20.0",
+      "latest_release_url": "https://github.com/Mintplex-Labs/anything-llm/releases/tag/v1.20.0",
       "icon_url": "catalog/media/icons/anythingllm.png"
     },
     {
@@ -2049,8 +2049,8 @@
       "security_exposure": "reverse_proxy_required",
       "compose_required": false,
       "balena_verified": false,
-      "latest_release": "v2.37.2",
-      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.37.2",
+      "latest_release": "v2.38.0",
+      "latest_release_url": "https://github.com/advplyr/audiobookshelf/releases/tag/v2.38.0",
       "icon_url": "catalog/media/icons/audiobookshelf.png"
     },
     {
