@@ -217,6 +217,13 @@ jobs:
           echo "Kiri image:   $kiri_image"
           [[ "$kiri_image" == "$docker_image" && "$kiri_image" == *" linux/$IMAGE_ARCH" ]]
           PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify --socket "$kiri_sock" --runtime kiri --port 28797
+      - name: Real SSH lifecycle on Docker and Kiri
+        working-directory: apps/kiri-manager
+        run: |
+          sudo apt-get install -y -qq openssh-server
+          python -m venv "$RUNNER_TEMP/kiri-ssh-venv"
+          "$RUNNER_TEMP/kiri-ssh-venv/bin/python" -m pip install -r requirements.txt
+          PYTHONPATH="$PWD" "$RUNNER_TEMP/kiri-ssh-venv/bin/python" tests/ssh_integration.py
       - name: Diagnose Kiri service failures
         if: failure()
         run: sudo journalctl -u kiri.service --no-pager -n 35
