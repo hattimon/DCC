@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DCC Kiri Manager · Web dashboard for Kiri</title><meta name="description" content="Independent, read-only workspace for Kiri containers, Compose and local workloads.">
+  <title>DCC Kiri Manager · Kiri and Docker workspace</title><meta name="description" content="Independent workspace to manage Kiri and Docker containers, SSH profiles and Compose workloads.">
   <meta property="og:type" content="website"><meta property="og:locale" content="en_US">
-  <meta property="og:title" content="DCC Kiri Manager"><meta property="og:description" content="Independent, read-only workspace for Kiri containers, Compose and local workloads.">
+  <meta property="og:title" content="DCC Kiri Manager"><meta property="og:description" content="Manage Kiri and Docker containers, SSH profiles and Compose workloads.">
   <meta property="og:image" content="assets/social-preview.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="DCC Kiri Manager overview with test data">
-  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="DCC Kiri Manager"><meta name="twitter:description" content="Independent, read-only workspace for Kiri containers, Compose and local workloads."><meta name="twitter:image" content="assets/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="DCC Kiri Manager"><meta name="twitter:description" content="Manage Kiri and Docker containers, SSH profiles and Compose workloads."><meta name="twitter:image" content="assets/social-preview.png">
   <!-- pages-canonical -->
   <link rel="icon" href="assets/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="assets/site.css"><script type="module" src="assets/site.js"></script>
 </head>
@@ -23,15 +23,15 @@
   </div></header>
   <main id="main">
     <section class="frame hero">
-      <div><h1>DCC Kiri Manager</h1><p class="lead">See what’s running on Kiri.</p><p>Inspect containers, images, volumes, networks and Compose projects from one lightweight dashboard.</p>
+      <div><h1>DCC Kiri Manager</h1><p class="lead">Manage Kiri and Docker from one workspace.</p><p>Inspect engine resources, manage container lifecycle, configure verified SSH profiles and review Compose projects.</p>
         <div class="buttons"><a class="button primary" href="#install">Installation</a><a class="button" href="https://github.com/hattimon/DCC/tree/main/apps/kiri-manager">Browse source ↗</a></div>
       </div>
       <div class="hero-image"><img id="hero-image" src="assets/screenshots/dashboard-dark.webp" data-dark="assets/screenshots/dashboard-dark.webp" data-light="assets/screenshots/dashboard-light.webp" width="1440" height="900" fetchpriority="high" alt="DCC Kiri Manager overview with test data · DEMO"></div>
     </section>
     <section class="section divider"><div class="frame pitch">
-      <div><h2>A local workspace for Kiri</h2><p>Independent, read-only workspace for Kiri containers, Compose and local workloads.</p><h3>Features</h3>
-        <ul class="feature-list"><li>Inventory, diagnostics and bounded logs</li><li>CPU and memory samples from a selected container</li><li>Compose grouping, connection profiles, two languages and themes</li></ul></div>
-      <div><h2>How it works</h2><p>The runtime starts the panel. An approved Unix socket connects the panel to Kiri.</p>
+      <div><h2>A local workspace for Kiri</h2><p>Manage containers on Kiri and Docker engines with a bilingual local dashboard.</p><h3>Features</h3>
+        <ul class="feature-list"><li>Start, stop, restart, pause, resume and remove stopped containers</li><li>SSH profiles with pinned host keys and encrypted credentials</li><li>Inventory, bounded logs, resource samples and Compose grouping</li></ul></div>
+      <div><h2>How it works</h2><p>Connect through an administrator-approved local socket or a verified SSH profile. Container actions require confirmation; named volumes are preserved.</p>
         <ol class="flow"><li>Docker or Kiri</li><li>DCC Kiri Manager</li><li>Kiri Engine API</li></ol>
       </div>
     </div></section>
@@ -53,8 +53,8 @@
     <section id="install" class="section divider"><div class="frame">
       <div class="section-heading"><div><h2>Installation</h2><p>Start the panel locally. The wizard guides setup of Kiri and the approved socket.</p></div><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.md">Documentation ↗</a></div>
       <div class="ways">
-        <article><h3>Docker Compose</h3><p>Run the panel with a named volume and a loopback port. Use the socket overlay on a compatible Linux host.</p></article>
-        <article><h3>Directly on Kiri</h3><p>Use the Docker-compatible CLI with the Kiri context. Socket mounting depends on the host.</p></article>
+        <article><h3>Docker Compose</h3><p>Run the panel with a named volume and loopback port. Use a compatible local socket or add a verified SSH profile.</p></article>
+        <article><h3>Directly on Kiri</h3><p>Use the Docker-compatible CLI or a verified SSH profile. Socket access depends on the host configuration.</p></article>
         <article><h3>DCC Store</h3><p>Find DCC Kiri Manager in the DCC category. Open the local address shown after installation.</p></article>
       </div>
       <details class="install-help" id="first-sign-in">
@@ -68,7 +68,7 @@
       </div>
     </div></section>
     <section id="compatibility" class="section"><div class="frame"><h2>Compatibility</h2>
-      <p>Panel 0.1.0 passed integration with Kiri Lite 0.2.2 on Ubuntu 24.04.5 LTS for amd64 and arm64. <a href="https://github.com/hattimon/DCC/actions/runs/45555032798">GitHub Actions results ↗</a></p>
+      <p>Release 0.1.3 passed isolated Docker and Kiri 0.2.2 lifecycle and SSH integration on GitHub-hosted Ubuntu runners for AMD64 and ARM64. This does not verify a user's Windows/WSL engine. <a href="https://github.com/hattimon/DCC/actions/runs/45767226482">Release workflow results ↗</a></p>
       <table class="matrix" role="table"><thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Host</th><th scope="col" role="columnheader">Architecture</th><th scope="col" role="columnheader">Panel runtime</th><th scope="col" role="columnheader">Kiri connection</th><th scope="col" role="columnheader">Status</th></tr></thead>
         <tbody role="rowgroup"><tr role="row"><td role="cell" data-label="Host">Windows 10/11</td><td role="cell" data-label="Architecture">amd64</td><td role="cell" data-label="Panel runtime">Docker Desktop</td><td role="cell" data-label="Kiri connection">Cross-VM socket unavailable</td><td role="cell" data-label="Status"><span class="status blocked">Unsupported</span></td></tr>
         <tr role="row"><td role="cell" data-label="Host">Windows 10/11</td><td role="cell" data-label="Architecture">amd64</td><td role="cell" data-label="Panel runtime">Kiri / WSL2</td><td role="cell" data-label="Kiri connection">Same WSL distribution</td><td role="cell" data-label="Status"><span class="status">Not verified</span></td></tr>
@@ -91,12 +91,12 @@
     </div></section>
     <section class="section divider"><div class="frame resource-grid">
       <article class="resource"><h2><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.md">Documentation ↗</a></h2><p>Install, configure and troubleshoot.</p></article>
-      <article class="resource"><h2><a href="https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.2">Release ↗</a></h2><p>GitHub release and OCI image.</p><a href="https://github.com/hattimon/DCC/pkgs/container/dcc-kiri-manager">GHCR ↗</a></article>
+      <article class="resource"><h2><a href="https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.3">Release 0.1.3 ↗</a></h2><p>GitHub release and multi-architecture OCI image.</p><a href="https://github.com/hattimon/DCC/pkgs/container/dcc-kiri-manager">GHCR ↗</a></article>
       <article class="resource"><h2><a href="https://github.com/hattimon/DCC/tree/main/apps/kiri-manager">Open source ↗</a></h2><p>MIT-licensed DCC project by hattimon.</p></article>
       <article class="resource"><h2><a href="https://ko-fi.com/hattimon">Support on Ko-fi ↗</a></h2><p>Support the author and DCC projects.</p></article>
     </div></section>
   </main>
-  <footer class="frame foot"><a class="brand" href="https://github.com/hattimon/DCC"><img src="assets/mark.svg" width="34" height="34" alt="">DCC ecosystem</a><span>v0.1.2 · EXPERIMENTAL</span>
+  <footer class="frame foot"><a class="brand" href="https://github.com/hattimon/DCC"><img src="assets/mark.svg" width="34" height="34" alt="">DCC ecosystem</a><span>v0.1.3 · EXPERIMENTAL</span>
     <nav><a href="https://github.com/hattimon/DCC">GitHub</a><a href="https://github.com/hattimon/DCC/blob/main/apps/kiri-manager/docs/installation.md">Documentation</a><a href="https://github.com/hattimon/DCC/blob/main/LICENSE">License</a></nav>
   </footer>
   <dialog id="lightbox" aria-labelledby="shot-title">
