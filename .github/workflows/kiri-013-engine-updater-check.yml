@@ -1,0 +1,33 @@
+name: Verify DCC Updater on Kiri
+on:
+  push:
+    branches: [codex/kiri-013-engine-updater-check]
+
+permissions:
+  contents: read
+
+jobs:
+  kiri-upgrade:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.12"
+      - name: Install Kiri 0.2.2 and the pinned Updater dependencies
+        run: |
+          bash apps/kiri-manager/setup-kiri-linux.sh --apply --grant-panel-access
+          python -m venv "$RUNNER_TEMP/updater-test"
+          "$RUNNER_TEMP/updater-test/bin/python" -m pip install -r apps/container-updater/requirements.txt
+      - name: Upgrade Kiri Manager through the Kiri socket using DCC Updater
+        run: |
+          sudo -n env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            DOCKER_HOST=unix:///run/kiri/docker.sock IMAGE_ARCH=amd64 \
+            PYTHONPATH="$GITHUB_WORKSPACE/apps/container-updater:$GITHUB_WORKSPACE/apps/kiri-manager:$GITHUB_WORKSPACE/apps/kiri-manager/tests" \
+            "$RUNNER_TEMP/updater-test/bin/python" apps/container-updater/tests/kiri_013_public_upgrade.py
+      - name: Report isolated Kiri service errors
+        if: failure()
+        run: sudo -n journalctl -u kiri.service --no-pager -n 35
