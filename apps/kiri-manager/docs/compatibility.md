@@ -4,7 +4,7 @@ Published panel image 0.1.3. Disposable GitHub-hosted Ubuntu 24.04.5 runners ver
 
 Local OCI builds covered `linux/amd64` and `linux/arm64`. A Windows/amd64 operator confirmed that the native Docker CLI connected to Kiri 0.2.2 in context `kiri`, negotiated API 1.47 (server range 1.24–1.47) and saw Kiri's Linux/amd64 engine. That CLI observation is separate from the panel's own socket, API reads and OCI checks.
 
-The supported rows cover panel 0.1.0 with Kiri Lite 0.2.2 on Ubuntu 24.04.5 LTS. The GitHub runners used a dedicated Unix socket and mapped the panel's UID 10001 directly to an authorized host account. [Integration results](verification.md#integracja-na-github-actions).
+The supported Linux rows cover panel 0.1.3 with Kiri Lite 0.2.2 on Ubuntu 24.04 LTS GitHub runners. The integration used a dedicated Unix socket and the panel's UID 10001. For the release evidence, see the [0.1.3 verification report](verification.md#weryfikacja-wydania-013).
 
 | System | Arch | Panel runtime | Upstream Kiri | Connection | Status |
 | --- | --- | --- | --- | --- | --- |

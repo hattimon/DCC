@@ -18,7 +18,7 @@ python tools/prepare_pages.py browser-artifacts/pages-preview
 python -m http.server --bind 127.0.0.1 --directory browser-artifacts/pages-preview 8000
 ```
 
-Preview `http://127.0.0.1:8000/kiri-manager/`. The existing site describes published 0.1.2; update the public copy and screenshots only when the 0.1.3 compatibility evidence is ready and publication is authorized. Both locale documents have independent metadata. The approved workflow passes the confirmed base URL to insert canonical links, alternate languages and absolute social card URLs into the artifact.
+Preview `http://127.0.0.1:8000/kiri-manager/`. Update both languages, the screenshots and the compatibility evidence together when promoting a release. The Pages workflow inserts canonical links, alternate languages and absolute social card URLs.
 
 ## Future versions
 

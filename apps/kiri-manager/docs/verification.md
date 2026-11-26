@@ -8,6 +8,7 @@
 - OCI archive SHA-256 `1d27c16e3c6150f7b52de6a12faeadfa6fd87c510fc01f64d6d9aae2238e0fb1`. Warstwy opublikowanych manifestów: AMD64 55 183 094 B, ARM64 54 287 922 B. Workflow PUBLISH sprawdził zgodność archiwum i registry.
 - Zrzuty strony i panelu 0.1.3 wygenerowano z testowego Chromium; syntetyczne dane oznaczono jako DEMO. Testy runnerów nie potwierdzają dostępu do prywatnego silnika Windows/WSL ani aktualizacji jego danych; zobacz macierz zgodności.
 - GitHub Release 0.1.3 jest niezależny od DCC Desktop. Globalne GitHub `Latest` pozostaje `v1.3.12`.
+- DCC Updater 1.1.9 wykrył 0.1.3 z publicznego katalogu i pobrał właściwy obraz z GHCR na izolowanych runnerach AMD64 i ARM64. Po wymianie kontenera zachowano nazwany wolumen, ustawienia kontenera, konto panelu, preferencje i aktywny profil Kiri z 0.1.2. Profil SSH utworzony w 0.1.3 zachował poświadczenia po restarcie, a kolejny skan nie wykazał oczekującej aktualizacji. [Wyniki testu aktualizacji](https://github.com/hattimon/DCC/actions/runs/45775801118).
 
 ---
 
