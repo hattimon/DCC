@@ -129,8 +129,12 @@ Eksperymentalna opcja zaawansowana to lokalny proces Python 3.12 z zależnościa
 - **Cofnięcie wersji:** jeśli poprzedni obraz nie obsługuje schematu bazy, przywróć spójną kopię danych panelu przeznaczoną dla tej wersji.
 - **Odinstalowanie:** `docker compose down` usuwa panel z zachowaniem jego wolumenu. Zachowaj `dcc_kiri_manager_data`, jeśli chcesz wrócić do tych profili.
 
-## Kandydat 0.1.3 i SSH
+## Aktualizacja z 0.1.2 i konfiguracja SSH
 
-Domyślny Compose i Sklep nadal wskazują opublikowane 0.1.2. Lokalny plik `compose.candidate.yaml` buduje obraz `dcc-kiri-manager:0.1.3-review` ze źródeł. Używaj go po jawnej zgodzie na właściwym hoście, z osobnym wolumenem testowym i portem. Dotychczasowy UID/GID socketu pozostaje bez zmian. W Połączenia → Nowy profil SSH wybierz oczekiwany silnik, host/port/użytkownika, wklej zweryfikowany niehaszowany wpis known_hosts i podaj hasło albo klucz prywatny. Zdalne Docker CLI musi już wskazywać właściwy silnik, a konto mieć jego uprawnienia. Przetestuj przed zapisaniem i aktywacją. Zmiana celu wymaga ponownego podania sekretu. Zrób prywatną kopię bazy i master-key. Schemat 3 nie działa z 0.1.2: do rollbacku zatrzymaj panel i przywróć kopię schematu 2 sprzed migracji; późniejsze zmiany nie zostaną przeniesione.
+Katalog DCC i domyślny plik Compose wskazują obraz `ghcr.io/hattimon/dcc-kiri-manager:0.1.3`. Samodzielny kontener zaktualizuj przez **DCC Container Updater**. W przypadku instalacji Compose pobierz obraz i odtwórz usługę z aktualnego pliku Compose, zachowując istniejący wolumen danych.
+
+Przed aktualizacją wykonaj kopię wolumenu danych. Panel migruje bazę do schematu 3 i zapisuje kopię schematu 2. Aby wrócić do 0.1.2, zatrzymaj panel i przywróć kopię schematu 2 przed uruchomieniem starszego obrazu. W tej kopii nie ma zmian wprowadzonych po migracji. W prywatnych kopiach wersji 0.1.3 i nowszych przechowuj bazę razem z kluczem głównym.
+
+Wybierz **Połączenia → Nowy profil SSH**, wskaż silnik, podaj host, port i użytkownika, a następnie wprowadź zweryfikowany niehaszowany wpis `known_hosts` oraz hasło lub klucz prywatny. Zdalne Docker CLI musi wskazywać właściwy silnik, a konto musi mieć do niego dostęp. Przetestuj połączenie przed zapisaniem i aktywacją. Zmiana celu wymaga ponownego podania poświadczeń.
 
 Po zgodzie na izolowany przegląd użyj osobnego pliku (opcjonalnie dodaj nakładkę socketu): `docker compose -f compose.candidate.yaml up --build -d`. Projekt, kontener, wolumen danych i port 18796 na loopback są odrębne od opublikowanego panelu. Nie łącz tego pliku z produkcyjnym compose.yaml. Migracja produkcyjna wymaga osobnego planu.
