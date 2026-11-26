@@ -31,7 +31,7 @@ docker run -d --name dcc-kiri-manager --restart unless-stopped \
   -p 127.0.0.1:8796:8796 --volume dcc_kiri_manager_data:/data \
   --read-only --tmpfs /tmp:size=8m,mode=1777 --cap-drop ALL \
   --security-opt no-new-privileges:true --memory 192m --pids-limit 40 \
-  ghcr.io/hattimon/dcc-kiri-manager:0.1.2
+  ghcr.io/hattimon/dcc-kiri-manager:0.1.3
 ```
 
 ## Konfiguracja i reset z terminala
@@ -99,7 +99,7 @@ docker --host "unix://$socket" run -d --name dcc-kiri-manager \
   --group-add "$gid" -e 'KIRI_SOCKETS={"local":"/run/dcc-kiri/engine.sock"}' \
   --cap-drop ALL --security-opt no-new-privileges:true --read-only \
   --tmpfs /tmp:size=8m,mode=1777 --restart unless-stopped \
-  ghcr.io/hattimon/dcc-kiri-manager:0.1.2
+  ghcr.io/hattimon/dcc-kiri-manager:0.1.3
 ```
 
 Raspberry Pi 4/5 wymaga systemu 64-bitowego, obrazu arm64 i zgodnego jądra z systemd/cgroups. Dostępność pakietu upstream dla Linux ARM64 nie jest potwierdzeniem działania na Raspberry Pi. Oba modele mają status **NOT VERIFIED**. [Macierz zgodności](compatibility.md).

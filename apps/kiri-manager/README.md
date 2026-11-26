@@ -1,10 +1,10 @@
-# DCC Kiri Manager 0.1.3 (review candidate)
+# DCC Kiri Manager 0.1.3
 
 **Experimental**. An independent browser workspace for Kiri and Docker engines, maintained in the Docker Control Center (DCC) repository. Kiri is developed by libracoder. References to Kiri and Docker identify the software used by the panel.
 
 ![DCC Kiri Manager dark overview with synthetic test data](site/assets/screenshots/dashboard-dark.webp)
 
-[Polski](README.pl.md) · [Project site](https://hattimon.github.io/DCC/kiri-manager/) · [GitHub release](https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.2) · [GHCR package](https://github.com/hattimon/DCC/pkgs/container/dcc-kiri-manager) · [Support the author on Ko-fi](https://ko-fi.com/hattimon)
+[Polski](README.pl.md) · [Project site](https://hattimon.github.io/DCC/kiri-manager/) · [GitHub release](https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.3) · [GHCR package](https://github.com/hattimon/DCC/pkgs/container/dcc-kiri-manager) · [Support the author on Ko-fi](https://ko-fi.com/hattimon)
 
 ## What it does
 
@@ -17,7 +17,7 @@
 
 ## Install and connect
 
-**Published version: 0.1.2.** The 0.1.3 candidate is not released; see [review notes](RELEASE_NOTES_0.1.3.md) before testing. Install the published version from the DCC Store under **DCC**, or run `docker compose up -d` from this directory. Open the panel on the Docker host. If no administrator has been configured, enter `admin` as the username and password. Choose a new password and optionally change the username before entering the panel. Expand the terminal help on the sign-in screen for account setup or recovery. [Local panel](http://127.0.0.1:8796) · [Installation and reset instructions](docs/installation.md).
+**Published version: 0.1.3.** Install the panel from the DCC Store under **DCC**, or run `docker compose up -d` from this directory. Open the panel on the Docker host. If no administrator has been configured, enter `admin` as the username and password. Choose a new password and optionally change the username before entering the panel. Expand the terminal help on the sign-in screen for account setup or recovery. [Local panel](http://127.0.0.1:8796) · [Installation and reset instructions](docs/installation.md).
 
 In DCC for Windows, open the Store's **DCC Kiri Manager** entry. DCC checks Kiri's documented Windows named pipe and offers **Connect** or **Install Kiri** (official installer guidance). Once connected to a verified Kiri engine, panel installation requires explicit administrator approval and a successful socket preflight from inside a disposable Kiri container. Failed preflights leave the running panel and `dcc_kiri_manager_data` volume untouched. The web panel automatically discovers only sockets already granted by an administrator; its advanced manual alias wizard is optional. The Debian/Ubuntu helper remains available for administrator-managed installation.
 

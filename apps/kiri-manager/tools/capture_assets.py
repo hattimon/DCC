@@ -46,7 +46,7 @@ def main():
     draw.line((79, 77, 79, 99), fill="#10343b", width=2)
     draw.text((44, 181), "DCC Kiri", font=font("bold", 65), fill="#edf4fb")
     draw.text((44, 255), "Manager", font=font("bold", 65), fill="#edf4fb")
-    draw.text((48, 360), "A read-only web dashboard\nfor Kiri containers and Compose.",
+    draw.text((48, 360), "Manage Kiri containers\nand SSH profiles.",
               font=font("regular", 24), fill="#a7b8c9", spacing=8)
     with Image.open(args.source / "dashboard-dark.png") as image:
         image = image.convert("RGB")

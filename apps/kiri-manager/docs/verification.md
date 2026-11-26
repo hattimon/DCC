@@ -1,13 +1,15 @@
-# Weryfikacja kandydata 0.1.3
+# Weryfikacja wydania 0.1.3
 
-26 listopada 2026, Windows, lokalny worktree codex/kiri-catalog-012, HEAD c1bbd98.
+26 listopada 2026. Źródło: merge commit `233f5b615cab1f31a954a497d73b6464cab26838`; niezależny tag `kiri-manager-v0.1.3`. Publikacyjny workflow [45767226482](https://github.com/hattimon/DCC/actions/runs/45767226482) zakończył sukcesem wszystkie zadania.
 
-- Python: 49 zaliczonych, 3 pominięte (Unix socket na Windows), łącznie 52. Testy obejmują migrację 2 → 3, kopię do rollbacku, zachowanie profili, szyfrowanie i utratę klucza, tożsamość silnika, sesję/CSRF/revision, wszystkie sześć metod API, zabezpieczenia usuwania, brak ponawiania mutacji i symulowany SSH.
-- Node: 5/5, kontrola składni JS/MJS zakończona powodzeniem. Python compileall, pip check, catalog_review i lokalny preview Pages zakończone powodzeniem. git diff --check bez błędów; ostrzeżenie CRLF dla Dockerfile.
-- Playwright: Chromium uruchomił się po wskazaniu istniejącego cache, lecz lokalny fixture Waitress nie wystartował: WinError 10013 przy połączeniu loopback. Scenariusze przeglądarkowe 0.1.3 nie zostały wykonane. Ruff nie jest zainstalowany w dostępnych venv.
-- Testy Python korzystały z cryptography 48.0.1 i Paramiko 5.0.0. Przypięta cryptography 50.0.1 nie została zweryfikowana w tym środowisku. Nie instalowano zależności systemowych.
-- Przygotowano CI z przypiętym obrazem 0.1.2, testem odtworzenia kopii schematu 2 i osobnym kontenerem oraz wolumenem do wszystkich akcji w Kiri na izolowanych runnerach. CI, obraz OCI amd64/arm64, rzeczywisty SSH i operacje Kiri nie zostały uruchomione.
-- Brak jednoznacznie potwierdzonego grantu DCC MCP dla Kiri Ubuntu WSL. Nie wykonano operacji na hostach. 0.1.3 pozostaje lokalnym kandydatem bez publikacji lub wdrożenia. Publiczna strona i katalog nadal opisują 0.1.2.
+- `VERIFY`: Python/security, Ruff, Node i Playwright zakończone powodzeniem. Lokalny przebieg galerii na aktualnym kodzie Chromium: 13/13 scenariuszy PASS (pierwsze logowanie, sześć rozdzielczości panelu oraz sześć rozdzielczości strony).
+- OCI, Docker i Kiri: build multiarch, smoke z poprzednim wydaniem i rollback, testy Kiri 0.2.2 na runnerach GitHub dla AMD64 i ARM64 — PASS. Real SSH do Docker i Kiri: hasło i klucz prywatny, poprawny klucz hosta, odrzucenie błędnego klucza, sześć operacji lifecycle i zachowanie wolumenów — PASS.
+- GHCR indeks `sha256:02268eb6f8d30bed7bc43529c1bdf4dece978dd2cf42f02629097f052d76757a`; manifest AMD64 `sha256:4fdd4add681e6272893ac26ddb4e7bca3a13ff9331546521f86a54ce6941eb12`; ARM64 `sha256:953586b7e2fe5fcd79175799d7c13e998e0119b1603f7d87cb6d2d1c91ca54bd`. Registry niezależnie potwierdziło identyczny indeks dla tagów `0.1.3`, `latest` i `sha-233f5b615cab1f31a954a497d73b6464cab26838`.
+- OCI archive SHA-256 `1d27c16e3c6150f7b52de6a12faeadfa6fd87c510fc01f64d6d9aae2238e0fb1`. Warstwy opublikowanych manifestów: AMD64 55 183 094 B, ARM64 54 287 922 B. Workflow PUBLISH sprawdził zgodność archiwum i registry.
+- Zrzuty strony i panelu 0.1.3 wygenerowano z testowego Chromium; syntetyczne dane oznaczono jako DEMO. Testy runnerów nie potwierdzają dostępu do prywatnego silnika Windows/WSL ani aktualizacji jego danych; zobacz macierz zgodności.
+- GitHub Release 0.1.3 jest niezależny od DCC Desktop. Globalne GitHub `Latest` pozostaje `v1.3.12`.
+
+---
 
 ---
 # Weryfikacja 0.1.2
