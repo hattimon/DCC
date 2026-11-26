@@ -1,0 +1,25 @@
+# Standalone review only: never combine with the published compose.yaml.
+name: dcc-kiri-manager-review
+services:
+  panel:
+    image: dcc-kiri-manager:0.1.3-review
+    build:
+      context: .
+      target: image
+      args:
+        VERSION: "0.1.3"
+    container_name: dcc-kiri-manager-review
+    ports:
+      - "127.0.0.1:${KIRI_REVIEW_HOST_PORT:-18796}:8796"
+    volumes:
+      - data:/data
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:size=8m,mode=1777"]
+    pids_limit: 40
+    mem_limit: 192m
+    restart: unless-stopped
+volumes:
+  data:
+    name: dcc_kiri_manager_review_data

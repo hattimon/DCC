@@ -85,7 +85,7 @@ export function wizard(wizard, endpoints) {
       <section class="card pad stack-sm"><h2 class="section-title">${icon("diagnostics")}${esc(t("checks"))}</h2><div id="wizard-result" aria-live="polite">${testReport(result)}</div></section>
       ${step >= 1 || !endpoints.length ? setupHelp(draft.host, draft.runtime) : ""}
     </div>
-    </div>` : `<div>${elButton(t("advancedOptions"), "wizard-advanced")}</div>`}</div>`;
+    </div>` : `<div>${elButton(t("advancedOptions"), "wizard-advanced")} ${elButton(t("newSSHProfile"), "profile-edit-ssh")}</div>`}</div>`;
 }
 
 export function automaticConnection(discovery, showSkip = false) {
@@ -118,15 +118,31 @@ export function wizardForm(wizard, form) {
   return wizard.draft;
 }
 
-export function profileForm(profile, endpoints) {
+export function profileForm(profile, endpoints, transport = "socket") {
   const draft = profile ?? { name: "", host: "linux", runtime: "docker", endpoint: endpoints[0] ?? "" };
+  const ssh = (profile?.transport ?? transport) === "ssh";
+  const sshFields = `<input type="hidden" name="transport" value="ssh"><input type="hidden" name="endpoint" value="">
+    <label>${esc(t("profileName"))}<input autocomplete="off" maxlength="64" required name="name" value="${esc(draft.name)}"></label>
+    <div class="grid2">
+      <label>${esc(t("sshHost"))}<input name="ssh_host" required maxlength="253" autocomplete="off" value="${esc(draft.ssh_host ?? "")}"></label>
+      <label>${esc(t("sshPort"))}<input name="ssh_port" type="number" min="1" max="65535" required value="${esc(draft.ssh_port ?? 22)}"></label>
+      <label>${esc(t("sshUser"))}<input name="ssh_username" required maxlength="64" autocomplete="off" value="${esc(draft.ssh_username ?? "")}"></label>
+      ${select("ssh_cli", [["kiri", "Kiri"], ["docker", "Docker"]], draft.ssh_cli ?? "kiri", t("expectedEngine"))}
+    </div>
+    <p>${esc(t("sshEngineHint"))}</p>
+    <label>known_hosts<textarea name="ssh_known_hosts" required maxlength="16384" rows="4" spellcheck="false" autocomplete="off">${esc(draft.ssh_known_hosts ?? "")}</textarea></label>
+    <p>${esc(t("sshTrustHint"))}</p>
+    <label>${esc(t("sshPassword"))}<input name="ssh_password" type="password" autocomplete="new-password" maxlength="1024"></label>
+    <label>${esc(t("sshKey"))}<textarea name="ssh_private_key" rows="4" maxlength="16384" autocomplete="off" spellcheck="false"></textarea></label>
+    <label>${esc(t("sshPassphrase"))}<input name="ssh_passphrase" type="password" autocomplete="new-password" maxlength="1024"></label>
+    <p>${esc(t(draft.has_credentials ? "sshKeepCredentials" : "sshNewCredentials"))}</p>`;
   return `<form id="profile-form" class="stack">
     <div class="grid2">${select("host", hostTypes.map((value) => [value, t(value)]), draft.host)}
     ${select("runtime", runtimeTypes.map((value) => [value, t(value)]), draft.runtime)}</div>
-    ${endpointFields(draft, endpoints)}
+    ${ssh ? sshFields : endpointFields(draft, endpoints)}
     <div class="actions">
-      ${elButton(t("test"), "profile-test", {symbol: "diagnostics", disabled: !endpoints.length})}
-      <button class="primary" type="submit" ${endpoints.length ? "" : "disabled"}>${icon("check")}${esc(t("save"))}</button>
+      ${elButton(t("test"), "profile-test", {symbol: "diagnostics", disabled: !ssh && !endpoints.length})}
+      <button class="primary" type="submit" ${ssh || endpoints.length ? "" : "disabled"}>${icon("check")}${esc(t("save"))}</button>
     </div><div id="profile-result" aria-live="polite"></div>
   </form>`;
 }
@@ -134,13 +150,14 @@ export function profileForm(profile, endpoints) {
 export function connections(profiles, active, statuses, endpoints, activeStatus, discovery = null) {
   const start = elButton(t("wizard"), "wizard", {symbol: "connections", cls: "primary"});
   const add = elButton(t("newProfile"), "profile-edit", {symbol: "plus", disabled: !endpoints.length});
+  const addSSH = elButton(t("newSSHProfile"), "profile-edit-ssh", {symbol: "plus"});
   const cards = profiles.map((profile) => {
     const status = statuses.get(profile.id);
     const connected = profile.id === active ? activeStatus === "online" : Boolean(status?.engine);
     const label = connected ? "online" : status?.error || (profile.id === active && activeStatus === "offline") ? "offline" : "untested";
     return `<section class="card pad stack-sm">
       <div class="line"><h2>${esc(profile.name)}</h2>${profile.id === active ? badge(t("active"), "good") : ""}${badge(t(label), connected ? "good" : label === "offline" ? "bad" : "")}</div>
-      ${facts([[t("host"), t(profile.host)], [t("runtime"), t(profile.runtime)], [t("endpoint"), profile.endpoint], [t("transport"), t("unix")]])}
+      ${facts([[t("host"), t(profile.host)], [t("runtime"), t(profile.runtime)], [t("endpoint"), profile.transport === "ssh" ? `${profile.ssh_username}@${profile.ssh_host}:${profile.ssh_port}` : profile.endpoint], [t("transport"), profile.transport === "ssh" ? "SSH" : t("unix")], ...(profile.transport === "ssh" ? [[t("expectedEngine"), t(profile.ssh_cli)]] : [])])}
       <div class="actions">
         ${profile.id === active ? "" : elButton(t("activate"), "activate", {key: profile.id})}
         ${elButton(t("test"), "saved-test", {key: profile.id, symbol: "diagnostics"})}
@@ -148,7 +165,7 @@ export function connections(profiles, active, statuses, endpoints, activeStatus,
         ${elButton(t("remove"), "profile-remove", {key: profile.id, cls: "danger quiet"})}
       </div></section>`;
   });
-  return `<div class="stack">${automaticConnection(discovery)}<div class="actions">${start}${add}</div>
+  return `<div class="stack">${automaticConnection(discovery)}<div class="actions">${start}${add}${addSSH}</div>
     ${profiles.length ? `<div class="grid2">${cards.join("")}</div>` : empty(t("noProfile"), t("noProfileHint"))}
     ${endpoints.length && activeStatus !== "offline" ? "" : setupHelp(profiles.find((row) => row.id === active)?.host ?? "linux", "docker")}</div>`;
 }

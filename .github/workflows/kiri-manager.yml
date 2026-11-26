@@ -58,6 +58,9 @@ jobs:
           bash -n setup-kiri-linux.sh
           KIRI_SOCKET_PATH=/run/kiri/docker.sock KIRI_SOCKET_GID=4242 \
             docker compose -f compose.yaml -f compose.kiri-socket.yaml config --quiet
+          docker compose -f compose.candidate.yaml config --quiet
+          KIRI_SOCKET_PATH=/run/kiri/docker.sock KIRI_SOCKET_GID=4242 \
+            docker compose -f compose.candidate.yaml -f compose.kiri-socket.yaml config --quiet
           python tools/catalog_review.py
           python tools/prepare_pages.py "$RUNNER_TEMP/kiri-pages-verify"
       - name: Python unit and security tests
@@ -142,11 +145,11 @@ jobs:
           sudo apt-get install -y -qq skopeo
           skopeo --override-arch "$IMAGE_ARCH" copy "oci-archive:$RUNNER_TEMP/kiri-manager.oci.tar" \
             docker-daemon:dcc-kiri-manager:verify
-          previous="$IMAGE:0.1.1@sha256:35d9f0e08ff5a6b16f8ffb949609185aef7a817710cd2d7080ed0f27cb8a3b11"
+          previous="$IMAGE:0.1.2@sha256:37404038b896cb9f9ac3a04e2b7b46c37246d6fdb79d38693717e8bffd0faf47"
           docker pull "$previous"
           PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify
           PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify \
-            --previous-image "$previous" --previous-version 0.1.1
+            --previous-image "$previous" --previous-version 0.1.2
 
   live_kiri:
     name: Kiri 0.2.2 integration · ${{ matrix.arch }}
@@ -190,11 +193,11 @@ jobs:
           kiri_sock=/run/kiri/docker.sock
           kiri_cli=(sudo -n docker --host "unix://$kiri_sock")
           "${kiri_cli[@]}" compose -f tests/live-compose.yaml -p dcc-kiri-fixture up -d
-      - name: Read real Kiri from a Docker-hosted panel
+      - name: Read and manage real Kiri from a Docker-hosted panel
         working-directory: apps/kiri-manager
         run: |
           PYTHONPATH="$PWD" python tests/container_integration.py --image dcc-kiri-manager:verify --socket /run/kiri/docker.sock
-      - name: Start the panel in Kiri and read real Kiri
+      - name: Start the panel in Kiri and manage real Kiri
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         working-directory: apps/kiri-manager
         env:

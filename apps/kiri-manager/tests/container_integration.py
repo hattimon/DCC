@@ -91,6 +91,43 @@ def verify(args):
             assert "kiri-integration-fixture" in client.get(f"{endpoint}/containers/{cid}/logs?tail=25")["text"]
             assert client.get(f"{endpoint}/containers/{cid}/stats")["memory_bytes"] is not None
 
+            # Separate disposable resource on the isolated Kiri CI runner.
+            # The shared Compose fixture remains untouched.
+            engine_cmd = ["sudo", "-n", "docker", "--host", "unix://" + args.socket]
+            def engine(*parts):
+                return subprocess.run([*engine_cmd, *parts], check=True, text=True,
+                                      stdout=subprocess.PIPE).stdout.strip()
+
+            action_name = name + "-action"
+            action_volume = action_name + "-data"
+            action_id = None
+            engine("volume", "create", "--label", "dev.dcc.kiri-ci=" + name, action_volume)
+            try:
+                action_id = engine("create", "--name", action_name, "--label", "dev.dcc.kiri-ci=" + name,
+                                   "--mount", f"type=volume,src={action_volume},dst=/fixture",
+                                   "alpine:3.22", "sleep", "300")
+                assert len(action_id) == 64
+                route = f"{endpoint}/containers/{action_id}/action"
+                for action, state in (("start", "running"), ("pause", "paused"),
+                                      ("unpause", "running"), ("restart", "running"),
+                                      ("stop", "exited"), ("remove", None)):
+                    result = client.request(route, {"action": action, "revision": profile["revision"],
+                                                    "confirmation": action_name if action == "remove" else action_id})
+                    assert result["ok"]
+                    if state:
+                        assert engine("inspect", "--format", "{{.State.Status}}", action_id) == state
+                    else:
+                        assert action_id not in engine("ps", "-aq", "--no-trunc").splitlines()
+                        action_id = None
+                assert engine("volume", "inspect", "--format", "{{.Name}}", action_volume) == action_volume
+                print("Kiri lifecycle: all six actions and volume retention verified")
+            finally:
+                if action_id:
+                    # The API could have applied removal before a response failed.
+                    if action_id in engine("ps", "-aq", "--no-trunc").splitlines():
+                        engine("rm", "-f", action_id)
+                engine("volume", "rm", action_volume)
+
         docker("restart", created)
         wait_ready(client)
         evidence = client.login(username)
@@ -111,15 +148,35 @@ def verify(args):
             docker("stop", created)
             docker("rm", created)
             created = None
+            # Downgrade requires restoring the pre-migration schema 2 backup.
+            # This helper touches only the uniquely owned CI test volume.
+            restore = """from pathlib import Path
+import os, sqlite3
+root = Path('/data')
+backups = list(root.glob('config-v2-*.sqlite3'))
+assert len(backups) == 1
+with sqlite3.connect(backups[0]) as src:
+    assert src.execute('PRAGMA user_version').fetchone()[0] == 2
+    assert src.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+    with sqlite3.connect(root / 'rollback.tmp') as dst:
+        src.backup(dst)
+os.chmod(root / 'rollback.tmp', 0o600)
+for suffix in ('-wal', '-shm', '-journal'):
+    (root / ('config.sqlite3' + suffix)).unlink(missing_ok=True)
+os.replace(root / 'rollback.tmp', root / 'config.sqlite3')
+"""
+            docker("run", "--rm", "--network", "none", "--user", "10001:10001",
+                   "--mount", f"type=volume,src={volume},dst=/data", "--entrypoint", "python",
+                   args.image, "-c", restore)
             created = docker("create", *params, args.previous_image)
             docker("start", created)
             client = PanelHTTP(client.url)
             wait_ready(client, seconds=20)
             assert not client.get("/api/session")["setup_available"]
-            evidence = client.login(username, reset_password)
+            evidence = client.login(username)
             assert evidence["version"] == args.previous_version
-            assert evidence["preferences"]["language"] == "en" and evidence["preferences"]["theme"] == "dark"
-            print(f"Rollback {VERSION} -> {args.previous_version}: updated password and preferences preserved")
+            assert all(evidence["preferences"][key] == value for key, value in original_preferences.items())
+            print(f"Rollback {VERSION} -> {args.previous_version}: pre-migration account and preferences restored")
     finally:
         if created:
             docker("rm", "-f", created)

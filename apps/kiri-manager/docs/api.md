@@ -17,23 +17,27 @@ When `setup_available` is true, an initial local login returns `setup_pending: t
 | GET `/api/install/linux` | Authenticated download of the optional Linux install helper |
 | GET `/api/discovery` | Authenticated inspection of administrator-configured socket endpoints; `ready` includes verified Kiri identity, `blocked` names the transport failure, `unconfigured` means no socket is mounted |
 | POST `/api/discovery/connect` | Authenticated, CSRF-protected empty object; repeats identity and inventory checks, reuses or creates a profile for the verified endpoint, activates it and marks onboarding complete |
-| POST `/api/profiles` | Add a profile using `name`, `host`, `runtime`, `endpoint` |
+| POST `/api/profiles` | Add a socket or SSH profile (fields below) |
 | POST `/api/profiles/test` | Read availability without creating a profile |
-| PUT `/api/profiles/{id}` | Edit using the four fields and the current `revision` |
+| PUT `/api/profiles/{id}` | Edit using profile fields and the current `revision` |
 | DELETE `/api/profiles/{id}` | Remove local settings using the current `revision` |
 | PUT `/api/profiles/{id}/active` | Select the profile, accepts an empty object |
 
-The endpoint field is a configured alias. Host values are `linux`, `wsl` and `macos`. Runtime values are `docker`, `kiri` and `native`. Profile IDs are local hexadecimal identifiers.
+Socket profiles use `transport: "socket"` (default) and a configured endpoint alias.
+
+SSH profiles require `transport: "ssh"`, `endpoint: ""`, `ssh_host`, integer `ssh_port`, `ssh_username`, `ssh_cli` (expected engine: `kiri` or `docker`), and `ssh_known_hosts` (verified unhashed entry for exact host/port). Send `credentials: {"password":"..."}` or `{"private_key":"...","passphrase":"..."}` (optional passphrase). Omit credentials on edit only when all SSH target/trust fields are unchanged. Responses return `has_credentials`, never the credentials object.
+
+`POST /api/profiles/{id}/test` tests saved settings with an empty JSON object. `POST /api/profiles/{id}/test-draft` tests edited fields with the current revision without saving; unchanged targets may reuse saved credentials. Host values are `linux`, `wsl` and `macos`. Runtime values are `docker`, `kiri` and `native`. Profile IDs are local hexadecimal identifiers.
 
 Automatic discovery never scans paths or enables a socket on the host; only administrator-provisioned `KIRI_SOCKETS` aliases are considered. A failed discovery cannot create a profile. The Windows DCC Store connects to the host's Kiri named pipe independently of this Linux web-panel API.
 
 ## Engine reads
 
-All paths start with `/api/profiles/{id}`. Kiri must pass identity verification before an engine read. Missing values are absent or JSON null. Lists distinguish a successful empty response from an unavailable endpoint.
+All paths start with `/api/profiles/{id}`. The selected engine must pass identity verification before an engine read. Missing values are absent or JSON null. Lists distinguish a successful empty response from an unavailable endpoint.
 
 | GET route | Data |
 | --- | --- |
-| `/status` | Verified Kiri version, API range and selected API, architecture and OS |
+| `/status` | Verified engine kind and version, API range and selected API, architecture and OS |
 | `/snapshot` | Resource lists, connections, counts and operation checks |
 | `/inventory/{kind}` | Container, image, volume, network or Compose list |
 | `/inventory/{kind}/{key}` | Sanitized detail from containers/images/volumes/networks |
@@ -42,3 +46,7 @@ All paths start with `/api/profiles/{id}`. Kiri must pass identity verification 
 | `/disk` | Image layer bytes via Kiri `system/df` |
 
 Failures return `{"error":"code"}`. Examples include `bad_engine`, `api_version`, `socket_missing`, `permission_denied`, `timeout`, `unsupported`, `large_response`, `profile_conflict` and `login_limited`. A profile test or snapshot may identify the engine while reporting individual unavailable reads. [Upstream operation matrix](kiri-audit.md).
+
+## Container management (0.1.3 candidate)
+
+`POST /api/profiles/{id}/containers/{key}/action` accepts exactly `action`, `revision`, `confirmation`. The profile must be active and its revision current. Container keys are full 64-digit lowercase hexadecimal IDs. Actions: `start`, `stop`, `restart`, `pause`, `unpause`, `remove`. For the first five, confirmation equals the full ID. For removal, confirmation is the exact container name (without leading slash), rechecked against inspect. Removal only permits created/exited/dead states and uses `v=false&force=false`. It deletes the writable layer but retains volumes. The panel is protected by name, image, label or dedicated volume. A successful request returns `{"ok":true}`; a transport failure can mean an uncertain outcome. Refresh state before repeating an action. The demo cannot execute actions.

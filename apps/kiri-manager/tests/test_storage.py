@@ -32,3 +32,34 @@ class StorageTest(unittest.TestCase):
                 with closing(upgraded.connect()) as connection:
                     self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
             self.assertEqual(upgraded.preferences()["theme"], "light")
+
+    def test_schema_two_profiles_and_rollback_backup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            # Actual 0.1.2 tables without a master key or SSH columns.
+            with closing(sqlite3.connect(root / "config.sqlite3")) as conn, conn:
+                for migration in MIGRATIONS[:2]:
+                    for statement in migration:
+                        conn.execute(statement)
+                conn.execute("PRAGMA user_version=2")
+                conn.execute("INSERT INTO profiles VALUES (?,?,?,?,?,?)",
+                             ("a"*32, "Existing Kiri", "linux", "kiri", "local", 7))
+                conn.execute("UPDATE preferences SET payload=?,active=? WHERE id=1",
+                             ('{"theme":"light","language":"pl"}', "a"*32))
+                conn.execute("INSERT INTO admin VALUES (1,?,?)", ("test-hash", "operator"))
+            store = Storage(root)
+            profile = store.profile("a"*32)
+            self.assertEqual(profile["revision"], 7)
+            self.assertEqual(profile["transport"], "socket")
+            self.assertFalse(profile["has_credentials"])
+            self.assertEqual(store.preferences()["active"], "a"*32)
+            self.assertEqual(store.credentials()["username"], "operator")
+            self.assertTrue(store.key_path.is_file())
+            backup, = root.glob("config-v2-*.sqlite3")
+            with closing(sqlite3.connect(backup)) as conn:
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
+                self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                self.assertEqual(conn.execute("SELECT revision FROM profiles").fetchone()[0], 7)
+            with patch("backend.storage.MIGRATIONS", MIGRATIONS[:2]):
+                with self.assertRaises(RuntimeError):
+                    Storage(root)

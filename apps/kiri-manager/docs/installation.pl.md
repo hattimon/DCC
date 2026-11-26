@@ -128,3 +128,9 @@ Eksperymentalna opcja zaawansowana to lokalny proces Python 3.12 z zależnościa
 - **Aktualizacja:** wykonaj spójną kopię bazy z dedykowanego wolumenu lub zrób ją przy zatrzymanym panelu. Odtwórz tylko panel z zatwierdzonym obrazem i zachowaj wolumen.
 - **Cofnięcie wersji:** jeśli poprzedni obraz nie obsługuje schematu bazy, przywróć spójną kopię danych panelu przeznaczoną dla tej wersji.
 - **Odinstalowanie:** `docker compose down` usuwa panel z zachowaniem jego wolumenu. Zachowaj `dcc_kiri_manager_data`, jeśli chcesz wrócić do tych profili.
+
+## Kandydat 0.1.3 i SSH
+
+Domyślny Compose i Sklep nadal wskazują opublikowane 0.1.2. Lokalny plik `compose.candidate.yaml` buduje obraz `dcc-kiri-manager:0.1.3-review` ze źródeł. Używaj go po jawnej zgodzie na właściwym hoście, z osobnym wolumenem testowym i portem. Dotychczasowy UID/GID socketu pozostaje bez zmian. W Połączenia → Nowy profil SSH wybierz oczekiwany silnik, host/port/użytkownika, wklej zweryfikowany niehaszowany wpis known_hosts i podaj hasło albo klucz prywatny. Zdalne Docker CLI musi już wskazywać właściwy silnik, a konto mieć jego uprawnienia. Przetestuj przed zapisaniem i aktywacją. Zmiana celu wymaga ponownego podania sekretu. Zrób prywatną kopię bazy i master-key. Schemat 3 nie działa z 0.1.2: do rollbacku zatrzymaj panel i przywróć kopię schematu 2 sprzed migracji; późniejsze zmiany nie zostaną przeniesione.
+
+Po zgodzie na izolowany przegląd użyj osobnego pliku (opcjonalnie dodaj nakładkę socketu): `docker compose -f compose.candidate.yaml up --build -d`. Projekt, kontener, wolumen danych i port 18796 na loopback są odrębne od opublikowanego panelu. Nie łącz tego pliku z produkcyjnym compose.yaml. Migracja produkcyjna wymaga osobnego planu.

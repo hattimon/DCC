@@ -11,8 +11,8 @@ from .config import Config
 def serve(app, bind, port):
     server = create_server(
         app, host=bind, port=port, threads=5, connection_limit=64,
-        channel_timeout=20, max_request_header_size=16 * 1024,
-        max_request_body_size=8192, expose_tracebacks=False,
+        channel_timeout=65, max_request_header_size=16 * 1024,
+        max_request_body_size=65536, expose_tracebacks=False,
         clear_untrusted_proxy_headers=True, ident="dcc-kiri-manager",
     )
 

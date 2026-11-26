@@ -1,4 +1,4 @@
-"""Bounded, read-only access to one explicitly approved Unix socket."""
+"""Bounded access to a verified Engine API."""
 import errno
 import http.client
 import json
@@ -100,12 +100,15 @@ class UnixTransport:
         self.identity = identity
 
     def get(self, path, limit, expected=None):
+        return self.request("GET", path, limit, expected)
+
+    def request(self, method, path, limit, expected=None):
         if not path.startswith("/") or path.startswith("//"):
             raise KiriError("bad_response")
         try:
             self.check_socket()
-            with closing(UnixHTTPConnection(self.path, self.timeout)) as conn:
-                conn.request("GET", path, headers={"X-Kiri-Background": "1", "Connection": "close",
+            with closing(UnixHTTPConnection(self.path, self.timeout if method == "GET" else 15)) as conn:
+                conn.request(method, path, body=b"" if method != "GET" else None, headers={"X-Kiri-Background": "1", "Connection": "close",
                                                    "Accept-Encoding": "identity"})
                 with conn.getresponse() as response:
                     server = response.getheader("Server", "")
@@ -116,7 +119,9 @@ class UnixTransport:
                     if response.status in {404, 405, 501}:
                         raise KiriError("resource_missing" if response.status == 404 else "unsupported",
                                         404 if response.status == 404 else 501)
-                    if response.status != 200:
+                    if response.status == 409:
+                        raise KiriError("engine_conflict", 409)
+                    if response.status not in ({200} if method == "GET" else {200, 204, 304}):
                         raise KiriError("engine_error")
                     if response.getheader("Content-Encoding", "identity") != "identity":
                         raise KiriError("bad_response")
@@ -190,13 +195,35 @@ def identify(server, value):
     }
 
 
+def identify_docker(server, value):
+    if not isinstance(value, dict):
+        raise KiriError("bad_engine")
+    version = value.get("Version")
+    platform = value.get("Platform")
+    if (not isinstance(version, str) or not KIRI_VERSION.fullmatch(version)
+            or value.get("KiriVersion") or not isinstance(platform, dict)
+            or not isinstance(platform.get("Name"), str)
+            or not platform["Name"].startswith("Docker Engine")
+            or server != f"Docker/{version} ({value.get('Os')})"
+            or value.get("Os") not in {"linux", "windows"}):
+        raise KiriError("bad_engine")
+    selected = min(api_tuple(value.get("ApiVersion")), API_MAX)
+    if max(api_tuple(value.get("MinAPIVersion")), API_MIN) > selected:
+        raise KiriError("api_version")
+    return {"kind": "docker", "version": version, "api": ".".join(map(str, selected)),
+            "api_max": value["ApiVersion"], "api_min": value["MinAPIVersion"],
+            "os": value["Os"], "arch": value.get("Arch") if value.get("Arch") in
+            {"amd64", "arm64", "386", "arm", "riscv64", "ppc64le", "s390x"} else None}
+
+
 class VerifiedKiri:
-    def __init__(self, transport):
+    def __init__(self, transport, engine="kiri"):
         self.transport = transport
         for attempt in range(2):
             try:
                 self.server, content_type, payload = transport.get("/version", 16 * 1024)
-                self.identity = identify(self.server, read_json(content_type, payload))
+                self.identity = (identify if engine == "kiri" else identify_docker)(self.server, read_json(content_type, payload))
+                self.identity["kind"] = engine
                 break
             except KiriError as e:
                 if e.code in {"resource_missing", "unsupported"}:
@@ -227,6 +254,47 @@ class VerifiedKiri:
         validate_key("volumes", name)
         query = urlencode({"all": 1, "filters": json.dumps({"volume": [name]}, separators=(",", ":"))})
         return self._json(f"/containers/json?{query}")
+
+    def container_action(self, key, action, confirmation):
+        # SSH mutations are pinned to one verified HTTP connection, with no reconnect.
+        if hasattr(self.transport, "mutation_session"):
+            with self.transport.mutation_session() as transport:
+                verified = VerifiedKiri(transport, self.identity["kind"])
+                if verified.identity != self.identity or verified.server != self.server:
+                    raise KiriError("bad_engine")
+                return verified._container_action(key, action, confirmation)
+        return self._container_action(key, action, confirmation)
+
+    def _container_action(self, key, action, confirmation):
+        validate_key("containers", key)
+        if action not in {"start", "stop", "restart", "pause", "unpause", "remove"}:
+            raise KiriError("bad_input", 400)
+        current = self.details("containers", key)
+        if not isinstance(current, dict) or current.get("Id") != key:
+            raise KiriError("bad_response")
+        name = current.get("Name")
+        config = current.get("Config") or {}
+        image = config.get("Image", "") if isinstance(config, dict) else ""
+        labels = config.get("Labels") or {} if isinstance(config, dict) else {}
+        mounts = current.get("Mounts") or []
+        if (name == "/dcc-kiri-manager"
+                or isinstance(image, str) and "dcc-kiri-manager" in image.lower()
+                or isinstance(labels, dict) and labels.get("org.opencontainers.image.title") == "DCC Kiri Manager"
+                or any(isinstance(m, dict) and m.get("Name") == "dcc_kiri_manager_data" for m in mounts)):
+            raise KiriError("protected_container", 409)
+        state = current.get("State")
+        if not isinstance(state, dict):
+            raise KiriError("bad_response")
+        if action == "remove" and (not isinstance(name, str) or confirmation != name.lstrip("/")):
+            raise KiriError("confirmation_required", 400)
+        if action == "remove" and state.get("Status") not in {"created", "exited", "dead"}:
+            raise KiriError("engine_conflict", 409)
+        base = f"/v{self.identity['api']}/containers/{key}"
+        method, path = ("DELETE", base + "?v=false&force=false") if action == "remove" else ("POST", base + "/" + action)
+        if action in {"stop", "restart"}:
+            path += "?t=10"
+        # Never retry mutations: a timeout may mean the engine already applied the action.
+        self.transport.request(method, path, 16384, self.server)
 
     def container_stats(self, key):
         validate_key("containers", key)
@@ -261,5 +329,21 @@ class Connector:
             raise KiriError("busy", 503)
         try:
             yield VerifiedKiri(self.transport(path))
+        finally:
+            self.slots.release()
+
+
+    @contextmanager
+    def connect_profile(self, profile):
+        if profile.get("transport", "socket") == "socket":
+            with self.connect(profile["endpoint"]) as engine:
+                yield engine
+            return
+        if not self.slots.acquire(blocking=False):
+            raise KiriError("busy", 503)
+        try:
+            from .ssh_transport import SSHTransport
+            with SSHTransport(profile) as transport:
+                yield VerifiedKiri(transport, profile["ssh_cli"])
         finally:
             self.slots.release()

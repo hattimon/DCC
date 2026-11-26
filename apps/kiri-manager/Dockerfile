@@ -1,5 +1,5 @@
 FROM python:3.12-slim-bookworm@sha256:44cf1793efa7c7a476bb0f2cff81443f4a072c90c1cb127e2924933daa3e8c64 AS runtime
-ARG VERSION=0.1.2
+ARG VERSION=0.1.3
 LABEL org.opencontainers.image.title="DCC Kiri Manager" \
       org.opencontainers.image.source="https://github.com/hattimon/DCC" \
       org.opencontainers.image.version="$VERSION" \

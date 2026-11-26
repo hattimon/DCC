@@ -1,11 +1,11 @@
 {
   "name": "DCC Kiri Manager",
-  "version": "0.1.2",
-  "image": "ghcr.io/hattimon/dcc-kiri-manager:0.1.2",
+  "version": "0.1.3",
+  "image": "ghcr.io/hattimon/dcc-kiri-manager:0.1.3",
   "category": "DCC",
   "category_en": "DCC",
-  "description": "Samodzielny panel Kiri do monitorowania zasobów i usług Compose.",
-  "description_en": "Standalone Kiri dashboard for observing resources and Compose services.",
+  "description": "Samodzielny panel Kiri i Docker z zarządzaniem kontenerami oraz profilami SSH.",
+  "description_en": "Standalone Kiri and Docker dashboard with container management and SSH profiles.",
   "store_description": "Panel PL/EN wykrywa zatwierdzone połączenia Kiri i pokazuje Połącz lub wskazówki konfiguracji. Sklep DCC na Windows sprawdza tożsamość Kiri przez lokalny potok; dostęp kontenera do socketu WSL wymaga testu przed instalacją.",
   "store_description_en": "PL/EN dashboard detects verified Kiri endpoints and shows Connect or setup guidance. DCC Store on Windows verifies the local Kiri pipe; the WSL container socket requires a successful preflight before installation.",
   "default_name": "dcc-kiri-manager",
@@ -15,11 +15,16 @@
   "command": "",
   "notes": "Sklep DCC sprawdza Kiri na Windows, proponuje Połącz, a po zgodzie administratora testuje socket w kontenerze i dostępność panelu na Windows. Nieudany test zatrzymuje instalację i usuwa jedynie nowy kontener. Dane dcc_kiri_manager_data i istniejące panele pozostają bez zmian. Pełne połączenie Windows/WSL niezweryfikowane na żywym silniku.",
   "notes_en": "DCC Store verifies Kiri on Windows and offers Connect; with administrator consent it checks the socket inside a container and panel reachability from Windows. Failed checks remove only the new container. Existing panels and dcc_kiri_manager_data remain intact. Full Windows/WSL connection has no live-engine verification yet.",
-  "engines": ["docker"],
-  "archs": ["amd64", "arm64"],
+  "engines": [
+    "docker"
+  ],
+  "archs": [
+    "amd64",
+    "arm64"
+  ],
   "lightweight": true,
-  "source_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.2/apps/kiri-manager",
-  "docs_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.2/apps/kiri-manager/docs",
+  "source_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.3/apps/kiri-manager",
+  "docs_url": "https://github.com/hattimon/DCC/tree/kiri-manager-v0.1.3/apps/kiri-manager/docs",
   "homepage_url": "https://hattimon.github.io/DCC/kiri-manager/",
   "icon_text": "◇",
   "post_install_hints": [
@@ -33,8 +38,8 @@
     "After signing in, choose Connect for verified Kiri or follow the setup guidance when transport is unavailable."
   ],
   "upstream_repo": "hattimon/DCC",
-  "latest_release": "kiri-manager-v0.1.2",
-  "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.2",
+  "latest_release": "kiri-manager-v0.1.3",
+  "latest_release_url": "https://github.com/hattimon/DCC/releases/tag/kiri-manager-v0.1.3",
   "release_tag_pattern": "kiri-manager-v[0-9]+\\.[0-9]+\\.[0-9]+",
   "image_tag_from_release": "strip-prefix:kiri-manager-v"
 }
