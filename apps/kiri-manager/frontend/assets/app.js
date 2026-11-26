@@ -243,7 +243,7 @@ function settings() {
     <div class="grid2">${select("language", [["en", "English"], ["pl", "Polski"]], locale)}
     ${select("theme", [["dark", t("dark")], ["light", t("light")]], theme)}</div>
     ${select("interval", intervalOptions.map((n) => [n, n ? t("seconds", {count: n}) : t("manual")]), interval, t("autoRefresh"))}
-    <p>${esc(t("pollHint"))}</p><small>${esc(t("permission"))} · ${esc(t("adminLocal"))} · ${esc(t("readOnly"))}</small>
+    <p>${esc(t("pollHint"))}</p><small>${esc(t("permission"))} · ${esc(t("adminLocal"))} · ${esc(t("managePermission"))}</small>
     <div><button class="primary" type="submit">${icon("check")}${esc(t("save"))}</button></div></form>`;
 }
 
@@ -413,6 +413,20 @@ function newProfileBody(form) {
   return Object.fromEntries(new FormData(form));
 }
 
+function profileBody(form) {
+  const values = newProfileBody(form);
+  if (values.transport === "ssh") {
+    values.ssh_port = Number(values.ssh_port);
+    const {ssh_password, ssh_private_key, ssh_passphrase} = values;
+    if (ssh_password || ssh_private_key || ssh_passphrase)
+      values.credentials = {password: ssh_password, private_key: ssh_private_key, passphrase: ssh_passphrase};
+    delete values.ssh_password;
+    delete values.ssh_private_key;
+    delete values.ssh_passphrase;
+  }
+  return values;
+}
+
 async function test(values) {
   try { return await api("/api/profiles/test", {method: "POST", data: values}); }
   catch (error) { return {error: error.code}; }
@@ -450,14 +464,15 @@ async function openDetail(spec) {
   if (!currentProfile()) return;
   const split = spec.indexOf(":");
   const kind = spec.slice(0, split), key = spec.slice(split + 1);
-  const reference = {mode: "detail", kind, key, profile: currentProfile().id};
+  const reference = {mode: "detail", kind, key, profile: currentProfile().id, revision: currentProfile().revision, name: null};
   state.modalRef = reference;
   modal(t("details"), opening());
   try {
     const result = await api(path(reference.profile, `inventory/${kind}/${encodeURIComponent(key)}`));
     if (state.modalRef === reference) {
       $("modal-title").textContent = result.item?.name || result.item?.tags?.[0] || t("details");
-      $("modal-body").innerHTML = detail(kind, result.item);
+      reference.name = result.item?.name;
+      $("modal-body").innerHTML = detail(kind, result.item, !state.auth?.demo);
     }
   } catch (error) {
     if (state.modalRef === reference) $("modal-body").innerHTML = failure(error.code);
@@ -488,14 +503,16 @@ async function submit(form) {
     }
   } else if (form.id === "profile-form") {
     const reference = state.modalRef;
-    const values = newProfileBody(form);
+    const values = profileBody(form);
     if (reference.profile) {
       await api(`/api/profiles/${reference.profile.id}`, {method: "PUT", data: {...values, revision: reference.profile.revision}});
       state.checked.delete(reference.profile.id);
     } else await api("/api/profiles", {method: "POST", data: values});
+    if (state.view === "wizard") await updatePreferences({onboarded: true});
     await rereadSession();
     $("modal").close();
-    render();
+    if (state.view === "wizard") navigate("connections", true);
+    else render();
     notify(t("saved"));
     void refresh(true);
   } else if (form.id === "settings-form") {
@@ -556,20 +573,30 @@ async function action(name, key, button) {
     case "wizard-finish": await completeWizard(true); break;
     case "wizard-skip": await completeWizard(false); break;
     case "profile-edit":
+    case "profile-edit-ssh":
       state.modalRef = {mode: "profile", profile: stored};
-      modal(t(stored ? "edit" : "newProfile"), profileForm(stored, state.endpoints));
+      modal(t(stored ? "edit" : name === "profile-edit-ssh" ? "newSSHProfile" : "newProfile"),
+        profileForm(stored, state.endpoints, name === "profile-edit-ssh" ? "ssh" : "socket"));
       break;
     case "profile-test": {
       const form = $("profile-form");
       if (!form.reportValidity()) return;
       const destination = $("profile-result");
       destination.innerHTML = opening();
-      const result = await test(newProfileBody(form));
+      const reference = state.modalRef;
+      let result;
+      if (reference.profile) {
+        try { result = await api(path(reference.profile.id, "test-draft"), {method: "POST",
+          data: {...profileBody(form), revision: reference.profile.revision}}); }
+        catch (error) { result = {error: error.code}; }
+      } else result = await test(profileBody(form));
       if (destination.isConnected) destination.innerHTML = testReport(result);
       break;
     }
     case "saved-test": {
-      const result = await test(Object.fromEntries(["name", "host", "runtime", "endpoint"].map((field) => [field, stored[field]])));
+      let result;
+      try { result = await api(path(stored.id, "test"), {method: "POST", data: {}}); }
+      catch (error) { result = {error: error.code}; }
       if (!state.auth?.authenticated) return;
       state.checked.set(key, result);
       if (currentProfile()?.id === key) state.status = result.engine ? "online" : "offline";
@@ -599,6 +626,37 @@ async function action(name, key, button) {
       break;
     case "modal-close": $("modal").close(); break;
     case "detail": await openDetail(key); break;
+    case "container-action": {
+      const ref = state.modalRef;
+      if (ref?.mode !== "detail" || ref.kind !== "containers" || state.auth?.demo
+          || ref.profile !== currentProfile()?.id || ref.revision !== currentProfile()?.revision) return;
+      const subject = ref.name || ref.key;
+      if (!window.confirm(t("confirmContainerAction", {action: t("action_" + key), name: subject}))) return;
+      const confirmation = key === "remove" ? window.prompt(t("confirmContainerRemove", {name: subject})) : ref.key;
+      if (key === "remove" && confirmation !== subject) return;
+      const buttons = $("modal-body").querySelectorAll("[data-action=container-action]");
+      buttons.forEach((control) => control.disabled = true);
+      try {
+        await api(path(ref.profile, `containers/${encodeURIComponent(ref.key)}/action`), {
+          method: "POST", data: {action: key, revision: ref.revision, confirmation},
+        });
+        notify(t("actionDone"));
+        if (state.modalRef === ref) {
+          if (key === "remove") $("modal").close();
+          else await openDetail("containers:" + ref.key);
+        }
+        await refresh(true);
+      } catch (error) {
+        const message = ["timeout", "ssh_connection", "disconnected", "bad_engine", "bad_response", "network"].includes(error.code)
+          ? t("actionUncertain") : problem(error.code);
+        notify(message);
+        if (state.modalRef === ref) $("container-action-status").textContent = message;
+        await refresh(true);
+      } finally {
+        buttons.forEach((control) => control.disabled = false);
+      }
+      break;
+    }
     case "disk": {
       const profile = currentProfile();
       const view = state.view;

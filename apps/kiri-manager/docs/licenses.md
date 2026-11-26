@@ -7,6 +7,8 @@ DCC Kiri Manager code, mark, CSS, diagrams and project content are provided unde
 | Flask, Werkzeug, Click, Jinja, itsdangerous, MarkupSafe | BSD-3-Clause |
 | Blinker | MIT |
 | Waitress | ZPL-2.1 |
+| cryptography | Apache-2.0 OR BSD-3-Clause |
+| Paramiko | LGPL-2.1-or-later |
 | Colorama (Windows local development) | BSD-3-Clause |
 | Python and Debian OCI base | PSF License and individual Debian package licenses |
 | Playwright (development and CI) | Apache-2.0 |

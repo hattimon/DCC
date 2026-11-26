@@ -1,3 +1,15 @@
+# Weryfikacja kandydata 0.1.3
+
+26 listopada 2026, Windows, lokalny worktree codex/kiri-catalog-012, HEAD c1bbd98.
+
+- Python: 49 zaliczonych, 3 pominięte (Unix socket na Windows), łącznie 52. Testy obejmują migrację 2 → 3, kopię do rollbacku, zachowanie profili, szyfrowanie i utratę klucza, tożsamość silnika, sesję/CSRF/revision, wszystkie sześć metod API, zabezpieczenia usuwania, brak ponawiania mutacji i symulowany SSH.
+- Node: 5/5, kontrola składni JS/MJS zakończona powodzeniem. Python compileall, pip check, catalog_review i lokalny preview Pages zakończone powodzeniem. git diff --check bez błędów; ostrzeżenie CRLF dla Dockerfile.
+- Playwright: Chromium uruchomił się po wskazaniu istniejącego cache, lecz lokalny fixture Waitress nie wystartował: WinError 10013 przy połączeniu loopback. Scenariusze przeglądarkowe 0.1.3 nie zostały wykonane. Ruff nie jest zainstalowany w dostępnych venv.
+- Testy Python korzystały z cryptography 48.0.1 i Paramiko 5.0.0. Przypięta cryptography 50.0.1 nie została zweryfikowana w tym środowisku. Nie instalowano zależności systemowych.
+- Przygotowano CI z przypiętym obrazem 0.1.2, testem odtworzenia kopii schematu 2 i osobnym kontenerem oraz wolumenem do wszystkich akcji w Kiri na izolowanych runnerach. CI, obraz OCI amd64/arm64, rzeczywisty SSH i operacje Kiri nie zostały uruchomione.
+- Brak jednoznacznie potwierdzonego grantu DCC MCP dla Kiri Ubuntu WSL. Nie wykonano operacji na hostach. 0.1.3 pozostaje lokalnym kandydatem bez publikacji lub wdrożenia. Publiczna strona i katalog nadal opisują 0.1.2.
+
+---
 # Weryfikacja 0.1.2
 
 25 listopada 2026, izolowany worktree `codex/kiri-auto-detection`.

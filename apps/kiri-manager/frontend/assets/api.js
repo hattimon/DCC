@@ -7,7 +7,7 @@ export class ApiError extends Error {
 
 export function client(getToken, onExpired) {
   return async function request(path, {method = "GET", data, signal} = {}) {
-    const timeout = AbortSignal.timeout(20000);
+    const timeout = AbortSignal.timeout(method === "GET" && !path.includes("/profiles/") ? 20000 : 60000);
     try {
       const response = await fetch(path, {
         method,

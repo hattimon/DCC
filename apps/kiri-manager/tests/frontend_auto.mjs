@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {automaticConnection, wizard, connections} from "../frontend/assets/connections.js";
+import {automaticConnection, wizard, connections, profileForm} from "../frontend/assets/connections.js";
+import {detail} from "../frontend/assets/inventory.js";
 import {setLanguage} from "../frontend/assets/i18n.js";
 
 globalThis.document = {documentElement: {lang: "en"}};
@@ -38,4 +39,23 @@ test("PL and connections: connect label localized, skip only in onboarding", () 
   assert.match(listing, /Połącz z wykrytym Kiri/);
   assert.doesNotMatch(listing, /data-action="auto-skip"/);
   setLanguage("en");
+});
+
+test("SSH form never renders stored credential values and supports pinned host key", () => {
+  const profile = {name: "Remote", host: "linux", runtime: "docker", transport: "ssh",
+    ssh_host: "example.invalid", ssh_port: 22, ssh_username: "operator", ssh_cli: "docker",
+    ssh_known_hosts: "public-key", has_credentials: true, credentials: {password: "TEST-SECRET"}};
+  const html = profileForm(profile, []);
+  assert.match(html, /name="ssh_known_hosts"/);
+  assert.match(html, /name="ssh_password" type="password"/);
+  assert.doesNotMatch(html, /TEST-SECRET/);
+});
+
+test("container controls depend on state and management mode", () => {
+  const item = {name: "demo-container", state: "exited", id: "a".repeat(64)};
+  assert.match(detail("containers", item, true), /data-key="remove"/);
+  assert.match(detail("containers", item, true), /data-key="start"/);
+  assert.doesNotMatch(detail("containers", {...item, state: "running"}, true), /data-key="remove"/);
+  assert.doesNotMatch(detail("containers", item, false), /data-action="container-action"/);
+  assert.doesNotMatch(detail("containers", {...item, name: "dcc-kiri-manager"}, true), /data-action="container-action"/);
 });

@@ -1,4 +1,4 @@
-"""Private SQLite state for profiles, preferences, password hash and session digests."""
+"""Private SQLite state for profiles, credentials, preferences and sessions."""
 import hashlib
 import json
 import os
@@ -7,6 +7,8 @@ import time
 from contextlib import closing, contextmanager
 from pathlib import Path
 from uuid import uuid4
+
+from cryptography.fernet import Fernet, InvalidToken
 
 DEFAULTS = {"language": "en", "theme": "dark", "interval": 30, "onboarded": False}
 DEFAULT_ADMIN_USERNAME = "admin"
@@ -27,6 +29,15 @@ MIGRATIONS = (
         "INSERT INTO preferences (id, payload) VALUES (1, '{}')",
     ),
     ("ALTER TABLE admin ADD COLUMN username TEXT NOT NULL DEFAULT 'admin'",),
+    (
+        "ALTER TABLE profiles ADD COLUMN transport TEXT NOT NULL DEFAULT 'socket'",
+        "ALTER TABLE profiles ADD COLUMN ssh_host TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN ssh_port INTEGER NOT NULL DEFAULT 22",
+        "ALTER TABLE profiles ADD COLUMN ssh_username TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN ssh_cli TEXT NOT NULL DEFAULT 'docker'",
+        "ALTER TABLE profiles ADD COLUMN ssh_known_hosts TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE profiles ADD COLUMN credentials BLOB",
+    ),
 )
 
 
@@ -35,6 +46,26 @@ class Storage:
         self.root = Path(root)
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.path = self.root / "config.sqlite3"
+        self.key_path = self.root / "master-key"
+        if self.key_path.exists():
+            if self.key_path.is_symlink() or (os.name != "nt" and self.key_path.stat().st_mode & 0o077):
+                raise RuntimeError("Insecure master-key permissions")
+            key = self.key_path.read_bytes()
+        else:
+            if self.path.exists():
+                with closing(sqlite3.connect(self.path)) as conn:
+                    columns = {row[1] for row in conn.execute("PRAGMA table_info(profiles)")}
+                    if "credentials" in columns and conn.execute("SELECT 1 FROM profiles WHERE credentials IS NOT NULL LIMIT 1").fetchone():
+                        raise RuntimeError("Missing master-key for existing SSH credentials")
+            key = Fernet.generate_key()
+            descriptor = os.open(self.key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(key)
+            except BaseException:
+                self.key_path.unlink(missing_ok=True)
+                raise
+        self.vault = Fernet(key)
         self.migrate()
 
     def connect(self):
@@ -87,31 +118,69 @@ class Storage:
 
     def profiles(self):
         with closing(self.connect()) as conn:
-            return [dict(row) for row in conn.execute("SELECT * FROM profiles ORDER BY name COLLATE NOCASE, id")]
+            rows = conn.execute("SELECT * FROM profiles ORDER BY name COLLATE NOCASE, id")
+            return [self._public_profile(row) for row in rows]
 
     def profile(self, profile_id):
         with closing(self.connect()) as conn:
             row = conn.execute("SELECT * FROM profiles WHERE id=?", (profile_id,)).fetchone()
-        return dict(row) if row else None
+        return self._public_profile(row) if row else None
+
+    @staticmethod
+    def _public_profile(row):
+        result = dict(row)
+        credentials = result.pop("credentials", None)
+        result["has_credentials"] = bool(credentials)
+        return result
+
+    def connection_profile(self, profile_id):
+        with closing(self.connect()) as conn:
+            row = conn.execute("SELECT * FROM profiles WHERE id=?", (profile_id,)).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        encrypted = result.pop("credentials", None)
+        try:
+            result["credentials"] = json.loads(self.vault.decrypt(encrypted).decode()) if encrypted else {}
+        except (InvalidToken, UnicodeDecodeError, ValueError, TypeError):
+            raise RuntimeError("Stored connection credentials cannot be decrypted") from None
+        result["has_credentials"] = bool(encrypted)
+        return result
 
     def create_profile(self, values):
         profile_id = uuid4().hex
+        encrypted = self.vault.encrypt(json.dumps(values.get("credentials", {})).encode()) if values.get("credentials") else None
         with self.transaction() as conn:
             if conn.execute("SELECT COUNT(*) FROM profiles").fetchone()[0] >= 32:
                 return None
             conn.execute(
-                "INSERT INTO profiles (id,name,host,runtime,endpoint) VALUES (?,?,?,?,?)",
-                (profile_id, values["name"], values["host"], values["runtime"], values["endpoint"]),
+                """INSERT INTO profiles
+                   (id,name,host,runtime,endpoint,transport,ssh_host,ssh_port,ssh_username,ssh_cli,ssh_known_hosts,credentials)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (profile_id, values["name"], values["host"], values["runtime"], values["endpoint"],
+                 values.get("transport", "socket"), values.get("ssh_host", ""), values.get("ssh_port", 22),
+                 values.get("ssh_username", ""), values.get("ssh_cli", "docker"),
+                 values.get("ssh_known_hosts", ""), encrypted),
             )
             conn.execute("UPDATE preferences SET active=? WHERE id=1 AND active IS NULL", (profile_id,))
         return self.profile(profile_id)
 
     def update_profile(self, profile_id, revision, values):
+        encrypted = self.vault.encrypt(json.dumps(values["credentials"]).encode()) if values.get("credentials") else None
         with self.transaction() as conn:
+            query = """UPDATE profiles SET name=?,host=?,runtime=?,endpoint=?,transport=?,ssh_host=?,ssh_port=?,
+                   ssh_username=?,ssh_cli=?,ssh_known_hosts=?,revision=revision+1"""
+            params = [values["name"], values["host"], values["runtime"], values["endpoint"],
+                      values.get("transport", "socket"), values.get("ssh_host", ""), values.get("ssh_port", 22),
+                      values.get("ssh_username", ""), values.get("ssh_cli", "docker"), values.get("ssh_known_hosts", "")]
+            if "credentials" in values or values.get("transport", "socket") == "socket":
+                query += ",credentials=?"
+                params.append(encrypted)
+            query += " WHERE id=? AND revision=?"
+            params.extend((profile_id, revision))
             return conn.execute(
-                """UPDATE profiles SET name=?,host=?,runtime=?,endpoint=?,revision=revision+1
-                   WHERE id=? AND revision=?""",
-                (values["name"], values["host"], values["runtime"], values["endpoint"], profile_id, revision),
+                query,
+                params,
             ).rowcount == 1
 
     def activate(self, profile_id):

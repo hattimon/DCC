@@ -94,9 +94,11 @@ class FakeClient:
 
 
 class WindowsKiriTest(unittest.TestCase):
-    def test_store_install_image_matches_this_release(self):
-        version = (Path(__file__).resolve().parents[1] / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(KIRI_MANAGER_INSTALL_IMAGE, f"ghcr.io/hattimon/dcc-kiri-manager:{version}")
+    def test_store_install_image_matches_published_catalog(self):
+        root = Path(__file__).resolve().parents[3]
+        published = json.loads((root / "dcc-catalog.json").read_text(encoding="utf-8"))
+        entry = next(item for item in published["apps"] if item["name"] == "DCC Kiri Manager")
+        self.assertEqual(KIRI_MANAGER_INSTALL_IMAGE, entry["image"])
 
     def test_engine_identity_is_not_a_context_name(self):
         self.assertEqual(check_identity(ENGINE, VERSION), "0.2.2")

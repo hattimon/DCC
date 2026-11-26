@@ -74,7 +74,17 @@ export function composeView(projects) {
     </section>`).join("")}</div>`;
 }
 
-export function detail(kind, item) {
+export function detail(kind, item, canManage = false) {
+  const actionNames = item.name === "dcc-kiri-manager" ? [] : ({
+    running: ["stop", "restart", "pause"], paused: ["unpause"],
+    exited: ["start", "remove"], created: ["start", "remove"], dead: ["remove"],
+  }[item.state] ?? []);
+  const controls = canManage && kind === "containers" && actionNames.length ?
+    `<section class="stack-sm"><h3>${esc(t("manageContainer"))}</h3>
+    <p>${esc(t("manageHint"))}</p><div class="actions">
+    ${actionNames.map((action) => elButton(t("action_" + action), "container-action",
+      {key: action, cls: action === "remove" ? "danger" : ""})).join("")}
+    </div><p id="container-action-status" role="status" class="error"></p></section>` : "";
   const labels = Object.entries(item.compose ?? {}).map(([key, value]) => [t(key), value]);
   const fields = {
     containers: [["id", item.id], ["image", item.image], ["state", item.state ? t(item.state === "created" ? "createdState" : item.state) : NA],
@@ -95,7 +105,7 @@ export function detail(kind, item) {
     </form>`;
   return `${facts([...fields[kind].map(([label, value]) => [t(label), value]), ...labels], "details")}
     ${item.attachments_error ? `<p class="error">${esc(problem(item.attachments_error))}</p>` : ""}
-    ${kind === "containers" ? logControls : ""}`;
+    ${controls}${kind === "containers" ? logControls : ""}`;
 }
 
 export function engineCard(engine, profile, counts, connection = "online", compact = false) {
@@ -103,7 +113,7 @@ export function engineCard(engine, profile, counts, connection = "online", compa
     <div><h2>${esc(t("engine"))}</h2>${badge(t(connection), connection === "online" ? "good" : connection === "offline" ? "bad" : "warn")}</div></div>
     ${facts([[t("profile"), profile?.name], [t("engineVersion"), engine?.version],
       [t("api"), engine?.api], [t("architecture"), engine ? [engine.os, engine.arch].filter(Boolean).join("/") || NA : NA],
-      [t("permission"), t("readOnly")], ...(counts ? [[t("projects"), counts.compose]] : [])])}</section>`;
+      [t("expectedEngine"), t(engine?.kind ?? "kiri")], [t("permission"), t("managePermission")], ...(counts ? [[t("projects"), counts.compose]] : [])])}</section>`;
 }
 
 function countCards(counts, running, stopped, checks) {
@@ -169,7 +179,7 @@ export function metrics(containers, samples, chosen, error, expanded = false, di
 export function capabilityChecks(snapshot, compact = false) {
   const engine = snapshot?.engine;
   if (!engine) return `<p>${esc(t("pending"))}</p>`;
-  const checks = [[t("socketAccess"), "available"], [t("identity"), "available"], [t("api"), engine.api],
+  const checks = [[t("transport"), "available"], [t("identity"), "available"], [t("api"), engine.api],
     ...Object.entries(snapshot.checks ?? {}).map(([key, value]) => [t(key === "info" ? "engine" : key), value])];
   if (!compact) checks.push([t("logs"), "onDemand"], [t("monitoring"), "onDemand"], [t("storage"), "onDemand"]);
   return `<dl class="checks">${checks.map(([label, status]) => `<div><dt>${esc(label)}</dt><dd>${

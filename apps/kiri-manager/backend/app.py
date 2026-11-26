@@ -1,7 +1,9 @@
-"""HTTP API for local settings and authenticated Kiri inventory."""
+"""Authenticated profiles, inventory and container management."""
 import os
 import re
 import secrets
+from threading import Lock
+from contextlib import contextmanager
 
 from flask import Flask, g, jsonify, request, send_from_directory, session
 from werkzeug.exceptions import HTTPException
@@ -19,6 +21,10 @@ HOSTS = {"linux", "wsl", "macos"}
 RUNTIMES = {"docker", "kiri", "native"}
 PREFS = {"language", "theme", "interval", "onboarded"}
 PROFILE_FIELDS = {"name", "host", "runtime", "endpoint"}
+SSH_FIELDS = {"ssh_host", "ssh_port", "ssh_username", "ssh_cli", "ssh_known_hosts"}
+PROFILE_OPTIONAL = SSH_FIELDS | {"transport", "credentials"}
+SSH_HOST = re.compile(r"[A-Za-z0-9][A-Za-z0-9.:-]{0,252}")
+SSH_USER = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.@-]{0,63}")
 INTERVALS = {0, 15, 30, 60, 120}
 ID = re.compile(r"[a-f0-9]{32}")
 
@@ -42,11 +48,21 @@ def create_app(config=None, *, connector=None, demo=False):
     store = Storage(config.data_dir)
     connector = connector if connector is not None else Connector(config.sockets)
     gate = LoginGate()
+    operation_lock = Lock()
+
+    @contextmanager
+    def exclusive_operation():
+        if not operation_lock.acquire(blocking=False):
+            raise KiriError("busy", 503)
+        try:
+            yield
+        finally:
+            operation_lock.release()
     gateway = default_gateway() if config.bind == "0.0.0.0" and not config.public_origin else None
     app = Flask(__name__, static_folder=str(ROOT / "frontend" / "assets"), static_url_path="/assets")
     app.config.update(
         SECRET_KEY=secrets.token_bytes(32), TRUSTED_HOSTS=config.trusted_hosts,
-        MAX_CONTENT_LENGTH=8192, SESSION_COOKIE_NAME="dcc_kiri_session",
+        MAX_CONTENT_LENGTH=65536, SESSION_COOKIE_NAME="dcc_kiri_session",
         SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=bool(config.public_origin), SESSION_COOKIE_PATH="/",
         SESSION_REFRESH_EACH_REQUEST=False, PERMANENT_SESSION_LIFETIME=SESSION_TTL,
@@ -98,18 +114,64 @@ def create_app(config=None, *, connector=None, demo=False):
             raise KiriError("profile_missing", 404)
         return row
 
-    def profile_values(extra=()):
-        data = json_object(PROFILE_FIELDS | set(extra), required=PROFILE_FIELDS | set(extra))
+    def profile_values(extra=(), existing=None):
+        data = json_object(PROFILE_FIELDS | PROFILE_OPTIONAL | set(extra),
+                           required=PROFILE_FIELDS | set(extra))
         if any(not isinstance(data[key], str) for key in PROFILE_FIELDS):
             raise KiriError("bad_input", 400)
         name = data["name"].strip()
         if (not 1 <= len(name) <= 64 or UNSAFE_NAME.search(name)
                 or data["host"] not in HOSTS or data["runtime"] not in RUNTIMES):
             raise KiriError("bad_input", 400)
-        if data["endpoint"] not in connector.sockets:
-            raise KiriError("endpoint_disabled", 409)
         data["name"] = name
+        transport = data.get("transport", "socket")
+        if transport == "socket":
+            if data.keys() & (SSH_FIELDS | {"credentials"}):
+                raise KiriError("bad_input", 400)
+            if data["endpoint"] not in connector.sockets:
+                raise KiriError("endpoint_disabled", 409)
+            return data
+        if demo and transport == "ssh":
+            raise KiriError("permission_denied", 403)
+        if transport != "ssh" or not SSH_FIELDS <= data.keys() or data["endpoint"] != "":
+            raise KiriError("bad_input", 400)
+        host, port, username = data["ssh_host"], data["ssh_port"], data["ssh_username"]
+        known = data["ssh_known_hosts"]
+        if (not isinstance(host, str) or not SSH_HOST.fullmatch(host)
+                or type(port) is not int or not 1 <= port <= 65535
+                or not isinstance(username, str) or not SSH_USER.fullmatch(username)
+                or data["ssh_cli"] not in ("kiri", "docker")
+                or not isinstance(known, str) or not 1 <= len(known) <= 16384):
+            raise KiriError("bad_input", 400)
+        from .ssh_transport import trusted_keys, private_key
+        trusted_keys(host, port, known)
+        if "credentials" not in data:
+            # Do not silently send existing secrets to a different host, user or host key.
+            if (not existing or existing.get("transport") != "ssh"
+                    or not existing.get("has_credentials")
+                    or any(data[field] != existing[field] for field in SSH_FIELDS)):
+                raise KiriError("ssh_credentials", 400)
+        else:
+            auth = data["credentials"]
+            limits = {"password": 1024, "private_key": 16384, "passphrase": 1024}
+            if (not isinstance(auth, dict) or auth.keys() - limits.keys()
+                    or any(not isinstance(value, str) or len(value) > limits[key]
+                           or "\x00" in value for key, value in auth.items())
+                    or bool(auth.get("password")) == bool(auth.get("private_key"))
+                    or (auth.get("passphrase") and not auth.get("private_key"))):
+                raise KiriError("ssh_credentials", 400)
+            if auth.get("private_key"):
+                private_key(auth["private_key"], auth.get("passphrase"))
         return data
+
+    def connection_profile(profile_id):
+        profile(profile_id)
+        row = store.connection_profile(profile_id)
+        if row is None:
+            raise KiriError("profile_missing", 404)
+        if demo and row.get("transport") == "ssh":
+            raise KiriError("permission_denied", 403)
+        return row
 
     def revision_value(body):
         value = body.get("revision")
@@ -162,22 +224,23 @@ def create_app(config=None, *, connector=None, demo=False):
 
     @app.post("/api/discovery/connect")
     def auto_connect():
-        json_object(set())
-        found = discover(connector)
-        if found["status"] != "ready":
-            raise KiriError("transport_not_configured" if found["status"] == "unconfigured"
-                            else found["reason"], 409)
-        alias = found["endpoint"]
-        saved = next((row for row in store.profiles() if row["endpoint"] == alias), None)
-        if saved is None:
-            saved = store.create_profile({"name": "Kiri (auto)", "host": "linux",
-                                         "runtime": "kiri", "endpoint": alias})
+        with exclusive_operation():
+            json_object(set())
+            found = discover(connector)
+            if found["status"] != "ready":
+                raise KiriError("transport_not_configured" if found["status"] == "unconfigured"
+                                else found["reason"], 409)
+            alias = found["endpoint"]
+            saved = next((row for row in store.profiles() if row.get("transport", "socket") == "socket" and row["endpoint"] == alias), None)
             if saved is None:
-                raise KiriError("profile_limit", 409)
-        if not store.activate(saved["id"]):
-            raise KiriError("profile_conflict", 409)
-        store.update_preferences({"onboarded": True})
-        return jsonify(profile=saved["id"], engine=found["engine"])
+                saved = store.create_profile({"name": "Kiri (auto)", "host": "linux",
+                                             "runtime": "kiri", "endpoint": alias})
+                if saved is None:
+                    raise KiriError("profile_limit", 409)
+            if not store.activate(saved["id"]):
+                raise KiriError("profile_conflict", 409)
+            store.update_preferences({"onboarded": True})
+            return jsonify(profile=saved["id"], engine=found["engine"])
 
     @app.get("/api/install/linux")
     def linux_setup():
@@ -249,56 +312,104 @@ def create_app(config=None, *, connector=None, demo=False):
 
     @app.post("/api/profiles")
     def create_profile():
-        result = store.create_profile(profile_values())
-        if result is None:
-            raise KiriError("profile_limit", 409)
-        return jsonify(result), 201
+        with exclusive_operation():
+            result = store.create_profile(profile_values())
+            if result is None:
+                raise KiriError("profile_limit", 409)
+            return jsonify(result), 201
 
     @app.put("/api/profiles/<profile_id>")
     def update_profile(profile_id):
-        profile(profile_id)
-        values = profile_values(("revision",))
-        if not store.update_profile(profile_id, revision_value(values), values):
-            raise KiriError("profile_conflict", 409)
-        return jsonify(profile(profile_id))
+        with exclusive_operation():
+            existing = profile(profile_id)
+            values = profile_values(("revision",), existing)
+            if not store.update_profile(profile_id, revision_value(values), values):
+                raise KiriError("profile_conflict", 409)
+            return jsonify(profile(profile_id))
 
     @app.delete("/api/profiles/<profile_id>")
     def delete_profile(profile_id):
-        profile(profile_id)
-        body = json_object({"revision"}, required={"revision"})
-        if not store.delete_profile(profile_id, revision_value(body)):
-            raise KiriError("profile_conflict", 409)
-        return jsonify(ok=True)
+        with exclusive_operation():
+            profile(profile_id)
+            body = json_object({"revision"}, required={"revision"})
+            if not store.delete_profile(profile_id, revision_value(body)):
+                raise KiriError("profile_conflict", 409)
+            return jsonify(ok=True)
 
     @app.put("/api/profiles/<profile_id>/active")
     def active_profile(profile_id):
-        json_object(set())
-        if not ID.fullmatch(profile_id) or not store.activate(profile_id):
-            raise KiriError("profile_missing", 404)
-        return jsonify(active=profile_id)
+        with exclusive_operation():
+            json_object(set())
+            if not ID.fullmatch(profile_id) or not store.activate(profile_id):
+                raise KiriError("profile_missing", 404)
+            return jsonify(active=profile_id)
 
     @app.post("/api/profiles/test")
     def test_profile():
         values = profile_values()
-        with connector.connect(values["endpoint"]) as kiri:
+        with connector.connect_profile(values) as kiri:
             overview = resources.snapshot(kiri)
         return jsonify(engine=overview["engine"], checks=overview["checks"], at=overview["at"])
 
+    @app.post("/api/profiles/<profile_id>/test")
+    def test_saved_profile(profile_id):
+        json_object(set())
+        with connector.connect_profile(connection_profile(profile_id)) as kiri:
+            overview = resources.snapshot(kiri)
+        return jsonify(engine=overview["engine"], checks=overview["checks"], at=overview["at"])
+
+    @app.post("/api/profiles/<profile_id>/test-draft")
+    def test_edited_profile(profile_id):
+        existing = connection_profile(profile_id)
+        values = profile_values(("revision",), existing)
+        if revision_value(values) != existing["revision"]:
+            raise KiriError("profile_conflict", 409)
+        if values.get("transport") == "ssh" and "credentials" not in values:
+            values["credentials"] = existing["credentials"]
+        with connector.connect_profile(values) as kiri:
+            overview = resources.snapshot(kiri)
+        return jsonify(engine=overview["engine"], checks=overview["checks"], at=overview["at"])
+
+    @app.post("/api/profiles/<profile_id>/containers/<key>/action")
+    def container_action(profile_id, key):
+        validate_key("containers", key)
+        values = json_object({"action", "revision", "confirmation"}, required={"action", "revision", "confirmation"})
+        action = values["action"]
+        if not isinstance(action, str) or action not in {"start", "stop", "restart", "pause", "unpause", "remove"}:
+            raise KiriError("bad_input", 400)
+        if demo:
+            raise KiriError("permission_denied", 403)
+        if not isinstance(values["confirmation"], str) or not values["confirmation"] or len(values["confirmation"]) > 256:
+            raise KiriError("confirmation_required", 400)
+        if action != "remove" and values["confirmation"] != key:
+            raise KiriError("confirmation_required", 400)
+        if not operation_lock.acquire(blocking=False):
+            raise KiriError("busy", 503)
+        try:
+            row = connection_profile(profile_id)
+            if revision_value(values) != row["revision"] or store.preferences()["active"] != profile_id:
+                raise KiriError("profile_conflict", 409)
+            with connector.connect_profile(row) as kiri:
+                kiri.container_action(key, action, values["confirmation"])
+        finally:
+            operation_lock.release()
+        return jsonify(ok=True)
+
     @app.get("/api/profiles/<profile_id>/status")
     def status(profile_id):
-        with connector.connect(profile(profile_id)["endpoint"]) as kiri:
+        with connector.connect_profile(connection_profile(profile_id)) as kiri:
             return jsonify(engine=kiri.identity)
 
     @app.get("/api/profiles/<profile_id>/snapshot")
     def snapshot(profile_id):
-        with connector.connect(profile(profile_id)["endpoint"]) as kiri:
+        with connector.connect_profile(connection_profile(profile_id)) as kiri:
             return jsonify(resources.snapshot(kiri))
 
     @app.get("/api/profiles/<profile_id>/inventory/<kind>")
     def inventory(profile_id, kind):
         if kind not in {*resources.DETAIL, "compose"}:
             raise KiriError("not_found", 404)
-        with connector.connect(profile(profile_id)["endpoint"]) as kiri:
+        with connector.connect_profile(connection_profile(profile_id)) as kiri:
             resource = "containers" if kind == "compose" else kind
             payload = resources.INVENTORY[resource](kiri.read(resource))
             return jsonify(items=resources.projects(payload) if kind == "compose" else payload,
@@ -309,7 +420,7 @@ def create_app(config=None, *, connector=None, demo=False):
         if kind not in resources.DETAIL:
             raise KiriError("not_found", 404)
         validate_key(kind, key)
-        with connector.connect(profile(profile_id)["endpoint"]) as kiri:
+        with connector.connect_profile(connection_profile(profile_id)) as kiri:
             value = kiri.details(kind, key)
             if not isinstance(value, dict):
                 raise KiriError("bad_response")
@@ -330,7 +441,7 @@ def create_app(config=None, *, connector=None, demo=False):
     @app.get("/api/profiles/<profile_id>/containers/<key>/stats")
     def stats(profile_id, key):
         validate_key("containers", key)
-        with connector.connect(profile(profile_id)["endpoint"]) as kiri:
+        with connector.connect_profile(connection_profile(profile_id)) as kiri:
             return jsonify(resources.stats(kiri.container_stats(key)))
 
     @app.get("/api/profiles/<profile_id>/containers/<key>/logs")
@@ -339,13 +450,13 @@ def create_app(config=None, *, connector=None, demo=False):
         tail = request.args.get("tail", "100")
         if not re.fullmatch(r"[1-9][0-9]{0,2}", tail) or int(tail) > 200:
             raise KiriError("bad_input", 400)
-        with connector.connect(profile(profile_id)["endpoint"]) as kiri:
+        with connector.connect_profile(connection_profile(profile_id)) as kiri:
             content_type, body = kiri.container_logs(key, int(tail))
             return jsonify(text=resources.sanitized_logs(content_type, body))
 
     @app.get("/api/profiles/<profile_id>/disk")
     def disk(profile_id):
-        with connector.connect(profile(profile_id)["endpoint"]) as kiri:
+        with connector.connect_profile(connection_profile(profile_id)) as kiri:
             return jsonify(resources.disk_usage(kiri.read("disk")))
 
     return app
